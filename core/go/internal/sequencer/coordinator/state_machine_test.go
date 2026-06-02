@@ -632,6 +632,28 @@ func TestCoordinator_WhenElect_HigherPriorityHeartbeat_HasInflightAndDispatched_
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
 }
 
+func TestCoordinator_WhenElect_HeartbeatFromCurrentActiveCoordinator_HigherPriorityThanSelf_TransitionsToObserving(t *testing.T) {
+	// Regression: node2 is in Elect targeting node1 (currentActiveCoordinator), but node1 is also
+	// higher-priority than node2. validator_IsHeartbeatFromHigherPriorityCoordinator must compare
+	// against nodeName (node2), not currentActiveCoordinator (node1), so that IsHigherPriority
+	// returns true and node2 steps back down.
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node2").
+		CurrentActiveCoordinator("node1"). // the node we're trying to displace
+		CoordinatorPriorityList("node1", "node2").
+		Build()
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode: "node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	}))
+	// validator_IsHeartbeatFromHigherPriorityCoordinator: IsHigherPriority(list, "node1", "node2") = 0 < 1 = true
+	// guard_HasTransactionsInflight = false → Observing
+	assert.Equal(t, State_Observing, c.GetCurrentState())
+}
+
 func TestCoordinator_WhenElect_HandoverRequest_HigherPriority_HasDispatched_TransitionsToClosingFlush(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, _ := newDispatchedTxMock(t)
@@ -1050,6 +1072,28 @@ func TestCoordinator_WhenPrepared_HeartbeatReceived_HigherPriority_HasInflightAn
 	}))
 	// guard_HasTransactionsInflight = true, guard_HasUnconfirmedDispatchedTransactions = true → Closing_Flush.
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+}
+
+func TestCoordinator_WhenPrepared_HeartbeatFromCurrentActiveCoordinator_HigherPriorityThanSelf_TransitionsToObserving(t *testing.T) {
+	// Regression: node2 is in Prepared targeting node1 (currentActiveCoordinator), but node1 is also
+	// higher-priority than node2. validator_IsHeartbeatFromHigherPriorityCoordinator must compare
+	// against nodeName (node2), not currentActiveCoordinator (node1), so that IsHigherPriority
+	// returns true and node2 steps back down.
+	ctx := t.Context()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node2").
+		CurrentActiveCoordinator("node1"). // the node we're trying to displace
+		CoordinatorPriorityList("node1", "node2").
+		Build()
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
+		FromNode: "node1",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState: common.CoordinatorState_Active,
+		},
+	}))
+	// validator_IsHeartbeatFromHigherPriorityCoordinator: IsHigherPriority(list, "node1", "node2") = 0 < 1 = true
+	// guard_HasTransactionsInflight = false → Observing
+	assert.Equal(t, State_Observing, c.GetCurrentState())
 }
 
 func TestCoordinator_WhenPrepared_HandoverRequest_HigherPriority_HasDispatched_TransitionsToClosingFlush(t *testing.T) {

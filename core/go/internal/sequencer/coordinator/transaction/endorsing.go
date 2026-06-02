@@ -287,8 +287,13 @@ func action_RecordEndorseFailure(ctx context.Context, t *coordinatorTransaction,
 	case *EndorseRequestRejectedEvent:
 		reqName = e.AttestationRequestName
 		party = e.Party
-		log.L(ctx).Warnf("endorsement request rejected by %s (%s) due to block height tolerance: coordinator block height=%d, endorser block height=%d, endorser tolerance=%d",
-			party, reqName, e.CoordinatorBlockHeight, e.EndorserBlockHeight, e.BlockHeightTolerance)
+		switch e.RejectionReason {
+		case common.RejectionReason_EndorserIsActiveCoordinator:
+			log.L(ctx).Warnf("endorsement request rejected by %s (%s): endorser is the active coordinator", party, reqName)
+		case common.RejectionReason_BlockHeightTolerance:
+			log.L(ctx).Warnf("endorsement request rejected by %s (%s) due to block height tolerance: coordinator block height=%d, endorser block height=%d, endorser tolerance=%d",
+				party, reqName, e.CoordinatorBlockHeight, e.EndorserBlockHeight, e.BlockHeightTolerance)
+		}
 	case *EndorseRevertEvent:
 		reqName = e.AttestationRequestName
 		party = e.Party
@@ -330,4 +335,3 @@ func action_ComputeEndorseTolerances(_ context.Context, t *coordinatorTransactio
 	t.endorseToleranceByRequirement = tolerances
 	return nil
 }
-

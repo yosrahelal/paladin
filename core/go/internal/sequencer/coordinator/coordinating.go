@@ -568,3 +568,10 @@ func validator_HeartBeatState(state ...common.CoordinatorState) statemachine.Val
 		return false, nil
 	}
 }
+
+// validator_IsHeartbeatFromHigherPriorityCoordinator returns true when a heartbeat is from a node
+// that is higher-priority than this node in the coordinator priority list.
+func validator_IsHeartbeatFromHigherPriorityCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
+	e := event.(*common.HeartbeatReceivedEvent)
+	return common.IsHigherPriority(c.coordinatorPriorityList, e.FromNode, c.nodeName), nil
+}

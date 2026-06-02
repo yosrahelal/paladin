@@ -32,12 +32,6 @@ func validator_IsHeartbeatSenderLive(_ context.Context, _ *coordinator, event co
 		state == common.CoordinatorState_Active_Flush, nil
 }
 
-// validator_IsHeartbeatFromHigherPriorityCoordinator returns true when a heartbeat is froma node that is higher-priority than this node
-func validator_IsHeartbeatFromHigherPriorityCoordinator(_ context.Context, c *coordinator, event common.Event) (bool, error) {
-	e := event.(*common.HeartbeatReceivedEvent)
-	return common.IsHigherPriority(c.coordinatorPriorityList, e.FromNode, c.currentActiveCoordinator), nil
-
-}
 
 // validator_IsHandoverRequestFromHigherPriorityCoordinator returns true when a HandoverRequest is from
 // a node that has strictly higher priority (lower index) than this node.
