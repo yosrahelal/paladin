@@ -14,18 +14,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Fade, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Fade, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Dispatch, SetStateAction, useEffect, useState } from "react";
-import { getAltModeScrollBarStyle } from "../themes/default";
 import { Timestamp } from "../components/Timestamp";
 import { Tag } from "lucide-react";
 import { customNavigate } from "../utils";
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { Hash } from "../components/Hash";
 import { queryMessages } from "../queries/transport";
+import { Filters } from "../components/Filters";
+import { IFilter } from "../interfaces";
+import { constants } from "../components/config";
 
 type Props = {
   sortAscending: boolean
@@ -49,14 +51,24 @@ export const Messages: React.FC<Props> = ({
   setRowsPerPage
 }) => {
 
+  const getFiltersFromStorage = () => {
+    const value = window.localStorage.getItem(constants.MESSAGES_FILTERS);
+    if (value !== null) {
+      try {
+        return JSON.parse(value);
+      } catch (_err) { }
+    }
+    return [];
+  };
+
+  const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
   const [count, setCount] = useState(-1);
-  const theme = useTheme();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
   const { data: messages, error } = useQuery({
-    queryKey: ['messages', page, rowsPerPage, sortAscending],
-    queryFn: () => queryMessages(rowsPerPage, sortAscending, refTimestamps[refTimestamps.length - 1]),
+    queryKey: ['messages', page, rowsPerPage, sortAscending, filters, refTimestamps],
+    queryFn: () => queryMessages(rowsPerPage, sortAscending, filters, refTimestamps[refTimestamps.length - 1]),
   });
 
   useEffect(() => {
@@ -66,6 +78,10 @@ export const Messages: React.FC<Props> = ({
       }
     }
   }, [messages, rowsPerPage, page]);
+
+  useEffect(() => {
+    window.localStorage.setItem(constants.MESSAGES_FILTERS, JSON.stringify(filters));
+  }, [filters]);
 
   if (messages === undefined) {
     return <></>
@@ -122,6 +138,30 @@ export const Messages: React.FC<Props> = ({
               {t("messages")}
             </Typography>
           </Box>
+          <Box sx={{ marginBottom: '20px' }}>
+            <Filters
+              filterFields={[
+                {
+                  label: t('id'),
+                  name: 'id',
+                  type: 'string',
+                  isUUID: true
+                },
+                {
+                  label: t('node'),
+                  name: 'node',
+                  type: 'string'
+                },
+                {
+                  label: t('type'),
+                  name: 'messageType',
+                  type: 'string'
+                }
+              ]}
+              filters={filters}
+              setFilters={setFilters}
+            />
+          </Box>
           <Box sx={{
             display: 'flex',
             flexDirection: 'column',
@@ -130,9 +170,6 @@ export const Messages: React.FC<Props> = ({
             {messages !== undefined && messages.length > 0 &&
               <TableContainer
                 component={Paper}
-                sx={{
-                  ...getAltModeScrollBarStyle(theme.palette.mode),
-                }}
               >
                 <Table stickyHeader>
                   <TableHead>
@@ -153,6 +190,15 @@ export const Messages: React.FC<Props> = ({
                         >
                           {t('created')}
                         </TableSortLabel>
+                      </TableCell>
+                      <TableCell
+                        width={1}
+                        sx={{
+                          backgroundColor: (theme) => theme.palette.background.paper,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {t('acknowledged')}
                       </TableCell>
                       <TableCell
                         width={1}
@@ -194,8 +240,14 @@ export const Messages: React.FC<Props> = ({
                   <TableBody>
                     {messages.map(message =>
                       <TableRow key={message.id}>
-                        <TableCell >
+                        <TableCell>
                           <Timestamp timestamp={message.created} />
+                        </TableCell>
+                        <TableCell>
+                          {message.ack?.time?
+                          <Timestamp timestamp={message.ack.time} />
+                          :
+                          <>--</>}
                         </TableCell>
                         <TableCell>
                           <Hash Icon={<Tag size="18px" />} title={t('id')} hash={message.id} />
@@ -209,7 +261,7 @@ export const Messages: React.FC<Props> = ({
                         <TableCell align="right" sx={{ padding: '8px' }}>
                           <Tooltip title={t('open')} arrow>
                             <IconButton
-                              onClick={mouseEvent => customNavigate(`/ui/privacy-groups/${message.id}`, mouseEvent, navigate)}>
+                              onClick={mouseEvent => customNavigate(`/ui/messages/${message.id}`, mouseEvent, navigate)}>
                               <OpenInNewIcon color="secondary" fontSize="medium" />
                             </IconButton>
                           </Tooltip>

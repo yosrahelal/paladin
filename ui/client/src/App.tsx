@@ -43,6 +43,8 @@ import { PrivacyGroup } from "./views/PrivacyGroup";
 import { Navigation } from "./components/Navigation";
 import { States } from "./views/States";
 import { Messages } from "./views/Messages";
+import { Message } from "./views/Message";
+import { State } from "./views/State";
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({}),
@@ -213,6 +215,7 @@ function App() {
                       rowsPerPage={stateRowsPerPage}
                       setRowsPerPage={setStateRowsPerPage}
                     />} />
+                    <Route path={AppRoutes.State} element={<State />} />
                     <Route path={AppRoutes.Messages} element={<Messages
                       sortAscending={messagesSortAscending}
                       setSortAscending={setMessagesSortAscending}
@@ -223,6 +226,7 @@ function App() {
                       refTimestamps={messagesRefTimestamps}
                       setRefTimestamps={setMessagesRefTimestamps}
                     />} />
+                    <Route path={AppRoutes.Message} element={<Message />} />
                     <Route path="*" element={<Navigate to={AppRoutes.Transactions} replace />} />
                   </Routes>
                 </Box>

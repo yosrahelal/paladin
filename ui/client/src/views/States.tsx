@@ -14,14 +14,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Fade, Grid2, IconButton, MenuItem, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, TextField, Tooltip, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Fade, Grid2, IconButton, MenuItem, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, TextField, Tooltip, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { listDomains } from "../queries/domains";
 import { useQuery } from "@tanstack/react-query";
 import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { listSchemas, queryStates } from "../queries/states";
-import { getAltModeScrollBarStyle } from "../themes/default";
 import { Timestamp } from "../components/Timestamp";
 import { Captions, Tag } from "lucide-react";
 import { customNavigate } from "../utils";
@@ -59,7 +58,6 @@ export const States: React.FC<Props> = ({
 }) => {
 
   const [count, setCount] = useState(-1);
-  const theme = useTheme();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -202,9 +200,6 @@ export const States: React.FC<Props> = ({
             {states !== undefined && states.length > 0 &&
               <TableContainer
                 component={Paper}
-                sx={{
-                  ...getAltModeScrollBarStyle(theme.palette.mode),
-                }}
               >
                 <Table stickyHeader>
                   <TableHead>
@@ -251,6 +246,15 @@ export const States: React.FC<Props> = ({
                           whiteSpace: 'nowrap'
                         }}
                       >
+                        {t('actions')}
+                      </TableCell>
+                      <TableCell
+                        width={1}
+                        sx={{
+                          backgroundColor: (theme) => theme.palette.background.paper,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
                       </TableCell>
                     </TableRow>
                   </TableHead>
@@ -266,10 +270,13 @@ export const States: React.FC<Props> = ({
                         <TableCell>
                           <Hash Icon={<Captions size="18px" />} title={t('address')} hash={state.contractAddress} />
                         </TableCell>
+                        <TableCell>
+                          
+                        </TableCell>
                         <TableCell align="right" sx={{ padding: '8px' }}>
                           <Tooltip title={t('open')} arrow>
                             <IconButton
-                              onClick={mouseEvent => customNavigate(`/ui/privacy-groups/${state.id}`, mouseEvent, navigate)}>
+                              onClick={mouseEvent => customNavigate(`/ui/states/${state.domain}/${state.schema}/${state.id}`, mouseEvent, navigate)}>
                               <OpenInNewIcon color="secondary" fontSize="medium" />
                             </IconButton>
                           </Tooltip>

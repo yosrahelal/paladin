@@ -25,5 +25,7 @@ export const AppRoutes = {
   PrivactGroups: '/ui/privacy-groups',
   PrivacyGroup: '/ui/privacy-groups/:idOrAddress',
   States: '/ui/states',
-  Messages: '/ui/messages'
+  Messages: '/ui/messages',
+  Message: '/ui/messages/:id',
+  State: '/ui/states/:domain/:schema/:id'
 };

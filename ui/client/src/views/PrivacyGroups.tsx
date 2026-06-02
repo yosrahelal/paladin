@@ -14,13 +14,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Button, Fade, Grid2, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Button, Fade, Grid2, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography } from "@mui/material";
 import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import SearchIcon from '@mui/icons-material/Search';
 import { listPrivacyGroups } from "../queries/privacyGroups";
 import { useQuery } from "@tanstack/react-query";
-import { getAltModeScrollBarStyle } from "../themes/default";
 import { Timestamp } from "../components/Timestamp";
 import { Hash } from "../components/Hash";
 import { customNavigate } from "../utils";
@@ -54,7 +53,6 @@ export const PrivacyGroups: React.FC<Props> = ({
 }) => {
 
   const [lookupPrivacyGroupDialogOpen, setLookupPrivacyGroupDialogOpen] = useState(false);
-  const theme = useTheme();
   const navigate = useNavigate();
   const [count, setCount] = useState(-1);
   const { t } = useTranslation();
@@ -151,9 +149,6 @@ export const PrivacyGroups: React.FC<Props> = ({
             {privacyGroups !== undefined && privacyGroups.length > 0 &&
               <TableContainer
                 component={Paper}
-                sx={{
-                  ...getAltModeScrollBarStyle(theme.palette.mode),
-                }}
               >
                 <Table stickyHeader>
                   <TableHead>

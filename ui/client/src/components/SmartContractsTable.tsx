@@ -27,13 +27,11 @@ import {
   TableRow,
   TableSortLabel,
   Tooltip,
-  Typography,
-  useTheme,
+  Typography
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { querySmartContractsByDomain } from '../queries/domains';
-import { getAltModeScrollBarStyle } from '../themes/default';
 import { DomainButtons } from './DomainButtons';
 import { Hash } from './Hash';
 import { IDomainContract } from '../interfaces';
@@ -72,7 +70,6 @@ export const SmartContractsTable: React.FC<Props> = ({
 
   const [count, setCount] = useState(-1);
   const { t } = useTranslation();
-  const theme = useTheme();
   const navigate = useNavigate();
 
   const {
@@ -137,9 +134,6 @@ export const SmartContractsTable: React.FC<Props> = ({
   return (
     <TableContainer
       component={Paper}
-      sx={{
-        ...getAltModeScrollBarStyle(theme.palette.mode),
-      }}
     >
       <Table stickyHeader>
         <TableHead>

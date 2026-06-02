@@ -109,4 +109,36 @@ export const queryStates = async (
   );
 };
 
-
+export const getState = async (
+  domain: string,
+  schemaId: string,
+  id: string
+): Promise<IState | null> => {
+  const requestPayload = {
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: RpcMethods.pstate_queryStates,
+    params: [
+      domain,
+      schemaId,
+      {
+        limit: 1,
+        "equal": [{
+          "field": ".id",
+          "value": id
+        }]
+      },
+      'all'
+    ]
+  };
+  const states = await <Promise<IState[]>>(
+    returnResponse(
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
+      i18next.t("errorFetchingSchemas"), []
+    )
+  );
+  if (states.length === 0) {
+    return null;
+  }
+  return states[0];
+};
