@@ -721,6 +721,25 @@ func TestCoordinator_WhenElect_TransactionStateTransition_ToFinal_CleansUpAndSta
 	assert.Empty(t, c.transactionsByID, "action_CleanUpTransaction must remove the finalised transaction")
 }
 
+func TestCoordinator_WhenElect_TransactionStateTransition_ToPooled_AddsToPool(t *testing.T) {
+	ctx := t.Context()
+	tx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txID := uuid.New()
+	tx.EXPECT().GetID().Return(txID).Maybe()
+	tx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node1").
+		CurrentActiveCoordinator("node2").
+		Transactions(tx).
+		Build()
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
+		ToState:       transaction.State_Pooled,
+	}))
+	assert.Equal(t, State_Elect, c.GetCurrentState())
+	assert.Contains(t, c.pooledTransactions, tx, "action_PoolTransaction must add the transaction to the pool")
+}
+
 func TestCoordinator_WhenElect_EndorsementRequestReceived_HigherPriority_NoInflight_TransitionsToObserving(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
@@ -1117,6 +1136,25 @@ func TestCoordinator_WhenPrepared_TransactionStateTransition_ToFinal_CleansUpAnd
 	}))
 	assert.Equal(t, State_Prepared, c.GetCurrentState())
 	assert.Empty(t, c.transactionsByID, "action_CleanUpTransaction must remove the finalised transaction")
+}
+
+func TestCoordinator_WhenPrepared_TransactionStateTransition_ToPooled_AddsToPool(t *testing.T) {
+	ctx := t.Context()
+	tx := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	txID := uuid.New()
+	tx.EXPECT().GetID().Return(txID).Maybe()
+	tx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node1").
+		CurrentActiveCoordinator("node2").
+		Transactions(tx).
+		Build()
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
+		TransactionID: txID,
+		ToState:       transaction.State_Pooled,
+	}))
+	assert.Equal(t, State_Prepared, c.GetCurrentState())
+	assert.Contains(t, c.pooledTransactions, tx, "action_PoolTransaction must add the transaction to the pool")
 }
 
 func TestCoordinator_WhenPreparedTransitionsToActive_RefreshesSigningIdentityAndSelectsPooledTransactions(t *testing.T) {

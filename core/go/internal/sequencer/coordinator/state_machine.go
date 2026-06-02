@@ -412,6 +412,12 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_TransactionStateTransition: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
+					// Newly created transactions will pool immediately (if not blocked by dependencies).
+					// While we don't start selecting for assembly until we're active, we need to reflect
+					// this pooled state by adding them to the pool.
+					Validator: validator_TransactionStateTransitionTo(transaction.State_Pooled),
+					Actions:   []ActionRule{{Action: action_PoolTransaction}},
+				}, {
 					// There is a small chance we have come here from State_Closing and still have transactions in terminal
 					// states from a previous time of actively coordinating that we haven't cleaned up from memory yet,
 					// so we handle that here.
@@ -584,6 +590,12 @@ var stateDefinitionsMap = StateDefinitions{
 			common.Event_TransactionStateTransition: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
+					// Newly created transactions will pool immediately (if not blocked by dependencies).
+					// While we don't start selecting for assembly until we're active, we need to reflect
+					// this pooled state by adding them to the pool.
+					Validator: validator_TransactionStateTransitionTo(transaction.State_Pooled),
+					Actions:   []ActionRule{{Action: action_PoolTransaction}},
+				}, {
 					// There is a small chance we have come here from State_Closing (via State_Elect) and still have transactions in terminal
 					// states from a previous time of actively coordinating that we haven't cleaned up from memory yet,
 					// so we handle that here.
