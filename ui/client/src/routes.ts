@@ -24,5 +24,6 @@ export const AppRoutes = {
   DomainContract: '/ui/domains/:address',
   PrivactGroups: '/ui/privacy-groups',
   PrivacyGroup: '/ui/privacy-groups/:idOrAddress',
-  States: '/ui/states'
+  States: '/ui/states',
+  Messages: '/ui/messages'
 };

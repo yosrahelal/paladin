@@ -285,3 +285,15 @@ export interface IState {
   contractAddress: string
   data: any
 }
+
+export interface IMessage {
+  sequence: string
+  id: string
+  created: string
+  node: string
+  messageType: string
+  metadata: any
+  ack?: {
+    time: string
+  }
+}

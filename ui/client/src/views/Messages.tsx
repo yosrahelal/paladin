@@ -14,19 +14,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Fade, Grid2, IconButton, MenuItem, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, TextField, Tooltip, Typography, useTheme } from "@mui/material";
+import { Alert, Box, Fade, IconButton, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel, Tooltip, Typography, useTheme } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { listDomains } from "../queries/domains";
 import { useQuery } from "@tanstack/react-query";
 import { Dispatch, SetStateAction, useEffect, useState } from "react";
-import { listSchemas, queryStates } from "../queries/states";
 import { getAltModeScrollBarStyle } from "../themes/default";
 import { Timestamp } from "../components/Timestamp";
-import { Captions, Tag } from "lucide-react";
+import { Tag } from "lucide-react";
 import { customNavigate } from "../utils";
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { Hash } from "../components/Hash";
+import { queryMessages } from "../queries/transport";
 
 type Props = {
   sortAscending: boolean
@@ -37,13 +36,9 @@ type Props = {
   setPage: Dispatch<SetStateAction<number>>
   rowsPerPage: number
   setRowsPerPage: Dispatch<SetStateAction<number>>
-  selectedDomain: string | undefined
-  setSelectedDomain: Dispatch<SetStateAction<string | undefined>>
-  selectedSchemaId: string | undefined
-  setSelectedSchemaId: Dispatch<SetStateAction<string | undefined>>
 };
 
-export const States: React.FC<Props> = ({
+export const Messages: React.FC<Props> = ({
   sortAscending,
   setSortAscending,
   refTimestamps,
@@ -51,11 +46,7 @@ export const States: React.FC<Props> = ({
   page,
   setPage,
   rowsPerPage,
-  setRowsPerPage,
-  selectedDomain,
-  setSelectedDomain,
-  selectedSchemaId,
-  setSelectedSchemaId
+  setRowsPerPage
 }) => {
 
   const [count, setCount] = useState(-1);
@@ -63,39 +54,27 @@ export const States: React.FC<Props> = ({
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  const { data: domains, error: domainsError } = useQuery({
-    queryKey: ['domains'],
-    queryFn: () => listDomains(),
-  });
-
-  const { data: schemas, error: schemasError } = useQuery({
-    queryKey: ['schemas', selectedDomain],
-    queryFn: () => listSchemas(selectedDomain!),
-    enabled: selectedDomain !== undefined
-  });
-
-  const { data: states, error: statesError } = useQuery({
-    queryKey: ['states', selectedDomain, selectedSchemaId, page, rowsPerPage, sortAscending],
-    queryFn: () => queryStates(selectedDomain!, selectedSchemaId!, rowsPerPage, sortAscending, refTimestamps[refTimestamps.length - 1]),
-    enabled: selectedSchemaId !== undefined
+  const { data: messages, error } = useQuery({
+    queryKey: ['messages', page, rowsPerPage, sortAscending],
+    queryFn: () => queryMessages(rowsPerPage, sortAscending, refTimestamps[refTimestamps.length - 1]),
   });
 
   useEffect(() => {
-    if (states !== undefined && count === -1) {
-      if (states.length < rowsPerPage) {
-        setCount(rowsPerPage * page + states.length);
+    if (messages !== undefined && count === -1) {
+      if (messages.length < rowsPerPage) {
+        setCount(rowsPerPage * page + messages.length);
       }
     }
-  }, [states, rowsPerPage, page]);
+  }, [messages, rowsPerPage, page]);
 
-  if (domains === undefined) {
+  if (messages === undefined) {
     return <></>
   }
 
-  if (domainsError || schemasError || statesError) {
-    return <Alert sx={{ margin: '30px' }} severity="error" variant="filled">
-      {domainsError?.message ?? schemasError?.message ?? statesError?.message}
-    </Alert>
+  if (error) {
+    return (<Alert sx={{ margin: '30px' }} severity="error" variant="filled">
+      {error?.message}
+    </Alert>);
   }
 
   const handleChangePage = (
@@ -105,9 +84,9 @@ export const States: React.FC<Props> = ({
     if (newPage === 0) {
       setRefTimestamps([]);
     } else if (newPage > page) {
-      if (states !== undefined) {
+      if (messages !== undefined) {
         const refEntriesCopy = [...refTimestamps];
-        refEntriesCopy.push(states[states.length - 1].created);
+        refEntriesCopy.push(messages[messages.length - 1].created);
         setRefTimestamps(refEntriesCopy);
       }
     } else {
@@ -140,7 +119,7 @@ export const States: React.FC<Props> = ({
         >
           <Box sx={{ marginBottom: '20px' }}>
             <Typography align="center" variant="h5">
-              {t("states")}
+              {t("messages")}
             </Typography>
           </Box>
           <Box sx={{
@@ -148,58 +127,7 @@ export const States: React.FC<Props> = ({
             flexDirection: 'column',
             gap: '20px'
           }}>
-            <Box
-              sx={{
-                backgroundColor: (theme) => theme.palette.background.paper,
-                marginBottom: '20px',
-                borderRadius: '4px',
-                padding: '20px',
-              }}
-            >
-              <Grid2 container spacing={2}>
-                <Grid2 size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label={t('domain')}
-                    select
-                    value={selectedDomain ?? ''}
-                    onChange={event => {
-                      setSelectedSchemaId(undefined);
-                      setSelectedDomain(event.target.value)
-                    }}
-                  >
-                    {domains.map(domain =>
-                      <MenuItem key={domain} value={domain}>
-                        {t(domain)}
-                      </MenuItem>
-                    )}
-                  </TextField>
-                </Grid2>
-                <Grid2 size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label={t('schema')}
-                    select={schemas !== undefined}
-                    disabled={schemas === undefined}
-                    value={selectedSchemaId ?? ''}
-                    onChange={event => setSelectedSchemaId(event.target.value)}
-                  >
-                    {schemas?.map(schema =>
-                      <MenuItem key={schema.id} value={schema.id}>
-                        <Box sx={{
-                          display: 'flex',
-                          gap: '10px'
-                        }}>
-                          <Typography>{schema.definition.name.length > 0 ? schema.definition.name : '--'}</Typography>
-                          <Typography color="primary">{schema.labels.join(', ')}</Typography>
-                        </Box>
-                      </MenuItem>
-                    )}
-                  </TextField>
-                </Grid2>
-              </Grid2>
-            </Box>
-            {states !== undefined && states.length > 0 &&
+            {messages !== undefined && messages.length > 0 &&
               <TableContainer
                 component={Paper}
                 sx={{
@@ -242,7 +170,16 @@ export const States: React.FC<Props> = ({
                           whiteSpace: 'nowrap'
                         }}
                       >
-                        {t('contractAddress')}
+                        {t('node')}
+                      </TableCell>
+                      <TableCell
+                        width={'100%'}
+                        sx={{
+                          backgroundColor: (theme) => theme.palette.background.paper,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {t('type')}
                       </TableCell>
                       <TableCell
                         width={1}
@@ -255,21 +192,24 @@ export const States: React.FC<Props> = ({
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {states.map(state =>
-                      <TableRow key={state.id}>
+                    {messages.map(message =>
+                      <TableRow key={message.id}>
                         <TableCell >
-                          <Timestamp timestamp={state.created} />
+                          <Timestamp timestamp={message.created} />
                         </TableCell>
                         <TableCell>
-                          <Hash Icon={<Tag size="18px" />} title={t('id')} hash={state.id} />
+                          <Hash Icon={<Tag size="18px" />} title={t('id')} hash={message.id} />
                         </TableCell>
                         <TableCell>
-                          <Hash Icon={<Captions size="18px" />} title={t('address')} hash={state.contractAddress} />
+                          {message.node}
+                        </TableCell>
+                        <TableCell>
+                          {message.messageType}
                         </TableCell>
                         <TableCell align="right" sx={{ padding: '8px' }}>
                           <Tooltip title={t('open')} arrow>
                             <IconButton
-                              onClick={mouseEvent => customNavigate(`/ui/privacy-groups/${state.id}`, mouseEvent, navigate)}>
+                              onClick={mouseEvent => customNavigate(`/ui/privacy-groups/${message.id}`, mouseEvent, navigate)}>
                               <OpenInNewIcon color="secondary" fontSize="medium" />
                             </IconButton>
                           </Tooltip>
@@ -299,6 +239,7 @@ export const States: React.FC<Props> = ({
           </Box>
         </Box>
       </Fade>
+
     </>
   );
 

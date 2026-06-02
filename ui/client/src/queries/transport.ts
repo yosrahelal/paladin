@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ITransportPeer } from "../interfaces";
+import { IMessage, ITransportPeer } from "../interfaces";
 import { generatePostReq, returnResponse } from "./common";
 import { RpcEndpoint, RpcMethods } from "./rpcMethods";
 import i18next from "i18next";
@@ -64,3 +64,39 @@ export const fetchTransportPeers = async (): Promise<ITransportPeer[]> => {
     )
   );
 };
+
+export const queryMessages = async (
+  limit: number,
+  sortAscending: boolean,
+  refTimestamp?: string
+): Promise<IMessage[]> => {
+  const requestPayload = {
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: RpcMethods.transport_queryReliableMessages,
+    params: [{
+      limit,
+      sort: [`created ${sortAscending ? 'ASC' : 'DESC'}`],
+      greaterThan: refTimestamp !== undefined && sortAscending ? [
+        {
+          field: 'created',
+          value: refTimestamp
+        }
+      ] : undefined,
+      lessThan: refTimestamp !== undefined && !sortAscending ? [
+        {
+          field: 'created',
+          value: refTimestamp
+        }
+      ] : undefined
+    }]
+  };
+
+  return <Promise<IMessage[]>>(
+    returnResponse(
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
+      i18next.t("errorFetchingMessages")
+    )
+  );
+};
+

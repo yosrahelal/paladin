@@ -107,6 +107,13 @@ export const Navigation: React.FC<Props> = ({
             <ListItemText primary={t('states')} />
           </ListItemButton>
         </ListItem>
+        <ListItem>
+          <ListItemButton
+            onClick={event => customNavigate(AppRoutes.Messages, event, navigate)}
+            selected={pathname.startsWith(AppRoutes.Messages)}>
+            <ListItemText primary={t('messages')} />
+          </ListItemButton>
+        </ListItem>
       </List>
 
       <IconButton

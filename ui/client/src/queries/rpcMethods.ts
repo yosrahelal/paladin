@@ -54,5 +54,6 @@ export const RpcMethods = {
   pgroup_getGroupById: 'pgroup_getGroupById',
   pgroup_getGroupByAddress: 'pgroup_getGroupByAddress',
   pstate_listSchemas: 'pstate_listSchemas',
-  pstate_queryStates: 'pstate_queryStates'
+  pstate_queryStates: 'pstate_queryStates',
+  transport_queryReliableMessages: 'transport_queryReliableMessages'
 };

@@ -42,6 +42,7 @@ import { PrivacyGroups } from "./views/PrivacyGroups";
 import { PrivacyGroup } from "./views/PrivacyGroup";
 import { Navigation } from "./components/Navigation";
 import { States } from "./views/States";
+import { Messages } from "./views/Messages";
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({}),
@@ -74,6 +75,10 @@ function App() {
   const [stateRowsPerPage, setStateRowsPerPage] = useState(10);
   const [stateRefTimestamps, setStateRefTimestamps] = useState<string[]>([]);
   const [stateSortAscending, setStateSortAscending] = useState(false);
+  const [messagesPage, setMessagesPage] = useState(0);
+  const [messagesRowsPerPage, setMessagesRowsPerPage] = useState(10);
+  const [messagesRefTimestamps, setMessagesRefTimestamps] = useState<string[]>([]);
+  const [messagesSortAscending, setMessagesSortAscending] = useState(false);
 
   const [systemTheme, setSystemTheme] = useState(
     window.matchMedia &&
@@ -207,6 +212,16 @@ function App() {
                       setPage={setStatePage}
                       rowsPerPage={stateRowsPerPage}
                       setRowsPerPage={setStateRowsPerPage}
+                    />} />
+                    <Route path={AppRoutes.Messages} element={<Messages
+                      sortAscending={messagesSortAscending}
+                      setSortAscending={setMessagesSortAscending}
+                      page={messagesPage}
+                      setPage={setMessagesPage}
+                      rowsPerPage={messagesRowsPerPage}
+                      setRowsPerPage={setMessagesRowsPerPage}
+                      refTimestamps={messagesRefTimestamps}
+                      setRefTimestamps={setMessagesRefTimestamps}
                     />} />
                     <Route path="*" element={<Navigate to={AppRoutes.Transactions} replace />} />
                   </Routes>

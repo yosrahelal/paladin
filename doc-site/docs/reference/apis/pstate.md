@@ -78,3 +78,17 @@ title: pstate_*
 
 0. `state`: [`State`](../types/state.md#state)
 
+## `pstate_transferState`
+
+Transfers a state that is stored locally to a recipient on another node
+
+### Parameters
+
+0. `domain`: `string`
+1. `stateId`: [`HexBytes`](../types/simpletypes.md#hexbytes)
+2. `recipient`: [`PrivateIdentityLocator`](../types/simpletypes.md#privateidentitylocator) — fully qualified identity locator (e.g. `bob@node2`)
+
+### Returns
+
+0. `reliableMessageId`: `UUID` — ID of the reliable message queued for delivery
+

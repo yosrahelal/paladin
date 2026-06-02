@@ -43,7 +43,7 @@ export const listPrivacyGroups = async (
           value: refTimestamp
         }
       ] : undefined
-    }],
+    }]
   };
   return <Promise<IPrivacyGroup[]>>(
     returnResponse(
