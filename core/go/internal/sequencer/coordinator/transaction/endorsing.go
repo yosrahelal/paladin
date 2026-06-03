@@ -300,8 +300,8 @@ func action_RecordEndorseFailure(ctx context.Context, t *coordinatorTransaction,
 		party = e.Party
 		log.L(ctx).Warnf("endorsement reverted by %s (%s): %s", party, reqName, e.RevertReason)
 	}
-	if reqName == "" || party == "" {
-		log.L(ctx).Warnf("action_RecordEndorseFailure: missing reqName or party on event %T", event)
+	if party == "" {
+		log.L(ctx).Warnf("action_RecordEndorseFailure: missing party on event %T", event)
 		return nil
 	}
 	// Mark the party as permanently failed this round using a nil sentinel in the pending map,
