@@ -236,6 +236,8 @@
 	"reverseLookup": "Reverse Lookup",
 	"root": "Root",
 	"schema": "Schema",
+	"send": "Send",
+	"sendState": "Send State",
 	"set": "Set",
 	"showProperties": "Show Properties",
 	"signature": "Signature",

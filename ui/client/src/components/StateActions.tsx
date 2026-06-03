@@ -17,7 +17,7 @@
 import { useTranslation } from "react-i18next";
 import { IState } from "../interfaces";
 import { Box, Button } from "@mui/material";
-import { PushStateDialog } from "../dialogs/PushState";
+import { SendStateDialog } from "../dialogs/SendState";
 import { useState } from "react";
 
 type Props = {
@@ -26,7 +26,7 @@ type Props = {
 
 export const StateActions: React.FC<Props> = ({ state }) => {
 
-  const [pushStateDialogOpen, setPushStateDialogOpen] = useState(false);
+  const [sendStateDialogOpen, setSendStateDialogOpen] = useState(false);
   const { t } = useTranslation();
 
   return (
@@ -35,15 +35,15 @@ export const StateActions: React.FC<Props> = ({ state }) => {
         <Button
           sx={{ fontWeight: '400' }}
           size="small"
-          onClick={() => setPushStateDialogOpen(true)}
+          onClick={() => setSendStateDialogOpen(true)}
         >
-          {t('push')}
+          {t('send')}
         </Button>
       </Box>
-      <PushStateDialog
+      <SendStateDialog
         state={state}
-        dialogOpen={pushStateDialogOpen}
-        setDialogOpen={setPushStateDialogOpen}
+        dialogOpen={sendStateDialogOpen}
+        setDialogOpen={setSendStateDialogOpen}
       />
     </>
   );

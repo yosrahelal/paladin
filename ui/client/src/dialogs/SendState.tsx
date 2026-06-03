@@ -38,7 +38,7 @@ type Props = {
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
 }
 
-export const PushStateDialog: React.FC<Props> = ({
+export const SendStateDialog: React.FC<Props> = ({
   state,
   dialogOpen,
   setDialogOpen,
@@ -102,7 +102,7 @@ export const PushStateDialog: React.FC<Props> = ({
         handleSubmit();
       }}>
         <DialogTitle>
-          {t('pushState')}
+          {t('sendState')}
           {errorMessage !== undefined &&
             <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{errorMessage}</Alert>}
         </DialogTitle>
@@ -136,7 +136,7 @@ export const PushStateDialog: React.FC<Props> = ({
             disableElevation
             disabled={!canSubmit}
             type="submit">
-            {t('push')}
+            {t('send')}
           </Button>
           <Button
             sx={{ minWidth: '100px' }}
