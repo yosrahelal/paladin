@@ -242,156 +242,155 @@ export const States: React.FC<Props> = ({
                 </Grid2>
               </Grid2>
             </Box>
+            {states !== undefined &&
+              <Filters
+                filterFields={filterFields}
+                filters={filters}
+                setFilters={setFilters}
+              />
+            }
             {states !== undefined && states.length > 0 &&
-              <>
-                <Box>
-                  <Filters
-                    filterFields={filterFields}
-                    filters={filters}
-                    setFilters={setFilters}
-                  />
-                </Box>
-                <TableContainer
-                  component={Paper}
-                >
-                  <Table stickyHeader>
-                    <TableHead>
-                      <TableRow>
+              <TableContainer
+                component={Paper}
+              >
+                <Table stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell
+                        width={1}
+                        sx={{
+                          backgroundColor: (theme) => theme.palette.background.paper
+                        }}>
+                        <TableSortLabel
+                          active={sortBy === '.created'}
+                          direction={sortAscending ? 'asc' : 'desc'}
+                          onClick={() => {
+                            if (sortBy === '.created') {
+                              setSortAscending(!sortAscending);
+                            } else {
+                              setSortBy('.created');
+                            }
+                            setRefTimestamps([]);
+                            setPage(0);
+                          }}
+                        >
+                          {t('created')}
+                        </TableSortLabel>
+                      </TableCell>
+                      <TableCell
+                        width={1}
+                        sx={{
+                          backgroundColor: (theme) => theme.palette.background.paper,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {t('id')}
+                      </TableCell>
+                      <TableCell
+                        width={1}
+                        sx={{
+                          backgroundColor: (theme) => theme.palette.background.paper,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {t('contractAddress')}
+                      </TableCell>
+                      {indexedFields.map(field =>
                         <TableCell
                           width={1}
                           sx={{
                             backgroundColor: (theme) => theme.palette.background.paper,
+                            whiteSpace: 'nowrap'
                           }}>
                           <TableSortLabel
-                            active={sortBy === '.created'}
+                            active={sortBy === field.name}
                             direction={sortAscending ? 'asc' : 'desc'}
                             onClick={() => {
-                              if(sortBy === '.created') {
+                              if (sortBy === field.name) {
                                 setSortAscending(!sortAscending);
                               } else {
-                                setSortBy('.created');
+                                setSortBy(field.name)
                               }
                               setRefTimestamps([]);
                               setPage(0);
                             }}
                           >
-                            {t('created')}
+                            [ {field.name} ]
                           </TableSortLabel>
                         </TableCell>
-                        <TableCell
-                          width={1}
-                          sx={{
-                            backgroundColor: (theme) => theme.palette.background.paper,
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          {t('id')}
+                      )}
+                      <TableCell
+                        width={1}
+                        sx={{
+                          backgroundColor: (theme) => theme.palette.background.paper,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {t('actions')}
+                      </TableCell>
+                      <TableCell
+                        width={1}
+                        sx={{
+                          backgroundColor: (theme) => theme.palette.background.paper,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {states.map(state =>
+                      <TableRow key={state.id}>
+                        <TableCell >
+                          <Timestamp timestamp={state.created} />
                         </TableCell>
-                        <TableCell
-                          width={1}
-                          sx={{
-                            backgroundColor: (theme) => theme.palette.background.paper,
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          {t('contractAddress')}
+                        <TableCell>
+                          <Hash Icon={<Tag size="18px" />} title={t('id')} hash={state.id} />
+                        </TableCell>
+                        <TableCell>
+                          {state.contractAddress !== null ?
+                            <Hash Icon={<Captions size="18px" />} title={t('address')} hash={state.contractAddress} />
+                            :
+                            <>--</>}
                         </TableCell>
                         {indexedFields.map(field =>
-                          <TableCell
-                            width={1}
-                            sx={{
-                              backgroundColor: (theme) => theme.palette.background.paper,
-                            }}>
-                            <TableSortLabel
-                              active={sortBy === field.name}
-                              direction={sortAscending ? 'asc' : 'desc'}
-                              onClick={() => {
-                                if(sortBy === field.name) {
-                                  setSortAscending(!sortAscending);
-                                } else {
-                                  setSortBy(field.name)
-                                }
-                                setRefTimestamps([]);
-                                setPage(0);
-                              }}
-                            >
-                             [ {field.name} ]
-                            </TableSortLabel>
+                          <TableCell key={field.name}>
+                            {getIndexedFieldContent(state, field)}
                           </TableCell>
                         )}
-                        <TableCell
-                          width={1}
-                          sx={{
-                            backgroundColor: (theme) => theme.palette.background.paper,
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
-                          {t('actions')}
+                        <TableCell>
+                          <StateActions state={state} />
                         </TableCell>
-                        <TableCell
-                          width={1}
-                          sx={{
-                            backgroundColor: (theme) => theme.palette.background.paper,
-                            whiteSpace: 'nowrap'
-                          }}
-                        >
+                        <TableCell align="right" sx={{ padding: '8px' }}>
+                          <Tooltip title={t('open')} arrow>
+                            <IconButton
+                              onClick={mouseEvent => customNavigate(`/ui/states/${state.domain}/${state.schema}/${state.id}`, mouseEvent, navigate)}>
+                              <OpenInNewIcon color="secondary" fontSize="medium" />
+                            </IconButton>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {states.map(state =>
-                        <TableRow key={state.id}>
-                          <TableCell >
-                            <Timestamp timestamp={state.created} />
-                          </TableCell>
-                          <TableCell>
-                            <Hash Icon={<Tag size="18px" />} title={t('id')} hash={state.id} />
-                          </TableCell>
-                          <TableCell>
-                            {state.contractAddress !== null ?
-                              <Hash Icon={<Captions size="18px" />} title={t('address')} hash={state.contractAddress} />
-                              :
-                              <>--</>}
-                          </TableCell>
-                          {indexedFields.map(field =>
-                            <TableCell key={field.name}>
-                              {getIndexedFieldContent(state, field)}
-                            </TableCell>
-                          )}
-                          <TableCell>
-                            <StateActions state={state} />
-                          </TableCell>
-                          <TableCell align="right" sx={{ padding: '8px' }}>
-                            <Tooltip title={t('open')} arrow>
-                              <IconButton
-                                onClick={mouseEvent => customNavigate(`/ui/states/${state.domain}/${state.schema}/${state.id}`, mouseEvent, navigate)}>
-                                <OpenInNewIcon color="secondary" fontSize="medium" />
-                              </IconButton>
-                            </Tooltip>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                  <TablePagination
-                    slotProps={{
-                      actions: {
-                        lastButton: {
-                          disabled: true
-                        }
+                    )}
+                  </TableBody>
+                </Table>
+                <TablePagination
+                  slotProps={{
+                    actions: {
+                      lastButton: {
+                        disabled: true
                       }
-                    }}
-                    component="div"
-                    showFirstButton
-                    showLastButton
-                    count={count}
-                    page={page}
-                    onPageChange={handleChangePage}
-                    rowsPerPage={rowsPerPage}
-                    onRowsPerPageChange={handleChangeRowsPerPage}
-                  />
-                </TableContainer>
-              </>}
+                    }
+                  }}
+                  component="div"
+                  showFirstButton
+                  showLastButton
+                  count={count}
+                  page={page}
+                  onPageChange={handleChangePage}
+                  rowsPerPage={rowsPerPage}
+                  onRowsPerPageChange={handleChangeRowsPerPage}
+                />
+              </TableContainer>}
             {states !== undefined && states.length === 0 &&
               <Box sx={{ marginTop: '60px', textAlign: 'center', color: theme => theme.palette.text.secondary }}>
                 <InfoOutlinedIcon sx={{ fontSize: '50px' }} />
