@@ -64,6 +64,7 @@ export const States: React.FC<Props> = ({
 
   const [filters, setFilters] = useState<IFilter[]>([]);
   const [count, setCount] = useState(-1);
+  const [sortBy, setSortBy] = useState('.created');
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -79,8 +80,8 @@ export const States: React.FC<Props> = ({
   });
 
   const { data: states, error: statesError } = useQuery({
-    queryKey: ['states', selectedDomain, selectedSchemaId, page, rowsPerPage, sortAscending, filters],
-    queryFn: () => queryStates(selectedDomain!, selectedSchemaId!, rowsPerPage, sortAscending, filters, refTimestamps[refTimestamps.length - 1]),
+    queryKey: ['states', selectedDomain, selectedSchemaId, page, rowsPerPage, sortBy, sortAscending, filters,],
+    queryFn: () => queryStates(selectedDomain!, selectedSchemaId!, rowsPerPage, sortBy, sortAscending, filters, refTimestamps[refTimestamps.length - 1]),
     enabled: selectedSchemaId !== undefined
   });
 
@@ -201,10 +202,8 @@ export const States: React.FC<Props> = ({
                     select
                     value={selectedDomain ?? ''}
                     onChange={event => {
-
                       setSelectedSchemaId(undefined);
                       setSelectedDomain(event.target.value);
-
                     }}
                   >
                     {domains.map(domain =>
@@ -264,10 +263,14 @@ export const States: React.FC<Props> = ({
                             backgroundColor: (theme) => theme.palette.background.paper,
                           }}>
                           <TableSortLabel
-                            active={true}
+                            active={sortBy === '.created'}
                             direction={sortAscending ? 'asc' : 'desc'}
                             onClick={() => {
-                              setSortAscending(!sortAscending);
+                              if(sortBy === '.created') {
+                                setSortAscending(!sortAscending);
+                              } else {
+                                setSortBy('.created');
+                              }
                               setRefTimestamps([]);
                               setPage(0);
                             }}
@@ -295,14 +298,25 @@ export const States: React.FC<Props> = ({
                         </TableCell>
                         {indexedFields.map(field =>
                           <TableCell
-                            key={field.name}
                             width={1}
                             sx={{
                               backgroundColor: (theme) => theme.palette.background.paper,
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            [ {field.name} ]
+                            }}>
+                            <TableSortLabel
+                              active={sortBy === field.name}
+                              direction={sortAscending ? 'asc' : 'desc'}
+                              onClick={() => {
+                                if(sortBy === field.name) {
+                                  setSortAscending(!sortAscending);
+                                } else {
+                                  setSortBy(field.name)
+                                }
+                                setRefTimestamps([]);
+                                setPage(0);
+                              }}
+                            >
+                             [ {field.name} ]
+                            </TableSortLabel>
                           </TableCell>
                         )}
                         <TableCell

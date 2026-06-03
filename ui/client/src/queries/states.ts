@@ -73,6 +73,7 @@ export const queryStates = async (
   domain: string,
   schemaId: string,
   limit: number,
+  sortBy: string,
   sortAscending: boolean,
   filters: IFilter[],
   refTimestamp?: string
@@ -90,7 +91,7 @@ export const queryStates = async (
       {
         ...translatedFilters,
         limit,
-        sort: [`.created ${sortAscending ? 'ASC' : 'DESC'}`],
+        sort: [`${sortBy} ${sortAscending ? 'ASC' : 'DESC'}`],
         greaterThan: refTimestamp !== undefined && sortAscending ? [
           {
             field: '.created',
