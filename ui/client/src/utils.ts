@@ -76,6 +76,10 @@ export const translateFilters = (filters: IFilter[]) => {
         break;
     }
 
+    if(filter.field.type === 'boolean') {
+      entry.value = Boolean(entry.value);
+    }
+
     let group = result[operator] ?? [];
     group.push(entry);
     result[operator] = group;

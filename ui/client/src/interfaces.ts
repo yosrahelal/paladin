@@ -263,6 +263,12 @@ export interface IPrivacyGroup {
   contractAddress: string
 }
 
+export interface ISchemaComponent {
+  name: string
+  type: string
+  indexed: boolean
+}
+
 export interface ISchema {
   id: string
   domain: string
@@ -272,7 +278,7 @@ export interface ISchema {
     name: string
     type: string
     internalType: string
-    components: any
+    components: ISchemaComponent[]
   }
   labels: string[]
 }

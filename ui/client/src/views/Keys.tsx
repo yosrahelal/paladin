@@ -271,7 +271,7 @@ export const Keys: React.FC = () => {
         <Box
           sx={{
             padding: "20px",
-            maxWidth: "1300px",
+            maxWidth: "1500px",
             marginLeft: "auto",
             marginRight: "auto",
           }}

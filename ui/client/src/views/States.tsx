@@ -27,8 +27,7 @@ import { customNavigate } from "../utils";
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { Hash } from "../components/Hash";
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { IFilter } from "../interfaces";
-import { constants } from "../components/config";
+import { IFilter, ISchemaComponent, IState } from "../interfaces";
 import { Filters } from "../components/Filters";
 import { StateActions } from "../components/StateActions";
 
@@ -62,17 +61,8 @@ export const States: React.FC<Props> = ({
   setSelectedSchemaId
 }) => {
 
-  const getFiltersFromStorage = () => {
-    const value = window.localStorage.getItem(constants.STATE_FILTERS);
-    if (value !== null) {
-      try {
-        return JSON.parse(value);
-      } catch (_err) { }
-    }
-    return [];
-  };
 
-  const [filters, setFilters] = useState<IFilter[]>(getFiltersFromStorage());
+  const [filters, setFilters] = useState<IFilter[]>([]);
   const [count, setCount] = useState(-1);
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -141,13 +131,46 @@ export const States: React.FC<Props> = ({
     setPage(0);
   };
 
+  const indexedFields = schemas?.find(schema => schema.id === selectedSchemaId)?.definition.components.filter(component => component.indexed) ?? [];
+
+  const getIndexedFieldContent = (state: IState, component: ISchemaComponent) => {
+    switch (component.type) {
+      case 'bytes32':
+      case 'address': return <Hash Icon={<Captions size="18px" />} title={t('address')} hash={state.data[component.name]} />
+      case 'bool': return state.data[component.name] ? 'true' : 'false';
+      default: return state.data[component.name];
+    }
+  };
+
+  const filterFields: any = [
+    {
+      label: t('id'),
+      name: '.id',
+      type: 'string',
+      isHexValue: true
+    },
+    {
+      label: t('contractAddress'),
+      name: 'contractAddress',
+      type: 'string',
+      isHexValue: true
+    }
+  ];
+
+  indexedFields.map(indexedField => filterFields.push({
+    label: `[ ${indexedField.name} ]`,
+    name: indexedField.name,
+    isHexValue: ['bytes32', 'address'].includes(indexedField.type),
+    type: indexedField.type === 'bool' ? 'boolean' : 'string'
+  }));
+
   return (
     <>
       <Fade timeout={600} in={true}>
         <Box
           sx={{
             padding: "20px",
-            maxWidth: "1300px",
+            maxWidth: "1500px",
             marginLeft: "auto",
             marginRight: "auto",
           }}
@@ -178,8 +201,10 @@ export const States: React.FC<Props> = ({
                     select
                     value={selectedDomain ?? ''}
                     onChange={event => {
+
                       setSelectedSchemaId(undefined);
-                      setSelectedDomain(event.target.value)
+                      setSelectedDomain(event.target.value);
+
                     }}
                   >
                     {domains.map(domain =>
@@ -196,7 +221,12 @@ export const States: React.FC<Props> = ({
                     select={schemas !== undefined}
                     disabled={schemas === undefined}
                     value={selectedSchemaId ?? ''}
-                    onChange={event => setSelectedSchemaId(event.target.value)}
+                    onChange={event => {
+                      setPage(0);
+                      setCount(-1);
+                      setSelectedSchemaId(event.target.value);
+                      setFilters([]);
+                    }}
                   >
                     {schemas?.map(schema =>
                       <MenuItem key={schema.id} value={schema.id}>
@@ -217,20 +247,7 @@ export const States: React.FC<Props> = ({
               <>
                 <Box>
                   <Filters
-                    filterFields={[
-                      {
-                        label: t('id'),
-                        name: '.id',
-                        type: 'string',
-                        isHexValue: true
-                      },
-                      {
-                        label: t('contractAddress'),
-                        name: 'contractAddress',
-                        type: 'string',
-                        isHexValue: true
-                      }
-                    ]}
+                    filterFields={filterFields}
                     filters={filters}
                     setFilters={setFilters}
                   />
@@ -276,6 +293,18 @@ export const States: React.FC<Props> = ({
                         >
                           {t('contractAddress')}
                         </TableCell>
+                        {indexedFields.map(field =>
+                          <TableCell
+                            key={field.name}
+                            width={1}
+                            sx={{
+                              backgroundColor: (theme) => theme.palette.background.paper,
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            [ {field.name} ]
+                          </TableCell>
+                        )}
                         <TableCell
                           width={1}
                           sx={{
@@ -310,6 +339,11 @@ export const States: React.FC<Props> = ({
                               :
                               <>--</>}
                           </TableCell>
+                          {indexedFields.map(field =>
+                            <TableCell key={field.name}>
+                              {getIndexedFieldContent(state, field)}
+                            </TableCell>
+                          )}
                           <TableCell>
                             <StateActions state={state} />
                           </TableCell>

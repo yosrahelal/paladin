@@ -97,7 +97,7 @@ export const Domains: React.FC<Props> = ({
         <Box
           sx={{
             padding: '20px',
-            maxWidth: '1300px',
+            maxWidth: '1500px',
             marginLeft: 'auto',
             marginRight: 'auto',
           }}
