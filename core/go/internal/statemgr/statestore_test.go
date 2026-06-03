@@ -37,18 +37,21 @@ import (
 )
 
 type mockComponents struct {
-	domainManager *componentsmocks.DomainManager
-	txManager     *componentsmocks.TXManager
-	allComponents *componentsmocks.AllComponents
+	domainManager    *componentsmocks.DomainManager
+	txManager        *componentsmocks.TXManager
+	transportManager *componentsmocks.TransportManager
+	allComponents    *componentsmocks.AllComponents
 }
 
 func newMockComponents(t *testing.T) *mockComponents {
 	m := &mockComponents{}
 	m.domainManager = componentsmocks.NewDomainManager(t)
 	m.txManager = componentsmocks.NewTXManager(t)
+	m.transportManager = componentsmocks.NewTransportManager(t)
 	m.allComponents = componentsmocks.NewAllComponents(t)
 	m.allComponents.On("DomainManager").Return(m.domainManager)
 	m.allComponents.On("TxManager").Return(m.txManager)
+	m.allComponents.On("TransportManager").Return(m.transportManager)
 	return m
 }
 
