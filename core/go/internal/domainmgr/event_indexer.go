@@ -253,20 +253,6 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX persistence.DBTX, ba
 			return err
 		}
 
-		// Update the global private state completion index for domains that opt in.
-		// This runs inside the same DB transaction as the checkpoint so the row is written
-		// atomically with block progress.
-		for _, txc := range txCompletions {
-			if txc.PSC == nil || txc.ReceiptType != components.RT_Success {
-				continue
-			}
-			if !txc.PSC.Domain().SupportsCompletionIndex() {
-				continue
-			}
-			if err := d.dm.WriteStateCompletionForTx(ctx, dbTX, txc.PSC, txc.TransactionID, txc.OnChain.BlockNumber); err != nil {
-				return err
-			}
-		}
 	}
 
 	dbTX.AddPostCommit(func(txCtx context.Context) {
@@ -324,6 +310,8 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 		stateReads[i] = &pldapi.StateReadRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
 	}
 
+	// Only confirmed states are tracked for the completion index
+	confirmedStateIDsByTX := make(map[uuid.UUID]map[string]pldtypes.HexBytes)
 	stateConfirms := make([]*pldapi.StateConfirmRecord, len(res.ConfirmedStates))
 	for i, state := range res.ConfirmedStates {
 		txUUID, stateID, err := d.prepareIndexRecord(ctx, state.TransactionId, state.Id)
@@ -331,6 +319,14 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 			return nil, err
 		}
 		stateConfirms[i] = &pldapi.StateConfirmRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
+		if d.SupportsCompletionIndex() {
+			if len(stateID) > 0 {
+				if confirmedStateIDsByTX[txUUID] == nil {
+					confirmedStateIDsByTX[txUUID] = make(map[string]pldtypes.HexBytes)
+				}
+				confirmedStateIDsByTX[txUUID][stateID.String()] = stateID
+			}
+		}
 	}
 
 	stateInfoRecords := make([]*pldapi.StateInfoRecord, len(res.InfoStates))
@@ -386,6 +382,28 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 			return nil, err
 		}
 	}
+
+	// Update the global private state completion index for domains that opt in.
+	if len(confirmedStateIDsByTX) > 0 {
+		var batchEntries []components.StateCompletionEntry
+		for _, txCompletionEvent := range res.TransactionsComplete {
+			txUUID, err := d.recoverTransactionID(ctx, txCompletionEvent.TransactionId)
+			if err != nil {
+				return nil, err
+			}
+			for _, id := range confirmedStateIDsByTX[*txUUID] {
+				batchEntries = append(batchEntries, components.StateCompletionEntry{
+					StateID:     id,
+					Contract:    addr,
+					BlockNumber: txCompletionEvent.Location.BlockNumber,
+				})
+			}
+		}
+		if err := d.dm.stateStore.WriteStateCompletionsForBatch(ctx, dbTX, d.name, batchEntries); err != nil {
+			return nil, err
+		}
+	}
+
 	return res, err
 }
 

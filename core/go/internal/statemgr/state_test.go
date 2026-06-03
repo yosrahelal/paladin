@@ -353,7 +353,8 @@ func TestFindStatesWithNilOptions(t *testing.T) {
 
 }
 
-func TestWritePreVerifiedStates_UpdateStateCompletion_CalledWithArrivedStateIDs(t *testing.T) {
+func TestWritePreVerifiedStates_ClearsCompletionRows(t *testing.T) {
+	// Writing states should delete any outstanding completion rows for those state IDs.
 	ctx, ss, m, done := newDBTestStateManager(t)
 	defer done()
 
@@ -365,12 +366,9 @@ func TestWritePreVerifiedStates_UpdateStateCompletion_CalledWithArrivedStateIDs(
 	_ = mockDomain(t, m, "domain1", false)
 	m.txManager.On("NotifyStatesDBChanged", mock.Anything).Return()
 
-	var capturedIDs []pldtypes.HexBytes
-	m.domainManager.On("UpdateStateCompletion", mock.Anything, mock.Anything, mock.Anything).
-		Run(func(args mock.Arguments) { capturedIDs = args.Get(2).([]pldtypes.HexBytes) }).
-		Return(nil).Once()
-
 	contractAddr := pldtypes.RandAddress()
+
+	// We need the real state IDs to pre-insert completion rows, so write the states first.
 	var states []*pldapi.State
 	err = ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		states, err = ss.WritePreVerifiedStates(ctx, dbTX, "domain1", []*components.StateUpsertOutsideContext{
@@ -389,35 +387,29 @@ func TestWritePreVerifiedStates_UpdateStateCompletion_CalledWithArrivedStateIDs(
 	})
 	require.NoError(t, err)
 	require.Len(t, states, 2)
-	require.Len(t, capturedIDs, 2)
-	assert.Equal(t, states[0].ID, capturedIDs[0])
-	assert.Equal(t, states[1].ID, capturedIDs[1])
-}
 
-func TestWriteReceivedStates_UpdateStateCompletion_ErrorPropagates(t *testing.T) {
-	ctx, ss, m, done := newDBTestStateManager(t)
-	defer done()
+	// Seed completion rows for both state IDs.
+	for _, s := range states {
+		err = ss.p.DB().Create(&privateStateCompletion{
+			MissingStateID: s.ID.String(),
+			Contract:       contractAddr.String(),
+			BlockNumber:    1,
+		}).Error
+		require.NoError(t, err)
+	}
 
-	schema, err := newABISchema(ctx, "domain1", testABIParam(t, fakeCoinABI))
-	require.NoError(t, err)
-	err = ss.persistSchemas(ctx, ss.p.NOTX(), []*pldapi.Schema{schema.Schema})
-	require.NoError(t, err)
-
-	_ = mockDomain(t, m, "domain1", false)
-
-	m.domainManager.On("UpdateStateCompletion", mock.Anything, mock.Anything, mock.Anything).
-		Return(fmt.Errorf("completion index failure")).Once()
-
-	contractAddr := pldtypes.RandAddress()
+	// Now write the states again (idempotent upsert) — this must clear the completion rows.
 	err = ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
-		_, err = ss.WriteReceivedStates(ctx, dbTX, "domain1", []*components.StateUpsertOutsideContext{
-			{
-				SchemaID:        schema.ID(),
-				Data:            pldtypes.RawJSON(fmt.Sprintf(`{"amount":10,"owner":"0x615dD09124271D8008225054d85Ffe720E7a447A","salt":"%s"}`, pldtypes.RandHex(32))),
-				ContractAddress: contractAddr,
-			},
+		_, err = ss.WritePreVerifiedStates(ctx, dbTX, "domain1", []*components.StateUpsertOutsideContext{
+			{ID: states[0].ID, SchemaID: schema.ID(), Data: states[0].Data, ContractAddress: contractAddr},
+			{ID: states[1].ID, SchemaID: schema.ID(), Data: states[1].Data, ContractAddress: contractAddr},
 		})
 		return err
 	})
-	assert.Regexp(t, "completion index failure", err)
+	require.NoError(t, err)
+
+	var remaining []privateStateCompletion
+	err = ss.p.DB().Find(&remaining).Error
+	require.NoError(t, err)
+	assert.Empty(t, remaining)
 }

@@ -98,7 +98,6 @@ func newMockComponents(t *testing.T, realDB bool) *mockComponents {
 	mc.domain.On("CustomHashFunction").Return(false).Maybe()
 	mc.domain.On("Name").Return("domain1").Maybe()
 	mc.txManager.On("NotifyStatesDBChanged", mock.Anything).Return().Maybe()
-	mc.domainManager.On("UpdateStateCompletion", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	mc.transportManager.On("LocalNodeName").Return("node1").Maybe()
 
 	return mc

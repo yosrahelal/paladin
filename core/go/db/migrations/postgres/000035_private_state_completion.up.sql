@@ -1,12 +1,11 @@
 BEGIN;
 
 CREATE TABLE private_state_completion (
-    "contract"              VARCHAR NOT NULL,
-    "transaction_id"        VARCHAR NOT NULL,
-    "block_number"          BIGINT  NOT NULL,
-    "next_missing_state"    VARCHAR NOT NULL,
-    PRIMARY KEY ("contract", "transaction_id")
+    "contract"         VARCHAR NOT NULL,
+    "missing_state_id" VARCHAR NOT NULL,
+    "block_number"     BIGINT  NOT NULL,
+    PRIMARY KEY ("missing_state_id")
 );
-CREATE INDEX psci_next_missing_state ON private_state_completion ("next_missing_state");
+CREATE INDEX psci_contract_block ON private_state_completion ("contract", "block_number");
 
 COMMIT;

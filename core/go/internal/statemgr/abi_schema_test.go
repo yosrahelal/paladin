@@ -52,7 +52,6 @@ func mockDomain(t *testing.T, m *mockComponents, name string, customHashFunction
 
 func mockStateCallback(m *mockComponents) {
 	m.txManager.On("NotifyStatesDBChanged", mock.Anything).Return()
-	m.domainManager.On("UpdateStateCompletion", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 }
 
 // This is an E2E test using the actual database, the flush-writer DB storage system, and the schema cache

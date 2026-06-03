@@ -110,7 +110,7 @@ func (e *engineIntegration) CheckStateCompletion(ctx context.Context, block int6
 	if !e.domainSmartContract.Domain().SupportsCompletionIndex() {
 		return true, nil
 	}
-	return e.components.DomainManager().CheckStateCompletionForContract(
+	return e.components.StateManager().CheckStateCompletionForContract(
 		ctx, e.components.Persistence().NOTX(),
 		e.domainSmartContract.Address().String(), block,
 	)
