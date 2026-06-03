@@ -27,67 +27,67 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { isValidAddress, isValidPrivacyGroupId } from '../utils';
+import { customNavigate } from '../utils';
 import { useNavigate } from 'react-router-dom';
-import { getPrivacyGroupByAddress, getPrivacyGroupById } from '../queries/privacyGroups';
+import { IState } from '../interfaces';
+import { pushState } from '../queries/states';
 
 type Props = {
+  state: IState
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
 }
 
-export const PrivacyGroupLookupDialog: React.FC<Props> = ({
+export const PushStateDialog: React.FC<Props> = ({
+  state,
   dialogOpen,
   setDialogOpen,
 }) => {
 
   const { t } = useTranslation();
-  const [notFound, setNotFound] = useState(false);
-  const [idOrContractAddress, setIdOrContractAddress] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string>();
+  const [recipient, setRecipient] = useState('');
+  const [messageId, setMessageId] = useState<string>();
+  const [lastRecepient, setLastRecepient] = useState<string>();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (dialogOpen) {
-      setIdOrContractAddress('');
+      setRecipient('');
     }
   }, [dialogOpen]);
 
-  const { refetch: privacyGroupById } = useQuery({
-    queryKey: [`privacy-group-by-id-${idOrContractAddress}`],
-    queryFn: () => getPrivacyGroupById(idOrContractAddress!),
+  const { refetch: pushMessage } = useQuery({
+    queryKey: ['push-state', state, recipient],
+    queryFn: () => pushState(state.domain, state.id, recipient),
     retry: false,
     enabled: false
   });
 
-  const { refetch: privacyGroupByAddress } = useQuery({
-    queryKey: [`privacy-group-by-address-${idOrContractAddress}`],
-    queryFn: () => getPrivacyGroupByAddress(idOrContractAddress!),
-    retry: false,
-    enabled: false
-  });
+  useEffect(() => {
+    if (dialogOpen) {
+      setErrorMessage(undefined);
+      setMessageId(undefined);
+      setLastRecepient(undefined);
+    }
+  }, [dialogOpen]);
 
   const handleSubmit = () => {
-    setNotFound(false);
-    if (isValidPrivacyGroupId(idOrContractAddress)) {
-      privacyGroupById().then(result => {
-        if (result.data !== null) {
-          navigate(`/ui/privacy-groups/${idOrContractAddress}`);
-        } else {
-          setNotFound(true);
-        }
-      });
-    } else if (isValidAddress(idOrContractAddress)) {
-      privacyGroupByAddress().then(result => {
-        if (result.data !== null) {
-          navigate(`/ui/privacy-groups/${idOrContractAddress}`);
-        } else {
-          setNotFound(true);
-        }
-      });
-    }
+    setErrorMessage(undefined);
+    setMessageId(undefined);
+    pushMessage().then(result => {
+      if(result.isError) {
+        setErrorMessage(t('failedToPushMessageCheckRecipientNode'));
+      } else if (result.data !== undefined && result.data.replace(/[0-]/g, '').length === 0) {
+        setErrorMessage(t('mustPushStateToAccountInDifferentNode'));
+      } else {
+        setMessageId(result.data);
+        setLastRecepient(recipient);
+      }
+    });
   };
 
-  const canSubmit = isValidPrivacyGroupId(idOrContractAddress) || isValidAddress(idOrContractAddress);
+  const canSubmit = /.+@.+/.test(recipient) && lastRecepient !== recipient;
 
   return (
     <Dialog
@@ -102,19 +102,29 @@ export const PrivacyGroupLookupDialog: React.FC<Props> = ({
         handleSubmit();
       }}>
         <DialogTitle>
-          {t('lookup')}
-          {notFound &&
-            <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{t('domainSmartContractNotFound')}</Alert>}
+          {t('pushState')}
+          {errorMessage !== undefined &&
+            <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{errorMessage}</Alert>}
         </DialogTitle>
         <DialogContent>
+          {messageId !== undefined &&
+            <Alert variant="filled" severity="success" sx={{ marginBottom: '20px' }}
+              action={
+                <Button variant="outlined" color="inherit" size="small"
+                  onClick={event => customNavigate(`/ui/messages/${messageId}`, event, navigate)}
+                >{t('view')}</Button>
+              }
+            >
+              {t('messageValue', { value: messageId })}
+            </Alert>}
           <Box sx={{ marginTop: '6px' }}>
             <TextField
-              label={t('privacyGroupIdOrContractAddress')}
+              label={t('recipient')}
               autoComplete="OFF"
               sx={{ marginBottom: '20px' }}
               fullWidth
-              value={idOrContractAddress}
-              onChange={event => setIdOrContractAddress(event.target.value)}
+              value={recipient}
+              onChange={event => setRecipient(event.target.value)}
             />
           </Box>
         </DialogContent>
@@ -126,7 +136,7 @@ export const PrivacyGroupLookupDialog: React.FC<Props> = ({
             disableElevation
             disabled={!canSubmit}
             type="submit">
-            {t('lookup')}
+            {t('push')}
           </Button>
           <Button
             sx={{ minWidth: '100px' }}
@@ -135,7 +145,7 @@ export const PrivacyGroupLookupDialog: React.FC<Props> = ({
             disableElevation
             onClick={() => setDialogOpen(false)}
           >
-            {t('cancel')}
+            {t(lastRecepient !== undefined? 'close' : 'cancel')}
           </Button>
         </DialogActions>
       </form>

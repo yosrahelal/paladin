@@ -148,3 +148,27 @@ export const getState = async (
   }
   return states[0];
 };
+
+export const pushState = async (
+  domain: string,
+  stateId: string,
+  recipient: string
+): Promise<string> => {
+  const requestPayload = {
+    jsonrpc: "2.0",
+    id: Date.now(),
+    method: RpcMethods.pstate_transferState,
+    params: [
+      domain,
+      stateId,
+      recipient
+    ]
+  };
+  return <Promise<string>>(
+    returnResponse(
+      () => fetch(RpcEndpoint, generatePostReq(JSON.stringify(requestPayload))),
+      i18next.t("errorFetchingSchemas"), []
+    )
+  );
+};
+

@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ButtonBase, Drawer, IconButton, List, ListItem, ListItemButton, ListItemText, useTheme } from "@mui/material";
+import { Box, ButtonBase, Drawer, IconButton, List, ListItem, ListItemButton, ListItemText, useTheme } from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -115,19 +115,17 @@ export const Navigation: React.FC<Props> = ({
           </ListItemButton>
         </ListItem>
       </List>
-
-      <IconButton
-      size="large"
-      sx={{
-        position: "absolute",
-        bottom: '8px',
-        left: '10px'
-      }}
-        onClick={(event) => setAnchorEl(event.currentTarget)}
-      >
-        <SettingsIcon />
-      </IconButton>
-
+      <Box sx={{ display: 'flex', height: '100%', padding: '5px' }}>
+        <IconButton
+          size="large"
+          sx={{
+            marginTop: 'auto'
+          }}
+          onClick={(event) => setAnchorEl(event.currentTarget)}
+        >
+          <SettingsIcon />
+        </IconButton>
+      </Box>
       <SettingsMenu anchorEl={anchorEl} setAnchorEl={setAnchorEl} />
 
     </>

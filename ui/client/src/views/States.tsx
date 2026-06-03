@@ -30,6 +30,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { IFilter } from "../interfaces";
 import { constants } from "../components/config";
 import { Filters } from "../components/Filters";
+import { StateActions } from "../components/StateActions";
 
 type Props = {
   sortAscending: boolean
@@ -304,10 +305,13 @@ export const States: React.FC<Props> = ({
                             <Hash Icon={<Tag size="18px" />} title={t('id')} hash={state.id} />
                           </TableCell>
                           <TableCell>
-                            <Hash Icon={<Captions size="18px" />} title={t('address')} hash={state.contractAddress} />
+                            {state.contractAddress !== null ?
+                              <Hash Icon={<Captions size="18px" />} title={t('address')} hash={state.contractAddress} />
+                              :
+                              <>--</>}
                           </TableCell>
                           <TableCell>
-
+                            <StateActions state={state} />
                           </TableCell>
                           <TableCell align="right" sx={{ padding: '8px' }}>
                             <Tooltip title={t('open')} arrow>

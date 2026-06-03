@@ -282,7 +282,7 @@ export interface IState {
   created: string
   domain: string
   schema: string
-  contractAddress: string
+  contractAddress: string | null
   data: any
 }
 
