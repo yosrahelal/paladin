@@ -44,6 +44,8 @@ type Props = {
   setSelectedDomain: Dispatch<SetStateAction<string | undefined>>
   selectedSchemaId: string | undefined
   setSelectedSchemaId: Dispatch<SetStateAction<string | undefined>>
+  filters: IFilter[]
+  setFilters: Dispatch<SetStateAction<IFilter[]>>
 };
 
 export const States: React.FC<Props> = ({
@@ -58,11 +60,11 @@ export const States: React.FC<Props> = ({
   selectedDomain,
   setSelectedDomain,
   selectedSchemaId,
-  setSelectedSchemaId
+  setSelectedSchemaId,
+  filters,
+  setFilters
 }) => {
 
-
-  const [filters, setFilters] = useState<IFilter[]>([]);
   const [count, setCount] = useState(-1);
   const [sortBy, setSortBy] = useState('.created');
   const navigate = useNavigate();
