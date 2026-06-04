@@ -19,6 +19,7 @@ package rpcserver
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/pldmsgs"
@@ -169,7 +170,11 @@ func mapResponse(ctx context.Context, req *rpcclient.RPCRequest, result interfac
 		}
 	}
 	if code == 0 {
-		code = rpcclient.RPCCodeInternalError
+		if strings.Contains(err.Error(), "PD012220") {
+			code = rpcclient.RPCCodeConflict
+		} else {
+			code = rpcclient.RPCCodeInternalError
+		}
 	}
 	return rpcclient.NewRPCErrorResponse(err, req.ID, code)
 }

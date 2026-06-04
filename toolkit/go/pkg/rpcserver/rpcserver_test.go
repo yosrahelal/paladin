@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
@@ -642,6 +643,44 @@ func TestLegacyReturnCodes_RPCError_Returns500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, res.StatusCode())
 	assert.NotNil(t, errResponse.Error)
 	assert.Contains(t, errResponse.Error.Message, "something went wrong")
+}
+
+func TestLegacyReturnCodes_ConflictError_Returns500(t *testing.T) {
+	url, s, done := newTestServerHTTPLegacy(t)
+	defer done()
+
+	var mu sync.Mutex
+	seenKeys := make(map[string]bool)
+	regTestRPC(s, "ut_idempotent", RPCMethod1(func(ctx context.Context, idempotencyKey string) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if seenKeys[idempotencyKey] {
+			return "", fmt.Errorf("PD012220 duplicate request with idempotency key: %s", idempotencyKey)
+		}
+		seenKeys[idempotencyKey] = true
+		return "ok", nil
+	}))
+
+	// First call succeeds
+	_, err := resty.New().R().
+		SetBody(`{"jsonrpc":"2.0","id":"1","method":"ut_idempotent","params":["my-key"]}`).
+		Post(url)
+	require.NoError(t, err)
+
+	// Second call: in legacy mode the conflict still returns HTTP 500 (matching pre-v1 behaviour),
+	// but the JSON/RPC error code in the body is RPCCodeConflict (-32001), not RPCCodeInternalError
+	var conflictResponse rpcclient.RPCResponse
+	res, err := resty.New().R().
+		SetBody(`{"jsonrpc":"2.0","id":"2","method":"ut_idempotent","params":["my-key"]}`).
+		SetResult(&conflictResponse).
+		SetError(&conflictResponse).
+		Post(url)
+	require.NoError(t, err)
+	assert.False(t, res.IsSuccess())
+	assert.Equal(t, http.StatusInternalServerError, res.StatusCode())
+	assert.NotNil(t, conflictResponse.Error)
+	assert.Equal(t, int64(rpcclient.RPCCodeConflict), conflictResponse.Error.Code)
+	assert.Contains(t, conflictResponse.Error.Message, "PD012220")
 }
 
 func TestLegacyReturnCodes_RPCSuccess_Returns200(t *testing.T) {

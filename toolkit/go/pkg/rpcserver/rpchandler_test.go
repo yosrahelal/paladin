@@ -283,7 +283,7 @@ func TestRPCIdempotencyConflict_Returns200WithError(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, res.IsSuccess()) // HTTP 200, not 500 or 409
 	assert.NotNil(t, conflictResponse.Error)
-	assert.Equal(t, int64(rpcclient.RPCCodeInternalError), conflictResponse.Error.Code)
+	assert.Equal(t, int64(rpcclient.RPCCodeConflict), conflictResponse.Error.Code) // Paladin's custom JSON/RPC error code equivalent to HTTP 409 Conflict
 	assert.Contains(t, conflictResponse.Error.Message, "PD012220")
 
 }

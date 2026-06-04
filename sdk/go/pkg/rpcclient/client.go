@@ -43,6 +43,7 @@ const (
 	// JSON-RPC 2.0 specification reserves -32000 to -32099 for "implementation-defined server-errors"
 	// Paladin uses this range for custom application errors like authentication failures
 	RPCCodeUnauthorized RPCCode = -32000 // Unauthorized request - authentication failed
+	RPCCodeConflict     RPCCode = -32001 // Idempotency key clash - request already submitted with this key
 )
 
 // ClosableClient is a Client that can be closed to release underlying connections (HTTP or WebSocket).
