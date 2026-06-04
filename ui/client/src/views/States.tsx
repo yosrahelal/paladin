@@ -149,21 +149,18 @@ export const States: React.FC<Props> = ({
     {
       label: t('id'),
       name: '.id',
-      type: 'string',
-      isHexValue: true
+      type: 'string'
     },
     {
       label: t('contractAddress'),
       name: 'contractAddress',
-      type: 'string',
-      isHexValue: true
+      type: 'string'
     }
   ];
 
   indexedFields.map(indexedField => filterFields.push({
     label: `[ ${indexedField.name} ]`,
     name: indexedField.name,
-    isHexValue: ['bytes32', 'address'].includes(indexedField.type),
     type: indexedField.type === 'bool' ? 'boolean' : 'string'
   }));
 
