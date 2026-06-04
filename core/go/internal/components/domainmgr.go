@@ -56,6 +56,10 @@ type Domain interface {
 	CustomHashFunction() bool
 	SupportsCompletionIndex() bool
 	FixedSigningIdentity() string
+	// GetBlockHeight returns the highest block number that has been fully confirmed as
+	// processed by this domain's event stream. Equivalent to the domain's event stream
+	// CheckpointBlock(); returns -1 if no blocks have been processed yet.
+	GetBlockHeight() int64
 
 	// Specific to domains that support privacy groups (domain should return error if it does not).
 	// Validates the input properties, and turns it into the full genesis configuration for a group

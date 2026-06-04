@@ -20,6 +20,7 @@ packages:
   github.com/LFDT-Paladin/paladin/core/pkg/blockindexer:    
     interfaces:
       BlockIndexer:
+      EventStream:
   github.com/LFDT-Paladin/paladin/core/pkg/ethclient:
     config:
       all: true

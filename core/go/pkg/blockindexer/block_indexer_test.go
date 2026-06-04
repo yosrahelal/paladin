@@ -852,7 +852,7 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 		HandlerDBTX: func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) error {
 			return nil
 		},
-		Definition: &EventStream{
+		Definition: &EventStreamDefinition{
 			Name: "unit_test",
 			Sources: []EventStreamSource{{
 				ABI: abi.ABI{
@@ -864,7 +864,7 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify event stream is added but not started yet
-	es := bi.eventStreams[eventStream.ID]
+	es := bi.eventStreams[eventStream.Definition().ID]
 	require.NotNil(t, es)
 
 	sentFail := false
@@ -894,7 +894,7 @@ func TestBlockIndexerResetsAfterHashLookupFail(t *testing.T) {
 
 	// Check that the event stream goroutines are now running
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		es := bi.eventStreams[eventStream.ID]
+		es := bi.eventStreams[eventStream.Definition().ID]
 		assert.NotNil(c, es.detectorDone, "Event stream detector should be started after reset")
 		assert.NotNil(c, es.dispatcherDone, "Event stream dispatcher should be started after reset")
 	}, testTimeout(t), 100*time.Millisecond, "Event streams should be started after reset")
@@ -911,7 +911,7 @@ func TestBlockIndexerResetsAfterReceiptIntegrityFail(t *testing.T) {
 		HandlerDBTX: func(ctx context.Context, dbTX persistence.DBTX, batch *EventDeliveryBatch) error {
 			return nil
 		},
-		Definition: &EventStream{
+		Definition: &EventStreamDefinition{
 			Name: "unit_test",
 			Sources: []EventStreamSource{{
 				ABI: abi.ABI{
@@ -922,7 +922,7 @@ func TestBlockIndexerResetsAfterReceiptIntegrityFail(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	es := bi.eventStreams[eventStream.ID]
+	es := bi.eventStreams[eventStream.Definition().ID]
 	require.NotNil(t, es)
 
 	sentFail := false
@@ -956,7 +956,7 @@ func TestBlockIndexerResetsAfterReceiptIntegrityFail(t *testing.T) {
 	assert.True(t, sentFail)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		es := bi.eventStreams[eventStream.ID]
+		es := bi.eventStreams[eventStream.Definition().ID]
 		assert.NotNil(c, es.detectorDone, "Event stream detector should be started after reset")
 		assert.NotNil(c, es.dispatcherDone, "Event stream dispatcher should be started after reset")
 	}, testTimeout(t), 100*time.Millisecond, "Event streams should be started after reset")

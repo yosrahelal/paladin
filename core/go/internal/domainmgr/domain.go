@@ -65,7 +65,7 @@ type domain struct {
 	initRetry   *retry.Retry
 	config      *prototk.DomainConfig
 	schemasByID map[string]components.Schema
-	eventStream *blockindexer.EventStream
+	eventStream blockindexer.EventStream
 
 	initError atomic.Pointer[error]
 	initDone  chan struct{}
@@ -144,7 +144,7 @@ func (d *domain) processDomainConfig(dbTX persistence.DBTX, confRes *prototk.Con
 		}
 	}
 
-	stream := &blockindexer.EventStream{
+	stream := &blockindexer.EventStreamDefinition{
 		Type: blockindexer.EventStreamTypeInternal.Enum(),
 		Sources: []blockindexer.EventStreamSource{
 			{ABI: iPaladinContractRegistryABI, Address: d.registryAddress},
@@ -291,6 +291,10 @@ func (d *domain) RegistryAddress() *pldtypes.EthAddress {
 
 func (d *domain) Configuration() *prototk.DomainConfig {
 	return d.config
+}
+
+func (d *domain) GetBlockHeight() int64 {
+	return d.eventStream.CheckpointBlock()
 }
 
 func (d *domain) FixedSigningIdentity() string {
