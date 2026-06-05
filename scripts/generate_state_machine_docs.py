@@ -493,15 +493,6 @@ def generate_detail_section(data: StateMachineData) -> str:
     )
 
 
-_GENERATED_NOTE = (
-    "> **Note:** This file is generated from the source code."
-    " To regenerate after state machine changes, run:\n"
-    "> ```\n"
-    "> python3 scripts/generate_state_machine_docs.py\n"
-    "> ```\n\n"
-)
-
-
 def generate_doc(all_data: List[StateMachineData]) -> str:
     header = (
         "# Sequencer and transaction state machines\n\n"
@@ -509,7 +500,6 @@ def generate_doc(all_data: List[StateMachineData]) -> str:
         " which manages the state of the sequencer components (originator and"
         " coordinator) and of sequencer transactions (at the originator and at"
         " the coordinator).\n\n"
-        + _GENERATED_NOTE
     )
     sections = "\n---\n\n".join(generate_overview_section(d) for d in all_data)
     return header + sections
@@ -520,7 +510,6 @@ def generate_transitions_doc(all_data: List[StateMachineData]) -> str:
         "# State machine transition detail\n\n"
         "Detailed state diagrams showing every transition event and guard condition"
         " for each of the four distributed sequencer state machines.\n\n"
-        + _GENERATED_NOTE
     )
     sections = "\n---\n\n".join(generate_detail_section(d) for d in all_data)
     return header + sections

@@ -2,11 +2,6 @@
 
 The distributed sequencer is designed as a set of state machines, each of which manages the state of the sequencer components (originator and coordinator) and of sequencer transactions (at the originator and at the coordinator).
 
-> **Note:** This file is generated from the source code. To regenerate after state machine changes, run:
-> ```
-> python3 scripts/generate_state_machine_docs.py
-> ```
-
 ## Coordinator State Machine
 
 ```mermaid

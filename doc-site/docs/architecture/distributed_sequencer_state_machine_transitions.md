@@ -2,11 +2,6 @@
 
 Detailed state diagrams showing every transition event and guard condition for each of the four distributed sequencer state machines.
 
-> **Note:** This file is generated from the source code. To regenerate after state machine changes, run:
-> ```
-> python3 scripts/generate_state_machine_docs.py
-> ```
-
 ## Coordinator State Machine
 
 ```mermaid
