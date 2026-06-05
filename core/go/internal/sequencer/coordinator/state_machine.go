@@ -34,15 +34,15 @@ type EventType = common.EventType
 // Note: inline comments on State_* constants are used in auto-generated documentation.
 // Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
-	State_Initial   State = iota // Coordinator created but not yet selected an active coordinator
+	State_Initial   State = iota // Coordinator created
 	State_Idle                   // Not acting as a coordinator and not aware of any other active coordinators
 	State_Observing              // Not acting as a coordinator but aware of another node acting as a coordinator
 	State_Elect                  // Elected to take over from another coordinator and waiting for handover information
-	State_Standby                // Going to be coordinator on the next block range but local indexer is not at that block yet.
+	State_Standby                // Going to be coordinator on the next block range but local indexer is not at that block yet
 	State_Prepared               // Have received the handover response but haven't seen the flush point confirmed
-	State_Active                 // Have seen the flush point or have reason to believe the old coordinator has become unavailable and am now assembling transactions based on available knowledge of the state of the base ledger and submitting transactions to the base ledger.
-	State_Flush                  // Stopped assembling and dispatching transactions but continue to submit transactions that are already dispatched
-	State_Closing                // Have flushed and am continuing to sent closing status for `x` heartbeats.
+	State_Active                 // Actively coordinating transactions for this domain instance
+	State_Flush                  // Stopped dispatching new transactions but continuing to process transactions that are already dispatched
+	State_Closing                // Have flushed and am continuing to send closing status for configured number of heartbeats
 )
 
 const (

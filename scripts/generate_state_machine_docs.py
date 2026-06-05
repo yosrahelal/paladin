@@ -500,6 +500,7 @@ def generate_doc(all_data: List[StateMachineData]) -> str:
         " which manages the state of the sequencer components (originator and"
         " coordinator) and of sequencer transactions (at the originator and at"
         " the coordinator).\n\n"
+        "*Auto-generated from source*\n\n"
     )
     sections = "\n---\n\n".join(generate_overview_section(d) for d in all_data)
     return header + sections
@@ -510,6 +511,7 @@ def generate_transitions_doc(all_data: List[StateMachineData]) -> str:
         "# State machine transition detail\n\n"
         "Detailed state diagrams showing every transition event and guard condition"
         " for each of the four distributed sequencer state machines.\n\n"
+        "*Auto-generated from source*\n\n"
     )
     sections = "\n---\n\n".join(generate_detail_section(d) for d in all_data)
     return header + sections

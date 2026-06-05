@@ -33,9 +33,9 @@ type EventType = common.EventType
 // Note: inline comments on State_* constants are used in auto-generated documentation.
 // Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
-	State_Idle      State = iota //Not acting as a originator and not aware of any active coordinators
-	State_Observing              //Not acting as a originator but aware of a node (which may be the same node) acting as a coordinator
-	State_Sending                //Has some transactions that have been sent to a coordinator but not yet confirmed TODO should this be named State_Monitoring or State_Delegated or even State_Sent.  Sending sounds like it is in the process of sending the request message.
+	State_Idle      State = iota // Not acting as an originator and not aware of any active coordinators
+	State_Observing              // Not acting as an originator but aware of a node (which may be the same node) acting as a coordinator
+	State_Sending                // Has some transactions that have been delegated to a coordinator but not yet confirmed
 )
 
 const (

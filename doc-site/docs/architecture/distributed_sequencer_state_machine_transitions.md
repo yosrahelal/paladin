@@ -2,6 +2,8 @@
 
 Detailed state diagrams showing every transition event and guard condition for each of the four distributed sequencer state machines.
 
+*Auto-generated from source*
+
 ## Coordinator State Machine
 
 ```mermaid
