@@ -27,6 +27,8 @@ import (
 
 type State int
 
+// Note: inline comments on State_* constants are used in auto-generated documentation.
+// Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
 	State_Initial                 State = iota // Initial state before anything is calculated
 	State_Pooled                               // waiting in the pool to be assembled - TODO should rename to "Selectable" or "Selectable_Pooled".  Related to potential rename of `State_PreAssembly_Blocked`

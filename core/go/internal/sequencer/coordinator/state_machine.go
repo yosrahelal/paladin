@@ -31,6 +31,8 @@ type State int
 // EventType is an alias for common.EventType
 type EventType = common.EventType
 
+// Note: inline comments on State_* constants are used in auto-generated documentation.
+// Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
 	State_Initial   State = iota // Coordinator created but not yet selected an active coordinator
 	State_Idle                   // Not acting as a coordinator and not aware of any other active coordinators

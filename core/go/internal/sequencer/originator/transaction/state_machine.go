@@ -27,6 +27,8 @@ import (
 
 type State int
 
+// Note: inline comments on State_* constants are used in auto-generated documentation.
+// Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
 	State_Initial               State = iota // Initial state before anything is calculated
 	State_Pending                            // Intent for the transaction has been created in the database and has been assigned a unique ID but is not currently known to be being processed by a coordinator
