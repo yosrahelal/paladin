@@ -27,71 +27,67 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fetchPaladinTransaction, fetchEnrichedTransaction } from '../queries/transactions';
-import { isValidTransactionHash, isValidUUID } from '../utils';
+import { customNavigate } from '../utils';
 import { useNavigate } from 'react-router-dom';
+import { IState } from '../interfaces';
+import { pushState } from '../queries/states';
 
 type Props = {
+  state: IState
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
-  label: string
 }
 
-export const TransactionLookupDialog: React.FC<Props> = ({
+export const SendStateDialog: React.FC<Props> = ({
+  state,
   dialogOpen,
   setDialogOpen,
-  label
 }) => {
 
   const { t } = useTranslation();
-  const [notFound, setNotFound] = useState(false);
-  const [hashOrId, setHashOrId] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string>();
+  const [recipient, setRecipient] = useState('');
+  const [messageId, setMessageId] = useState<string>();
+  const [lastRecepient, setLastRecepient] = useState<string>();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (dialogOpen) {
-      setHashOrId('');
+      setRecipient('');
     }
   }, [dialogOpen]);
 
-  const { refetch: blockchainTransactionByHash } = useQuery({
-    queryKey: ["blockchainTransactionByHash", hashOrId],
-    queryFn: () => fetchEnrichedTransaction(hashOrId),
-    enabled: isValidTransactionHash(hashOrId),
-    refetchOnMount: false,
-    retry: false
+  const { refetch: pushMessage } = useQuery({
+    queryKey: ['push-state', state, recipient],
+    queryFn: () => pushState(state.domain, state.id, recipient),
+    retry: false,
+    enabled: false
   });
 
-  const { refetch: paladinTransactionById } = useQuery({
-    queryKey: ["paladinTransactionById", hashOrId],
-    queryFn: () => fetchPaladinTransaction(hashOrId),
-    enabled: isValidUUID(hashOrId),
-    refetchOnMount: false,
-    retry: false
-  });
+  useEffect(() => {
+    if (dialogOpen) {
+      setErrorMessage(undefined);
+      setMessageId(undefined);
+      setLastRecepient(undefined);
+    }
+  }, [dialogOpen]);
 
   const handleSubmit = () => {
-    setNotFound(false);
-    if (isValidTransactionHash(hashOrId)) {
-      blockchainTransactionByHash().then(result => {
-        if (result.isSuccess) {
-          navigate(`/ui/transactions/${hashOrId}`);
-        } else {
-          setNotFound(true);
-        }
-      });
-    } else if (isValidUUID(hashOrId)) {
-      paladinTransactionById().then(result => {
-        if (result.isSuccess && result.data !== null) {
-          navigate(`/ui/transactions/${hashOrId}`);
-        } else {
-          setNotFound(true);
-        }
-      });
-    }
+    setErrorMessage(undefined);
+    setMessageId(undefined);
+    pushMessage().then(result => {
+      if(result.isError) {
+        setErrorMessage(t('failedToPushMessageCheckRecipientNode'));
+      } else if (result.data !== undefined && result.data.replace(/[0-]/g, '').length === 0) {
+        setErrorMessage(t('mustPushStateToAccountInDifferentNode'));
+      } else {
+        setMessageId(result.data);
+        setLastRecepient(recipient);
+      }
+    });
   };
 
-  const canSubmit = isValidTransactionHash(hashOrId) || isValidUUID(hashOrId);
+  const canSubmit = /.+@.+/.test(recipient) && lastRecepient !== recipient;
 
   return (
     <Dialog
@@ -106,19 +102,29 @@ export const TransactionLookupDialog: React.FC<Props> = ({
         handleSubmit();
       }}>
         <DialogTitle>
-          {t('lookup')}
-          {notFound &&
-            <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{t('transactionNotFound')}</Alert>}
+          {t('sendState')}
+          {errorMessage !== undefined &&
+            <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{errorMessage}</Alert>}
         </DialogTitle>
         <DialogContent>
+          {messageId !== undefined &&
+            <Alert variant="filled" severity="success" sx={{ marginBottom: '20px' }}
+              action={
+                <Button variant="outlined" color="inherit" size="small"
+                  onClick={event => customNavigate(`/ui/messages/${messageId}`, event, navigate)}
+                >{t('view')}</Button>
+              }
+            >
+              {t('messageValue', { value: messageId })}
+            </Alert>}
           <Box sx={{ marginTop: '6px' }}>
             <TextField
-              label={label}
+              label={t('recipient')}
               autoComplete="OFF"
               sx={{ marginBottom: '20px' }}
               fullWidth
-              value={hashOrId}
-              onChange={event => setHashOrId(event.target.value)}
+              value={recipient}
+              onChange={event => setRecipient(event.target.value)}
             />
           </Box>
         </DialogContent>
@@ -130,7 +136,7 @@ export const TransactionLookupDialog: React.FC<Props> = ({
             disableElevation
             disabled={!canSubmit}
             type="submit">
-            {t('lookup')}
+            {t('send')}
           </Button>
           <Button
             sx={{ minWidth: '100px' }}
@@ -139,7 +145,7 @@ export const TransactionLookupDialog: React.FC<Props> = ({
             disableElevation
             onClick={() => setDialogOpen(false)}
           >
-            {t('cancel')}
+            {t(lastRecepient !== undefined? 'close' : 'cancel')}
           </Button>
         </DialogActions>
       </form>

@@ -27,71 +27,51 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fetchPaladinTransaction, fetchEnrichedTransaction } from '../queries/transactions';
-import { isValidTransactionHash, isValidUUID } from '../utils';
+import { isValidAddress } from '../utils';
 import { useNavigate } from 'react-router-dom';
+import { getDomainContractByAddress } from '../queries/domains';
 
 type Props = {
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
-  label: string
 }
 
-export const TransactionLookupDialog: React.FC<Props> = ({
+export const DomainContractLookupDialog: React.FC<Props> = ({
   dialogOpen,
   setDialogOpen,
-  label
 }) => {
 
   const { t } = useTranslation();
   const [notFound, setNotFound] = useState(false);
-  const [hashOrId, setHashOrId] = useState('');
+  const [address, setAddress] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
     if (dialogOpen) {
-      setHashOrId('');
+      setAddress('');
     }
   }, [dialogOpen]);
 
-  const { refetch: blockchainTransactionByHash } = useQuery({
-    queryKey: ["blockchainTransactionByHash", hashOrId],
-    queryFn: () => fetchEnrichedTransaction(hashOrId),
-    enabled: isValidTransactionHash(hashOrId),
-    refetchOnMount: false,
-    retry: false
-  });
-
-  const { refetch: paladinTransactionById } = useQuery({
-    queryKey: ["paladinTransactionById", hashOrId],
-    queryFn: () => fetchPaladinTransaction(hashOrId),
-    enabled: isValidUUID(hashOrId),
+  const { refetch: domainContractByAddress } = useQuery({
+    queryKey: [`domain-contract-${address}`],
+    queryFn: () => getDomainContractByAddress(address),
+    enabled: isValidAddress(address),
     refetchOnMount: false,
     retry: false
   });
 
   const handleSubmit = () => {
     setNotFound(false);
-    if (isValidTransactionHash(hashOrId)) {
-      blockchainTransactionByHash().then(result => {
-        if (result.isSuccess) {
-          navigate(`/ui/transactions/${hashOrId}`);
-        } else {
-          setNotFound(true);
-        }
-      });
-    } else if (isValidUUID(hashOrId)) {
-      paladinTransactionById().then(result => {
-        if (result.isSuccess && result.data !== null) {
-          navigate(`/ui/transactions/${hashOrId}`);
-        } else {
-          setNotFound(true);
-        }
-      });
-    }
+    domainContractByAddress().then(result => {
+      if (result.isSuccess) {
+        navigate(`/ui/domains/${address}`);
+      } else {
+        setNotFound(true);
+      }
+    });
   };
 
-  const canSubmit = isValidTransactionHash(hashOrId) || isValidUUID(hashOrId);
+  const canSubmit = isValidAddress(address);
 
   return (
     <Dialog
@@ -108,17 +88,17 @@ export const TransactionLookupDialog: React.FC<Props> = ({
         <DialogTitle>
           {t('lookup')}
           {notFound &&
-            <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{t('transactionNotFound')}</Alert>}
+            <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{t('domainSmartContractNotFound')}</Alert>}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ marginTop: '6px' }}>
             <TextField
-              label={label}
+              label={t('contractAddress')}
               autoComplete="OFF"
               sx={{ marginBottom: '20px' }}
               fullWidth
-              value={hashOrId}
-              onChange={event => setHashOrId(event.target.value)}
+              value={address}
+              onChange={event => setAddress(event.target.value)}
             />
           </Box>
         </DialogContent>
