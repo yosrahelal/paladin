@@ -92,21 +92,16 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
 					Validator: validator_TransactionDoesNotExist,
-					Actions:   []ActionRule{{Action: action_TransactionCreated}},
+					Actions: []ActionRule{
+						{Action: action_TransactionCreated},
+						// If we are idle we have not been receiving heartbeats from a coordinator so we
+						// need to make sure our delegation goes to the current top priority coordinator
+						{Action: action_RefreshBlockHeight},
+						{Action: action_ResetToTopPriorityCoordinator},
+					},
 					Transitions: []Transition{{
 						To: State_Sending,
 					}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
-						// Re-align to the new epoch's top-priority coordinator while still idle.
-						{If: guard_IsOnEpochBoundary, Action: action_ResetToTopPriorityCoordinator},
-					},
 				}},
 			},
 			common.Event_EndorserNodesDiscovered: {
@@ -163,15 +158,6 @@ var stateDefinitionsMap = StateDefinitions{
 					Transitions: []Transition{{
 						To: State_Sending,
 					}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 			common.Event_EndorserNodesDiscovered: {
@@ -298,15 +284,6 @@ var stateDefinitionsMap = StateDefinitions{
 						validator_OriginatorTransactionStateTransitionToReverted,
 					),
 					Actions: []ActionRule{{Action: action_FinalizeTransaction}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 			common.Event_EndorserNodesDiscovered: {

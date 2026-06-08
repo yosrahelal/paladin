@@ -94,7 +94,7 @@ type coordinatorTransaction struct {
 	stateVisibilityTracker            statevisibilitytracker.StateVisibilityStore
 	dependencyTracker                 dependencytracker.DependencyTracker
 	engineIntegration                 common.EngineIntegration
-	getCurrentBlockHeight             func() int64 // returns the coordinator's tracked block height
+	getBlockHeight                    func(ctx context.Context) int64
 	blockHeightTolerance              uint64
 	syncPoints                        syncpoints.SyncPoints
 	components                        components.AllComponents
@@ -120,7 +120,7 @@ func NewTransaction(ctx context.Context,
 	getCoordinatorTransactionState func(context.Context, uuid.UUID) (State, bool),
 	notifyEndorserCandidates func(context.Context, ...string),
 	engineIntegration common.EngineIntegration,
-	getCurrentBlockHeight func() int64,
+	getBlockHeight func(ctx context.Context) int64,
 	blockHeightTolerance uint64,
 	syncPoints syncpoints.SyncPoints,
 	allComponents components.AllComponents,
@@ -150,7 +150,7 @@ func NewTransaction(ctx context.Context,
 		getCoordinatorTransactionState,
 		notifyEndorserCandidates,
 		engineIntegration,
-		getCurrentBlockHeight,
+		getBlockHeight,
 		blockHeightTolerance,
 		syncPoints,
 		allComponents,
@@ -182,7 +182,7 @@ func newTransaction(
 	getCoordinatorTransactionState func(context.Context, uuid.UUID) (State, bool),
 	notifyEndorserCandidates func(context.Context, ...string),
 	engineIntegration common.EngineIntegration,
-	getCurrentBlockHeight func() int64,
+	getBlockHeight func(ctx context.Context) int64,
 	blockHeightTolerance uint64,
 	syncPoints syncpoints.SyncPoints,
 	allComponents components.AllComponents,
@@ -212,7 +212,7 @@ func newTransaction(
 		getCoordinatorTransactionState:    getCoordinatorTransactionState,
 		notifyEndorserCandidates:          notifyEndorserCandidates,
 		engineIntegration:                 engineIntegration,
-		getCurrentBlockHeight:             getCurrentBlockHeight,
+		getBlockHeight:                    getBlockHeight,
 		blockHeightTolerance:              blockHeightTolerance,
 		syncPoints:                        syncPoints,
 		components:                        allComponents,

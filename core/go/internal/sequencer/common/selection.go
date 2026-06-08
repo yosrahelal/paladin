@@ -99,17 +99,16 @@ func DedupeSortedCoordinatorEndorserNodes(nodes []string) []string {
 }
 
 // ComputeCoordinatorPriorityList returns a priority-ordered list of coordinator nodes for the
-// given block height and range. The node at index 0 is the highest-priority (currently selected)
+// given effective block height. The node at index 0 is the highest-priority (currently selected)
 // coordinator; remaining nodes follow in sorted order. All nodes that call this function with the
-// same pool and block height will independently reach the same result.
+// same pool and effective block height will independently reach the same result.
 //
 // For COORDINATOR_STATIC and COORDINATOR_SENDER modes, the coordinator field is set once at
 // construction/Start time and this function is never invoked.
 func ComputeCoordinatorPriorityList(
 	ctx context.Context,
 	nodePool []string,
-	currentBlockHeight uint64,
-	blockRange uint64,
+	effectiveBlockHeight uint64,
 ) []string {
 	n := len(nodePool)
 	if n == 0 {
@@ -118,11 +117,10 @@ func ComputeCoordinatorPriorityList(
 	if n == 1 {
 		return []string{nodePool[0]}
 	}
-	effectiveBlockNumber := currentBlockHeight - (currentBlockHeight % blockRange)
 
 	// Take a numeric hash of the effective block number
 	h := fnv.New32a()
-	h.Write([]byte(strconv.FormatUint(effectiveBlockNumber, 10)))
+	h.Write([]byte(strconv.FormatUint(effectiveBlockHeight, 10)))
 	p := int(h.Sum32()) % n
 	selected := nodePool[p]
 	log.L(ctx).Debugf("coordinator priority list: selected index %d (%q) from pool %+v", p, selected, nodePool)
@@ -153,12 +151,9 @@ func IsHigherPriority(list []string, node1 string, node2 string) bool {
 	return idx1 < idx2
 }
 
-// DecodeNewBlockHeight extracts the new block height from a NewBlockEvent and determines
-// whether we have entered a new block range epoch. Both coordinator and originator use this
-// to update their block height state consistently.
-func DecodeNewBlockHeight(currentBlockHeight uint64, blockRange uint64, event Event) (uint64, bool) {
-	e := event.(*NewBlockEvent)
-	newHeight := e.BlockHeight
-	onEpochBoundary := newHeight/blockRange != currentBlockHeight/blockRange
-	return newHeight, onEpochBoundary
+// ComputeEffectiveBlockHeight returns the epoch-aligned block height for a given raw block
+// height and epoch width (blockRange). The result is constant within an epoch, changing only
+// when the raw height crosses the next epoch boundary.
+func ComputeEffectiveBlockHeight(height, blockRange uint64) uint64 {
+	return height - (height % blockRange)
 }

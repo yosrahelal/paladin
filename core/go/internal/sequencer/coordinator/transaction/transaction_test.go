@@ -261,7 +261,7 @@ func TestNewTransaction_Success_ReturnsTransaction(t *testing.T) {
 		func(ctx context.Context, id uuid.UUID) (State, bool) { return State(0), false },
 		func(context.Context, ...string) {}, // notifyEndorserCandidates
 		sequencercommonmocks.NewEngineIntegration(t),
-		func() int64 { return 0 },
+		func(_ context.Context) int64 { return 0 },
 		0,
 		&syncpointsmocks.SyncPoints{},
 		allComponents,
@@ -312,7 +312,7 @@ func TestNewTransaction_PublicAPI_ReturnsTransaction(t *testing.T) {
 		func(ctx context.Context, id uuid.UUID) (State, bool) { return State(0), false },
 		func(context.Context, ...string) {}, // notifyEndorserCandidates
 		sequencercommonmocks.NewEngineIntegration(t),
-		func() int64 { return 0 },
+		func(_ context.Context) int64 { return 0 },
 		0,
 		&syncpointsmocks.SyncPoints{},
 		allComponents,

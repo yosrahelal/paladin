@@ -82,7 +82,8 @@ type coordinator struct {
 	heartbeatIntervalsSinceLastReceive int
 	transactionsByID                   map[uuid.UUID]transaction.CoordinatorTransaction
 	pooledTransactions                 []transaction.CoordinatorTransaction
-	currentBlockHeight                 uint64
+	currentBlockHeight                 int64
+	effectiveBlockHeight               uint64
 	dependencyTracker                  dependencytracker.DependencyTracker
 	grapher                            grapher.Grapher
 	stateVisibilityTracker             statevisibilitytracker.StateVisibilityStore
@@ -219,11 +220,9 @@ func (c *coordinator) Start(ctx context.Context) error {
 	coordCtx := log.WithLogField(ctx, "role", "coordinator")
 	c.ctx = coordCtx
 
-	blockHeight, err := c.engineIntegration.GetBlockHeight(ctx)
-	if err != nil {
-		return err
-	}
-	c.currentBlockHeight = uint64(blockHeight)
+	blockHeight := c.engineIntegration.GetBlockHeight(ctx)
+	c.currentBlockHeight = blockHeight
+	c.effectiveBlockHeight = common.ComputeEffectiveBlockHeight(uint64(blockHeight), c.coordinatorSelectionBlockRange)
 
 	c.started = true
 

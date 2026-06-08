@@ -51,6 +51,7 @@ const (
 	Event_HandoverRequest            // pushed by transport_client when a CoordinatorHandoverRequest message is received from a higher-priority node
 	Event_RestartDispatchLoop        // queued internally after an in-place key rotation so the loop restarts after TransactionStateTransitionEvents are processed
 	Event_EndorsementRequestReceived // pushed by transport_client when an EndorsementRequest message arrives for this coordinator
+	Event_EpochBoundaryReached       // queued internally by getAndRefreshBlockHeight when the effective block height advances to a new epoch
 )
 
 // Type aliases for the generic statemachine types, specialized for coordinator
@@ -128,19 +129,6 @@ var stateDefinitionsMap = StateDefinitions{
 					Transitions: []Transition{{To: State_Active}},
 				}},
 			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
-				}},
-			},
 		},
 	},
 	State_Observing: {
@@ -212,19 +200,6 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Elect,
 						If: guard_IsHigherPriorityThanCurrentActive,
 					}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 		},
@@ -396,19 +371,6 @@ var stateDefinitionsMap = StateDefinitions{
 					Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 				}},
 			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
-				}},
-			},
 			common.Event_TransactionStateTransition: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -572,19 +534,6 @@ var stateDefinitionsMap = StateDefinitions{
 					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
 				}, {
 					Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 			common.Event_TransactionStateTransition: {
@@ -783,21 +732,16 @@ var stateDefinitionsMap = StateDefinitions{
 					Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
 				}},
 			},
-			common.Event_NewBlock: {
+			Event_EpochBoundaryReached: {
+				// getAndRefreshBlockHeight queues this event when the effective block height advances to a new
+				// epoch. We need to rotate the coordinator signing key.
+				// If the key has been used AND we have unconfirmed dispatched transactions we need to
+				// take the more expensive route of flushing the dispatched transactions before we can
+				// start signing with the new key. The dispatch loop must be stopped in order to reliably
+				// make this decision. Otherwise we can rotate the key in place and restart the dispatch loop.
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					// We're at an epoch boundary we need to rotate the coordinator signing key
-					// If the key has been used AND we have unconfirmed dispatched transactions we need to
-					// take the more expensive route of flushing the dispatched transactions before we can
-					// start signing with the new key. The dispatch loop must be stopped in order to reliably
-					// make this decision. Otherwise we can rotate the key in place and restart the dispatch loop.
-					Validator: validator_IsOnEpochBoundary,
 					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
 						{Action: action_StopDispatchLoop},
 						{If: statemachine.GuardNot(guard_MustFlushToRotateSigningIdentity), Action: action_NewSigningIdentity},
 						// Queueing this event gives the coordinator a chance to process any state transition events before
@@ -966,19 +910,6 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}},
 			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
-				}},
-			},
 		},
 	},
 	State_Closing_Flush: {
@@ -1079,19 +1010,6 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Closing,
 						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 					}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 		},
@@ -1198,19 +1116,6 @@ var stateDefinitionsMap = StateDefinitions{
 				Handlers: []EventHandler{{
 					Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
 					Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 		},

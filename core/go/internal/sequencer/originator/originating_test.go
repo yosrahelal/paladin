@@ -30,12 +30,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_action_UpdateBlockHeight_SetsCurrentBlockHeight(t *testing.T) {
+
+func Test_getAndRefreshBlockHeight_SetsEffectiveBlockHeight(t *testing.T) {
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
-	err := action_UpdateBlockHeight(ctx, o, &common.NewBlockEvent{BlockHeight: 1000})
-	require.NoError(t, err)
-	assert.Equal(t, uint64(1000), o.currentBlockHeight)
+	o, mocks := NewOriginatorBuilderForTesting(t, State_Idle).
+		BlockRange(100).
+		Build()
+
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(1000))
+
+	liveHeight := o.getAndRefreshBlockHeight(ctx)
+	assert.Equal(t, int64(1000), liveHeight)
+	assert.Equal(t, uint64(1000), o.effectiveBlockHeight)
 }
 
 func Test_action_UpdateEndorserCandidates_ReplacesCandidates(t *testing.T) {
@@ -296,10 +302,11 @@ func Test_sendDelegationRequest_HandleEventError_ReturnsWrappedError(t *testing.
 	mockTxn.On("GetPrivateTransaction").Return(pt)
 	mockTxn.On("GetID").Return(txnID)
 	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(expectedErr)
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+	o, mocks := NewOriginatorBuilderForTesting(t, State_Sending).
 		Transactions(mockTxn).
 		CurrentActiveCoordinator("coordinator@coordinatorNode").
 		Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	err := sendDelegationRequest(ctx, o)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error handling delegated event for transaction")
@@ -397,6 +404,7 @@ func Test_sendDelegationRequest_TransportError_ReturnsError(t *testing.T) {
 	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
 	o, mocks := builder.Transactions(mockTxn).CurrentActiveCoordinator("coordinator@node1").Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(fmt.Errorf("transport error"))
@@ -456,6 +464,27 @@ func Test_action_UpdateEndorserCandidatesFromHeartbeat_NoOpWhenSenderAlreadyKnow
 
 	assert.Len(t, o.endorserCandidates, 2, "duplicate must not be added")
 	assert.Len(t, o.coordinatorPriorityList, before, "priority list must be unchanged when pool does not grow")
+}
+
+func Test_action_UpdateEndorserCandidatesFromHeartbeat_UsesSnapshotCandidatesWhenPresent(t *testing.T) {
+	ctx := context.Background()
+	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+		WithEndorserCandidates("node1").
+		CoordinatorPriorityList("node1").
+		CurrentActiveCoordinator("node1").
+		Build()
+
+	err := action_UpdateEndorserCandidatesFromHeartbeat(ctx, o, &common.HeartbeatReceivedEvent{
+		FromNode: "node2",
+		CoordinatorSnapshot: &common.CoordinatorSnapshot{
+			CoordinatorState:   common.CoordinatorState_Active,
+			EndorserCandidates: []string{"node1", "node2", "node3"},
+		},
+	})
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []string{"node1", "node2", "node3"}, o.endorserCandidates,
+		"snapshot candidates must supersede the sender-only candidate list")
 }
 
 func Test_action_UpdateEndorserCandidatesFromHeartbeat_NoOpInSenderMode(t *testing.T) {
@@ -582,16 +611,16 @@ func Test_action_FailoverToNextCoordinator_WithPriorityList_AdvancesCoordinatorA
 	mockTxn.On("GetID").Return(txID)
 	mockTxn.On("GetPrivateTransaction").Return(pt)
 	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+	o, mocks := NewOriginatorBuilderForTesting(t, State_Sending).
 		CoordinatorPriorityList("A", "B", "C").
 		CurrentActiveCoordinator("A").
 		FailoverIndex(1).
-		WithMockTransportWriter(t)
-	o, mocks := builder.Build()
-	o.transactionsByID[txID] = mockTxn
-	o.transactionsOrdered = []transaction.OriginatorTransaction{mockTxn}
-	o.heartbeatIntervalsSinceLastReceive = 5
+		HeartbeatIntervalsSinceLastReceive(5).
+		Transactions(mockTxn).
+		WithMockTransportWriter(t).
+		Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "B", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -612,15 +641,15 @@ func Test_action_FailoverToNextCoordinator_WrapAround_CyclesBackToStart(t *testi
 	mockTxn.On("GetID").Return(txID)
 	mockTxn.On("GetPrivateTransaction").Return(pt)
 	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+	o, mocks := NewOriginatorBuilderForTesting(t, State_Sending).
 		CoordinatorPriorityList("A", "B", "C").
 		CurrentActiveCoordinator("B").
 		FailoverIndex(2). // pointing to last slot
-		WithMockTransportWriter(t)
-	o, mocks := builder.Build()
-	o.transactionsByID[txID] = mockTxn
-	o.transactionsOrdered = []transaction.OriginatorTransaction{mockTxn}
+		Transactions(mockTxn).
+		WithMockTransportWriter(t).
+		Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "C", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -640,15 +669,15 @@ func Test_action_FailoverToNextCoordinator_EmptyPriorityList_DelegatesWithoutRes
 	mockTxn.On("GetID").Return(txID)
 	mockTxn.On("GetPrivateTransaction").Return(pt)
 	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
-	builder := NewOriginatorBuilderForTesting(t, State_Sending).
+	o, mocks := NewOriginatorBuilderForTesting(t, State_Sending).
 		CurrentActiveCoordinator("static-coordinator").
 		FailoverIndex(0).
-		WithMockTransportWriter(t)
-	o, mocks := builder.Build()
-	o.transactionsByID[txID] = mockTxn
-	o.transactionsOrdered = []transaction.OriginatorTransaction{mockTxn}
-	o.heartbeatIntervalsSinceLastReceive = 3
+		HeartbeatIntervalsSinceLastReceive(3).
+		Transactions(mockTxn).
+		WithMockTransportWriter(t).
+		Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "static-coordinator", mock.Anything, mock.Anything).
 		Return(nil).Once()

@@ -22,28 +22,20 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
-// action_CalculateCoordinatorPriorities recomputes the coordinator priority list for the current
-// block height and epoch. No-op in STATIC and SENDER modes.
 func action_CalculateCoordinatorPriorities(ctx context.Context, c *coordinator, _ common.Event) error {
+	c.calculateCoordinatorPriorities(ctx)
+	return nil
+}
+
+// calculateCoordinatorPriorities recomputes the coordinator priority list for the current
+// effectiveBlockHeight. No-op in STATIC and SENDER modes.
+func (c *coordinator) calculateCoordinatorPriorities(ctx context.Context) {
 	if c.coordinatorSelection != prototk.ContractConfig_COORDINATOR_ENDORSER {
-		return nil
+		return
 	}
 	c.coordinatorPriorityList = common.ComputeCoordinatorPriorityList(
 		ctx,
 		c.endorserCandidates,
-		c.currentBlockHeight,
-		c.coordinatorSelectionBlockRange,
+		c.effectiveBlockHeight,
 	)
-	return nil
-}
-
-func validator_IsOnEpochBoundary(_ context.Context, c *coordinator, event common.Event) (bool, error) {
-	_, isOnBoundary := common.DecodeNewBlockHeight(c.currentBlockHeight, c.coordinatorSelectionBlockRange, event)
-	return isOnBoundary, nil
-}
-
-func action_UpdateBlockHeight(ctx context.Context, c *coordinator, event common.Event) error {
-	c.currentBlockHeight, _ = common.DecodeNewBlockHeight(c.currentBlockHeight, c.coordinatorSelectionBlockRange, event)
-	c.grapher.ForgetLocks(ctx, c.currentBlockHeight)
-	return nil
 }

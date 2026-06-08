@@ -60,6 +60,7 @@ func Test_addToDelegatedTransactions_NewTransactionError_ReturnsError(t *testing
 	assert.Equal(t, 0, len(c.transactionsByID), "transaction should not be added when NewTransaction fails")
 }
 
+
 func Test_addToDelegatedTransactions_AddsTransactionInPreDispatchFlowState(t *testing.T) {
 	ctx := t.Context()
 	originator := "sender@senderNode"
@@ -73,7 +74,8 @@ func Test_addToDelegatedTransactions_AddsTransactionInPreDispatchFlowState(t *te
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
 	txn := transactionBuilder.BuildSparse()
 
@@ -103,7 +105,8 @@ func Test_addToDelegatedTransactions_AddsTransactionInPooledFlowState(t *testing
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
 	txn := transactionBuilder.BuildSparse()
 
@@ -130,7 +133,8 @@ func Test_addToDelegatedTransactions_DuplicateTransaction_SkipsAndReturnsNoError
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
 	txn := transactionBuilder.BuildSparse()
 
@@ -450,7 +454,8 @@ func Test_addToDelegatedTransactions_WhenMaxInflightReached_ReturnsError(t *test
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	txn1 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 	txn2 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 
@@ -516,7 +521,8 @@ func Test_addToDelegatedTransactions_MaxInflightThree_SlidingWindowKeepsOrder(t 
 	config.MaxDispatchAhead = confutil.P(-1)
 	config.MaxInflightTransactions = confutil.P(3)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	txns := make([]*components.PrivateTransaction, 10)
 	for i := range txns {
 		txns[i] = testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
@@ -559,7 +565,8 @@ func Test_addToDelegatedTransactions_HandleEventError_ContinuesAndReturnsNoError
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 	txn.PreAssembly = nil // Triggers error in action_InitializeForNewAssembly when transitioning to Pooled
 
@@ -583,6 +590,7 @@ func Test_addToDelegatedTransactions_SendDelegationResponseError_ReturnsError(t 
 	config.MaxDispatchAhead = confutil.P(-1)
 	builder.OverrideSequencerConfig(config)
 	c, mocks := builder.WithMockTransportWriter().Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.On("SendDelegationResponse", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("send ack failed"))
 
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
@@ -664,7 +672,8 @@ func Test_addToDelegatedTransactions_PreviousTransactionInPreAssemblyState_Estab
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	// Create a mock previous transaction in State_Pooled
 	mockPreviousTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	previousTxnID := uuid.New()
@@ -699,7 +708,8 @@ func Test_addToDelegatedTransactions_PreviousTransactionInPreAssemblyState_DoesN
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	// Create a mock previous transaction in State_Pooled.
 	mockPreviousTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	previousTxnID := uuid.New()
@@ -733,7 +743,8 @@ func Test_addToDelegatedTransactions_MockTransactionHandleEventReturnsError(t *t
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 
 	expectedError := fmt.Errorf("handle delegated event failed")
@@ -785,6 +796,7 @@ func Test_addToDelegatedTransactions_SubsequentTransactionGetsPreviousTransactio
 
 	var capturedErrors []int64
 	c, mocks := builder.WithMockTransportWriter().Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.On("SendDelegationResponse", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(errors []int64) bool {
 		capturedErrors = errors
 		return true
@@ -820,6 +832,7 @@ func Test_addToDelegatedTransactions_ErrorStopsSubsequentTransactionsBeingAccept
 
 	fifthErr := fmt.Errorf("fifth transaction HandleEvent failed")
 	c, mocks := builder.WithMockTransportWriter().Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.On("SendDelegationResponse", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	// Delegate 10 transactions. TX 5 fails at HandleEvent time. 5-10 should not be in the TX list for the coordinator
@@ -886,6 +899,7 @@ func Test_addToDelegatedTransactions_FifthFailsThenFullRetry_PreservesFirstFourA
 	fifthErr := fmt.Errorf("fifth transaction HandleEvent failed")
 
 	c, mocks := builder.WithMockTransportWriter().Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.On("SendDelegationResponse", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Twice()
 
 	txns := make([]*components.PrivateTransaction, 10)
@@ -1020,7 +1034,8 @@ func Test_addToDelegatedTransactions_PreviousTransactionNotInPreAssemblyState_No
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	// Create a mock previous transaction in State_Assembling (not a pre-assembly state)
 	mockPreviousTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	previousTxnID := uuid.New()
@@ -1039,6 +1054,24 @@ func Test_addToDelegatedTransactions_PreviousTransactionNotInPreAssemblyState_No
 	err := c.addToDelegatedTransactions(ctx, originator, []*components.PrivateTransaction{existingTxn, newTxn}, "", c.newCoordinatorTransaction)
 
 	require.NoError(t, err)
+}
+
+func Test_action_CleanUpTransactionsNotYetDispatched_DrainsPendingDispatchQueueItems(t *testing.T) {
+	ctx := context.Background()
+
+	txPooled := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	idPooled := uuid.New()
+	txPooled.EXPECT().GetID().Return(idPooled)
+	txPooled.EXPECT().GetCurrentState().Return(transaction.State_Pooled)
+
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txPooled).Build()
+
+	// Pre-populate the dispatch queue with a transaction reference to exercise the drain path.
+	c.dispatchQueue <- txPooled
+
+	err := action_CleanUpTransactionsNotYetDispatched(ctx, c, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(c.dispatchQueue), "dispatch queue must be drained")
 }
 
 func Test_action_CleanUpTransactionsNotYetDispatched_RemovesNonDispatchedTransactions(t *testing.T) {
@@ -1276,15 +1309,14 @@ func Test_updateOriginatorActivity_DoesNotPruneActiveNode(t *testing.T) {
 	assert.Equal(t, 0, c.originatorActivity["node2"])
 }
 
-func Test_action_CalculateCoordinatorPriorities_UpdatesPriorityList(t *testing.T) {
+func Test_calculateCoordinatorPriorities_UpdatesPriorityList(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
 		EndorserCandidates("node1", "node2").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	err := action_CalculateCoordinatorPriorities(ctx, c, nil)
-	require.NoError(t, err)
+	c.calculateCoordinatorPriorities(ctx)
 	assert.NotEmpty(t, c.coordinatorPriorityList)
 	assert.Contains(t, []string{"node1", "node2"}, c.coordinatorPriorityList[0])
 }

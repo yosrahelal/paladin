@@ -66,10 +66,9 @@ type originator struct {
 	heartbeatIntervalsSinceLastReceive int
 	transactionsByID                   map[uuid.UUID]transaction.OriginatorTransaction
 	transactionsOrdered                []transaction.OriginatorTransaction
-	currentBlockHeight                 uint64
-	onEpochBoundary                    bool
+	effectiveBlockHeight               uint64
 	endorserCandidates                 []string // COORDINATOR_ENDORSER mode: deduped+sorted candidate pool; updated when EndorserNodesDiscoveredEvent arrives
-	coordinatorPriorityList            []string // COORDINATOR_ENDORSER mode: priority-ordered list computed independently from endorserCandidates + currentBlockHeight + blockRangeSize
+	coordinatorPriorityList            []string // COORDINATOR_ENDORSER mode: priority-ordered list computed independently from endorserCandidates + effectiveBlockHeight + blockRangeSize
 	failoverIndex                      int      // COORDINATOR_ENDORSER mode:t he next position in coordinatorPriorityList to try when the current active coordinator exceeds the inactive grace period
 
 	/* Config */
@@ -126,11 +125,8 @@ func (o *originator) Start(ctx context.Context) error {
 	}
 	o.ctx = log.WithLogField(ctx, "role", "originator")
 
-	blockHeight, err := o.engineIntegration.GetBlockHeight(ctx)
-	if err != nil {
-		return err
-	}
-	o.currentBlockHeight = uint64(blockHeight)
+	blockHeight := o.engineIntegration.GetBlockHeight(ctx)
+	o.effectiveBlockHeight = common.ComputeEffectiveBlockHeight(uint64(blockHeight), o.blockRange)
 
 	o.started = true
 
