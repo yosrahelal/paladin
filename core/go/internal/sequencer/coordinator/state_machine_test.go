@@ -23,12 +23,12 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
-	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibilitytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -181,6 +181,28 @@ func TestCoordinator_WhenIdleAndTransactionsDelegatedToSelf_TransitionsToActive(
 	assert.True(t, mocks.SentMessageRecorder.HasSentHeartbeat(), "OnTransitionTo Active must send an immediate heartbeat")
 }
 
+func TestCoordinator_WhenIdle_TransactionsDelegated_BlockHeightToleranceExceeded_RejectsAndStaysIdle(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	// action_RefreshBlockHeight fetches the live height and stores it in c.currentBlockHeight.
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(100))
+	// diff = |100 - 0| = 100 > 10 → block height rejection.
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(
+		mock.Anything, "node2", "del-bh-test",
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		"", int64(0), int64(100), int64(10),
+	).Return(nil)
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, newDelegationBlockHeightExceedingEvent("node2")))
+	assert.Equal(t, State_Idle, c.GetCurrentState())
+}
 
 func TestCoordinator_WhenIdle_EndorsementRequestReceived_UpdatesActiveCoordinatorAndTransitionsToObserving(t *testing.T) {
 	ctx := t.Context()
@@ -305,6 +327,29 @@ func TestCoordinator_WhenObserving_DelegatedTransactions_LowerPriority_RejectsAn
 	assert.Equal(t, State_Observing, c.GetCurrentState())
 }
 
+func TestCoordinator_WhenObserving_TransactionsDelegated_BlockHeightToleranceExceeded_RejectsAndStaysObserving(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
+		NodeName("node2").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(100))
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(
+		mock.Anything, "originator-node", "del-bh-test",
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		"", int64(0), int64(100), int64(10),
+	).Return(nil)
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, newDelegationBlockHeightExceedingEvent("originator-node")))
+	assert.Equal(t, State_Observing, c.GetCurrentState())
+	// active coordinator must not be updated on a block height rejection
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
 
 func TestCoordinator_WhenObserving_EndorsementRequestReceived_UpdatesActiveCoordinatorAndStaysObserving(t *testing.T) {
 	ctx := t.Context()
@@ -653,6 +698,29 @@ func TestCoordinator_WhenElect_DelegatedTransactions_AcceptsAndStaysElect(t *tes
 	assert.Equal(t, State_Elect, c.GetCurrentState())
 }
 
+func TestCoordinator_WhenElect_TransactionsDelegated_BlockHeightToleranceExceeded_RejectsAndStaysElect(t *testing.T) {
+	// Block height check is evaluated before any delegation processing — even a valid originator
+	// is rejected if the height difference exceeds tolerance.
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
+		NodeName("node1").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(100))
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(
+		mock.Anything, "originator-node", "del-bh-test",
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		"", int64(0), int64(100), int64(10),
+	).Return(nil)
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, newDelegationBlockHeightExceedingEvent("originator-node")))
+	assert.Equal(t, State_Elect, c.GetCurrentState())
+}
 
 func TestCoordinator_WhenElect_TransactionStateTransition_ToFinal_CleansUpAndStaysElect(t *testing.T) {
 	ctx := t.Context()
@@ -1076,6 +1144,27 @@ func TestCoordinator_WhenPrepared_DelegatedTransactions_AcceptsAndStaysPrepared(
 	assert.Equal(t, State_Prepared, c.GetCurrentState())
 }
 
+func TestCoordinator_WhenPrepared_TransactionsDelegated_BlockHeightToleranceExceeded_RejectsAndStaysPrepared(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
+		NodeName("node1").
+		CurrentActiveCoordinator("node2").
+		CoordinatorPriorityList("node1", "node2").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(100))
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(
+		mock.Anything, "originator-node", "del-bh-test",
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		"", int64(0), int64(100), int64(10),
+	).Return(nil)
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, newDelegationBlockHeightExceedingEvent("originator-node")))
+	assert.Equal(t, State_Prepared, c.GetCurrentState())
+}
 
 func TestCoordinator_WhenPrepared_TransactionStateTransition_ToFinal_CleansUpAndStaysPrepared(t *testing.T) {
 	ctx := t.Context()
@@ -1414,6 +1503,27 @@ func TestCoordinator_WhenActive_DelegatedTransactions_AcceptsAndStaysActive(t *t
 	assert.Equal(t, State_Active, c.GetCurrentState())
 }
 
+func TestCoordinator_WhenActive_TransactionsDelegated_BlockHeightToleranceExceeded_RejectsAndStaysActive(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(100))
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(
+		mock.Anything, "originator-node", "del-bh-test",
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		"", int64(0), int64(100), int64(10),
+	).Return(nil)
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, newDelegationBlockHeightExceedingEvent("originator-node")))
+	assert.Equal(t, State_Active, c.GetCurrentState())
+}
+
 func TestCoordinator_WhenActive_TransactionStateTransition_DispatchedToPooled_WithAssembling_CancelsAssembling(t *testing.T) {
 	ctx := t.Context()
 	txAssembling := coordinatortransactionmocks.NewCoordinatorTransaction(t)
@@ -1594,7 +1704,6 @@ func TestCoordinator_WhenActiveAndEpochChanges_SigningNotUsed_StaysActiveAndRota
 	// not in the EpochBoundaryReachedEvent handler. effectiveBlockHeight is already set.
 	assert.Equal(t, uint64(150), c.effectiveBlockHeight, "effective block height must have been set by builder")
 }
-
 
 func TestCoordinator_WhenActive_RestartDispatchLoop_StaysActive(t *testing.T) {
 	ctx := t.Context()
@@ -1809,6 +1918,27 @@ func TestCoordinator_WhenActiveFLush_DelegatedTransactions_AcceptsAndStaysActive
 	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
 }
 
+func TestCoordinator_WhenActiveFLush_TransactionsDelegated_BlockHeightToleranceExceeded_RejectsAndStaysActiveFlush(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+		NodeName("node1").
+		CurrentActiveCoordinator("node1").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(100))
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(
+		mock.Anything, "originator-node", "del-bh-test",
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		"", int64(0), int64(100), int64(10),
+	).Return(nil)
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, newDelegationBlockHeightExceedingEvent("originator-node")))
+	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
+}
+
 func TestCoordinator_WhenActiveFLushCompletesAndStillCurrentCoordinator_TransitionsToActive(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, txID := newDispatchedTxMock(t)
@@ -1910,7 +2040,6 @@ func TestCoordinator_WhenActiveFLush_TransactionStateTransition_ToFinal_WithMore
 	assert.Equal(t, State_Active_Flush, c.GetCurrentState())
 	assert.Equal(t, 1, len(c.transactionsByID))
 }
-
 
 func TestCoordinator_WhenActiveFLush_EndorsementRequestReceived_HigherPriority_TransitionsToClosingFlush(t *testing.T) {
 	ctx := t.Context()
@@ -2108,6 +2237,30 @@ func TestCoordinator_WhenClosingFlush_DelegatedTransactions_LowerPriority_Reject
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
 }
 
+func TestCoordinator_WhenClosingFlush_TransactionsDelegated_BlockHeightToleranceExceeded_RejectsAndStaysClosingFlush(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+		NodeName("node2").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(100))
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(
+		mock.Anything, "originator-node", "del-bh-test",
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		"", int64(0), int64(100), int64(10),
+	).Return(nil)
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, newDelegationBlockHeightExceedingEvent("originator-node")))
+	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
+	// active coordinator must not be updated on a block height rejection
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
 func TestCoordinator_WhenClosingFlushCompletesAndNotCurrentCoordinator_TransitionsToClosing(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, txID := newDispatchedTxMock(t)
@@ -2164,7 +2317,6 @@ func TestCoordinator_WhenClosingFlush_TransactionStateTransition_ToFinal_WithMor
 	assert.Equal(t, State_Closing_Flush, c.GetCurrentState())
 	assert.Equal(t, 1, len(c.transactionsByID))
 }
-
 
 func TestCoordinator_WhenClosingFlushCompletesAndNotCurrentCoordinator_EnteringClosingEmitsImmediateHeartbeat(t *testing.T) {
 	ctx := t.Context()
@@ -2432,6 +2584,30 @@ func TestCoordinator_WhenClosing_DelegatedTransactions_LowerPriority_ActiveCoord
 	assert.NotEmpty(t, c.signingIdentity.value, "OnTransitionTo Active must call action_NewSigningIdentity")
 }
 
+func TestCoordinator_WhenClosing_TransactionsDelegated_BlockHeightToleranceExceeded_RejectsAndStaysClosing(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing).
+		NodeName("node2").
+		CurrentActiveCoordinator("node1").
+		CoordinatorPriorityList("node1", "node2").
+		CurrentBlockHeight(100).
+		BlockHeightTolerance(10).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(100))
+	mocks.TransportWriter.EXPECT().SendDelegationRejection(
+		mock.Anything, "originator-node", "del-bh-test",
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		"", int64(0), int64(100), int64(10),
+	).Return(nil)
+
+	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, newDelegationBlockHeightExceedingEvent("originator-node")))
+	assert.Equal(t, State_Closing, c.GetCurrentState())
+	// active coordinator must not be updated on a block height rejection
+	assert.Equal(t, "node1", c.currentActiveCoordinator)
+}
+
 func TestCoordinator_WhenClosing_TransactionStateTransition_ToFinal_CleansUpAndStaysClosing(t *testing.T) {
 	ctx := t.Context()
 	txFinal := coordinatortransactionmocks.NewCoordinatorTransaction(t)
@@ -2451,7 +2627,6 @@ func TestCoordinator_WhenClosing_TransactionStateTransition_ToFinal_CleansUpAndS
 	assert.Equal(t, State_Closing, c.GetCurrentState())
 	assert.Empty(t, c.transactionsByID, "action_CleanUpTransaction must remove the finalised transaction")
 }
-
 
 func TestCoordinator_WhenClosing_EndorsementRequestReceived_UpdatesActiveCoordinatorAndStaysClosing(t *testing.T) {
 	ctx := t.Context()
@@ -2563,6 +2738,19 @@ func newBlockHeightExceedingEndorsementEvent(fromNode string) *EndorsementReques
 	}
 }
 
+// newDelegationBlockHeightExceedingEvent creates a TransactionsDelegatedEvent where
+// OriginatorsBlockHeight=0. When the coordinator's stored block height is 100 and
+// blockHeightTolerance is 10, the difference (100) exceeds the tolerance, triggering
+// action_RejectDelegationRequestBlockHeight instead of action_ProcessDelegatedTransactions.
+func newDelegationBlockHeightExceedingEvent(fromNode string) *TransactionsDelegatedEvent {
+	return &TransactionsDelegatedEvent{
+		FromNode:               fromNode,
+		Originator:             "sender@" + fromNode,
+		DelegationID:           "del-bh-test",
+		OriginatorsBlockHeight: 0, // far from coordinator's stored height of 100
+	}
+}
+
 // newEndorsementEventForStateMachineTest creates an EndorsementRequestReceivedEvent and
 // wires the coordinator's mocks so the background endorsement goroutine exits immediately
 // (at party key resolution) without touching SendEndorsementResponse.  All mock expectations
@@ -2576,7 +2764,7 @@ func newEndorsementEventForStateMachineTest(t *testing.T, fromNode string, mocks
 		Return(nil, fmt.Errorf("test: goroutine exit early")).Maybe()
 	mocks.AllComponents.On("KeyManager").Return(mockKeyManager).Maybe()
 
-	// Block-height tolerance validators (MatchAll) call GetBlockHeight for every endorsement event.
+	// action_RefreshBlockHeight calls GetBlockHeight for every endorsement and delegation event.
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 
 	return &EndorsementRequestReceivedEvent{

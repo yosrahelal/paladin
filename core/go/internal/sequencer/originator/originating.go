@@ -51,16 +51,16 @@ func action_TransactionCreated(ctx context.Context, o *originator, event common.
 	return o.addToTransactions(ctx, e.Transaction, o.newOriginatorTransaction)
 }
 
-// getAndRefreshBlockHeight queries the live block height, updates effectiveBlockHeight when the
-// epoch changes, and recomputes the priority list.
-func (o *originator) getAndRefreshBlockHeight(ctx context.Context) int64 {
+// refreshBlockHeight queries the live block height, updates currentBlockHeight, and updates
+// effectiveBlockHeight (recalculating coordinator priorities) when the epoch changes.
+func (o *originator) refreshBlockHeight(ctx context.Context) {
 	liveHeight := o.engineIntegration.GetBlockHeight(ctx)
+	o.currentBlockHeight = liveHeight
 	newEffective := common.ComputeEffectiveBlockHeight(uint64(liveHeight), o.blockRange)
 	if newEffective != o.effectiveBlockHeight {
 		o.effectiveBlockHeight = newEffective
 		o.calculateCoordinatorPriorities(ctx)
 	}
-	return liveHeight
 }
 
 func (o *originator) newOriginatorTransaction(ctx context.Context, pt *components.PrivateTransaction) (transaction.OriginatorTransaction, error) {
@@ -71,7 +71,8 @@ func (o *originator) newOriginatorTransaction(ctx context.Context, pt *component
 		o.queueEventInternal,
 		o.engineIntegration,
 		o.metrics,
-		o.getAndRefreshBlockHeight,
+		func(ctx context.Context) { o.refreshBlockHeight(ctx) },
+		func() int64 { return o.currentBlockHeight },
 	)
 }
 
@@ -99,8 +100,6 @@ func (o *originator) addToTransactions(
 }
 
 func sendDelegationRequest(ctx context.Context, o *originator) error {
-	liveHeight := o.getAndRefreshBlockHeight(ctx)
-
 	// Re-delegate all transactions in the order they were created on the originating node.
 	transactionsToDelegate := make([]*components.PrivateTransaction, 0)
 	for _, txn := range o.transactionsOrdered {
@@ -119,7 +118,7 @@ func sendDelegationRequest(ctx context.Context, o *originator) error {
 
 	log.L(ctx).Debugf("sending delegation request for %d transactions", len(o.transactionsOrdered))
 
-	return o.transportWriter.SendDelegationRequest(ctx, o.currentActiveCoordinator, transactionsToDelegate, uint64(liveHeight))
+	return o.transportWriter.SendDelegationRequest(ctx, o.currentActiveCoordinator, transactionsToDelegate, uint64(o.currentBlockHeight))
 }
 
 func action_SendDelegationRequest(ctx context.Context, o *originator, _ common.Event) error {
@@ -129,7 +128,7 @@ func action_SendDelegationRequest(ctx context.Context, o *originator, _ common.E
 // action_RefreshBlockHeight queries the live block height and updates effectiveBlockHeight and the
 // priority list if the epoch has changed.
 func action_RefreshBlockHeight(ctx context.Context, o *originator, _ common.Event) error {
-	o.getAndRefreshBlockHeight(ctx)
+	o.refreshBlockHeight(ctx)
 	return nil
 }
 

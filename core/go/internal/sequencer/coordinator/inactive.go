@@ -42,11 +42,11 @@ func validator_IsHandoverRequestFromHigherPriorityCoordinator(_ context.Context,
 }
 
 // validator_IsDelegationBlockHeightToleranceExceeded returns true when the absolute difference
-// between this coordinator's current block height and the originator's block height exceeds the
-// configured block height tolerance.
-func validator_IsDelegationBlockHeightToleranceExceeded(ctx context.Context, c *coordinator, event common.Event) (bool, error) {
+// between this coordinator's stored block height (refreshed by action_RefreshBlockHeight)
+// and the originator's block height exceeds the configured block height tolerance.
+func validator_IsDelegationBlockHeightToleranceExceeded(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*TransactionsDelegatedEvent)
-	ch := uint64(c.engineIntegration.GetBlockHeight(ctx))
+	ch := uint64(c.currentBlockHeight)
 	oh := e.OriginatorsBlockHeight
 	diff := max(ch, oh) - min(ch, oh)
 	return diff > c.blockHeightTolerance, nil
@@ -56,10 +56,9 @@ func validator_IsDelegationBlockHeightToleranceExceeded(ctx context.Context, c *
 // height difference exceeds the configured tolerance.
 func action_RejectDelegationRequestBlockHeight(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*TransactionsDelegatedEvent)
-	blockHeight := c.engineIntegration.GetBlockHeight(ctx)
 	c.recordOriginatorActivity(e.FromNode)
 	log.L(ctx).Warnf("rejecting delegation from %s due to block height tolerance (originator=%d, coordinator=%d, tolerance=%d)",
-		e.FromNode, e.OriginatorsBlockHeight, blockHeight, c.blockHeightTolerance)
+		e.FromNode, e.OriginatorsBlockHeight, c.currentBlockHeight, c.blockHeightTolerance)
 	return c.transportWriter.SendDelegationRejection(
 		ctx,
 		e.FromNode,
@@ -67,7 +66,7 @@ func action_RejectDelegationRequestBlockHeight(ctx context.Context, c *coordinat
 		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		"", // no active coordinator redirect for block height rejections
 		int64(e.OriginatorsBlockHeight),
-		blockHeight,
+		c.currentBlockHeight,
 		int64(c.blockHeightTolerance),
 	)
 }
@@ -82,7 +81,7 @@ func action_RejectDelegationRequest(ctx context.Context, c *coordinator, event c
 		engineProto.RejectionReason_NOT_CURRENT_DELEGATE,
 		c.currentActiveCoordinator,
 		int64(e.OriginatorsBlockHeight),
-		c.engineIntegration.GetBlockHeight(ctx),
+		c.currentBlockHeight,
 		0, // tolerance not relevant for non-block-height rejections
 	)
 }

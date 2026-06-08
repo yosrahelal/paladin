@@ -178,7 +178,8 @@ func (b *TransactionBuilderForTesting) Build() *originatorTransaction {
 		transportWriter,
 		b.queueEventForOriginator,
 		b.metrics,
-		func(_ context.Context) int64 { return b.currentBlockHeight })
+		func(_ context.Context) {},
+		func() int64 { return b.currentBlockHeight })
 
 	txn.stateMachine.SetCurrentState(b.state)
 

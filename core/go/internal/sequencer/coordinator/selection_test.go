@@ -111,7 +111,7 @@ func Test_calculateCoordinatorPriorities_SenderMode_NoOp(t *testing.T) {
 }
 
 
-func Test_getAndRefreshBlockHeight_SetsEffectiveBlockHeight(t *testing.T) {
+func Test_refreshBlockHeight_SetsEffectiveBlockHeight(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
 		EndorserCandidates("node1").
@@ -121,8 +121,7 @@ func Test_getAndRefreshBlockHeight_SetsEffectiveBlockHeight(t *testing.T) {
 
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(1000))
 
-	liveHeight, epochChanged := c.getAndRefreshBlockHeight(ctx)
-	assert.Equal(t, int64(1000), liveHeight)
-	assert.True(t, epochChanged)
+	c.refreshBlockHeight(ctx)
+	assert.Equal(t, int64(1000), c.currentBlockHeight)
 	assert.Equal(t, uint64(1000), c.effectiveBlockHeight)
 }

@@ -24,7 +24,6 @@ import (
 	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,11 +105,11 @@ func Test_action_RejectDelegationRequestBlockHeight_Success(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
 		BlockHeightTolerance(10).
+		CurrentBlockHeight(200).
 		WithMockTransportWriter().
 		Build()
 
 	fromNode := "remoteNode"
-	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(200))
 	mocks.TransportWriter.EXPECT().SendDelegationRejection(
 		ctx, fromNode, "del-789",
 		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
@@ -134,7 +133,6 @@ func Test_action_RejectDelegationRequest_Success(t *testing.T) {
 
 	delegationID := "del-123"
 	fromNode := "remoteNode"
-	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.EXPECT().SendDelegationRejection(ctx, fromNode, delegationID, engineProto.RejectionReason_NOT_CURRENT_DELEGATE, c.currentActiveCoordinator, int64(0), int64(0), int64(0)).Return(nil)
 
 	event := &TransactionsDelegatedEvent{
@@ -152,7 +150,6 @@ func Test_action_RejectDelegationRequest_PropagatesError(t *testing.T) {
 	delegationID := "del-456"
 	fromNode := "remoteNode"
 	expectedErr := fmt.Errorf("transport error")
-	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.EXPECT().SendDelegationRejection(ctx, fromNode, delegationID, engineProto.RejectionReason_NOT_CURRENT_DELEGATE, c.currentActiveCoordinator, int64(0), int64(0), int64(0)).Return(expectedErr)
 
 	event := &TransactionsDelegatedEvent{

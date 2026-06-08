@@ -30,8 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
-func Test_getAndRefreshBlockHeight_SetsEffectiveBlockHeight(t *testing.T) {
+func Test_refreshBlockHeight_SetsEffectiveBlockHeight(t *testing.T) {
 	ctx := context.Background()
 	o, mocks := NewOriginatorBuilderForTesting(t, State_Idle).
 		BlockRange(100).
@@ -39,8 +38,8 @@ func Test_getAndRefreshBlockHeight_SetsEffectiveBlockHeight(t *testing.T) {
 
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(1000))
 
-	liveHeight := o.getAndRefreshBlockHeight(ctx)
-	assert.Equal(t, int64(1000), liveHeight)
+	o.refreshBlockHeight(ctx)
+	assert.Equal(t, int64(1000), o.currentBlockHeight)
 	assert.Equal(t, uint64(1000), o.effectiveBlockHeight)
 }
 
@@ -302,11 +301,10 @@ func Test_sendDelegationRequest_HandleEventError_ReturnsWrappedError(t *testing.
 	mockTxn.On("GetPrivateTransaction").Return(pt)
 	mockTxn.On("GetID").Return(txnID)
 	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(expectedErr)
-	o, mocks := NewOriginatorBuilderForTesting(t, State_Sending).
+	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		Transactions(mockTxn).
 		CurrentActiveCoordinator("coordinator@coordinatorNode").
 		Build()
-	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	err := sendDelegationRequest(ctx, o)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error handling delegated event for transaction")
@@ -404,7 +402,6 @@ func Test_sendDelegationRequest_TransportError_ReturnsError(t *testing.T) {
 	mockTxn.On("HandleEvent", mock.Anything, mock.Anything).Return(nil)
 	o, mocks := builder.Transactions(mockTxn).CurrentActiveCoordinator("coordinator@node1").Build()
 
-	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(fmt.Errorf("transport error"))
@@ -620,7 +617,6 @@ func Test_action_FailoverToNextCoordinator_WithPriorityList_AdvancesCoordinatorA
 		WithMockTransportWriter(t).
 		Build()
 
-	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "B", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -649,7 +645,6 @@ func Test_action_FailoverToNextCoordinator_WrapAround_CyclesBackToStart(t *testi
 		WithMockTransportWriter(t).
 		Build()
 
-	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "C", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -677,7 +672,6 @@ func Test_action_FailoverToNextCoordinator_EmptyPriorityList_DelegatesWithoutRes
 		WithMockTransportWriter(t).
 		Build()
 
-	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "static-coordinator", mock.Anything, mock.Anything).
 		Return(nil).Once()

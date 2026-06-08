@@ -25,11 +25,11 @@ import (
 )
 
 // validator_IsEndorsementBlockHeightToleranceExceeded returns true when the absolute difference
-// between this coordinator's current block height and the requesting coordinator's block height
-// exceeds the configured block height tolerance.
-func validator_IsEndorsementBlockHeightToleranceExceeded(ctx context.Context, c *coordinator, event common.Event) (bool, error) {
+// between this coordinator's stored block height (refreshed by action_RefreshBlockHeight)
+// and the requesting coordinator's block height exceeds the configured block height tolerance.
+func validator_IsEndorsementBlockHeightToleranceExceeded(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*EndorsementRequestReceivedEvent)
-	localHeight := uint64(c.engineIntegration.GetBlockHeight(ctx))
+	localHeight := uint64(c.currentBlockHeight)
 	remoteHeight := uint64(e.CoordinatorBlockHeight)
 	diff := max(localHeight, remoteHeight) - min(localHeight, remoteHeight)
 	return diff > c.blockHeightTolerance, nil
@@ -40,8 +40,7 @@ func validator_IsEndorsementBlockHeightToleranceExceeded(ctx context.Context, c 
 // does not call the domain.
 func action_RejectEndorsementBlockHeight(ctx context.Context, c *coordinator, event common.Event) error {
 	e := event.(*EndorsementRequestReceivedEvent)
-	blockHeight := c.engineIntegration.GetBlockHeight(ctx)
-	log.L(ctx).Warnf("rejecting endorsement request from %s due to block height tolerance (coordinator=%d, endorser=%d, tolerance=%d)", e.FromNode, e.CoordinatorBlockHeight, blockHeight, c.blockHeightTolerance)
+	log.L(ctx).Warnf("rejecting endorsement request from %s due to block height tolerance (coordinator=%d, endorser=%d, tolerance=%d)", e.FromNode, e.CoordinatorBlockHeight, c.currentBlockHeight, c.blockHeightTolerance)
 	return c.transportWriter.SendEndorsementRejection(
 		ctx,
 		e.TransactionId,
@@ -52,7 +51,7 @@ func action_RejectEndorsementBlockHeight(ctx context.Context, c *coordinator, ev
 		e.FromNode,
 		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		e.CoordinatorBlockHeight,
-		blockHeight,
+		c.currentBlockHeight,
 		int64(c.blockHeightTolerance),
 	)
 }

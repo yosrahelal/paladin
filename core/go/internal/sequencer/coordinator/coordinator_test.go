@@ -269,8 +269,7 @@ func TestCoordinator_MaxInflightTransactions(t *testing.T) {
 	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	c, _ := builder.Build()
 
 	// Start by simulating the originator and delegate a transaction to the coordinator
 	for i := range 100 {
