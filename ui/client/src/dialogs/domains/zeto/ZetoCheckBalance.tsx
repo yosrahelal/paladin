@@ -14,12 +14,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export const AppRoutes = {
-  Keys: '/ui/keys',
-  Submissions: '/ui/submissions',
-  Registry: '/ui/registry',
-  Domains: '/ui/domains',
-  Transactions: '/ui/transactions',
-  Transaction: '/ui/transactions/:hashOrId',
-  DomainContract: '/ui/domains/:address'
+import { Dispatch, SetStateAction } from 'react';
+import { CheckBalanceDialog } from '../../CheckBalance';
+
+type Props = {
+  contractAddress: string;
+  dialogOpen: boolean;
+  setDialogOpen: Dispatch<SetStateAction<boolean>>;
 };
+
+export const ZetoCheckBalanceDialog: React.FC<Props> = ({
+  contractAddress,
+  dialogOpen,
+  setDialogOpen,
+}) => {
+  return (
+    <CheckBalanceDialog
+      domain="zeto"
+      contractAddress={contractAddress}
+      dialogOpen={dialogOpen}
+      setDialogOpen={setDialogOpen}
+    />
+  );
+}; 

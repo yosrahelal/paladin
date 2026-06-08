@@ -27,63 +27,59 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fetchPaladinTransaction, fetchEnrichedTransaction } from '../queries/transactions';
-import { isValidTransactionHash, isValidUUID } from '../utils';
+import { isValidAddress, isValidPrivacyGroupId } from '../utils';
 import { useNavigate } from 'react-router-dom';
+import { getPrivacyGroupByAddress, getPrivacyGroupById } from '../queries/privacyGroups';
 
 type Props = {
   dialogOpen: boolean
   setDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
-  label: string
 }
 
-export const TransactionLookupDialog: React.FC<Props> = ({
+export const PrivacyGroupLookupDialog: React.FC<Props> = ({
   dialogOpen,
   setDialogOpen,
-  label
 }) => {
 
   const { t } = useTranslation();
   const [notFound, setNotFound] = useState(false);
-  const [hashOrId, setHashOrId] = useState('');
+  const [idOrContractAddress, setIdOrContractAddress] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
     if (dialogOpen) {
-      setHashOrId('');
+      setIdOrContractAddress('');
     }
   }, [dialogOpen]);
 
-  const { refetch: blockchainTransactionByHash } = useQuery({
-    queryKey: ["blockchainTransactionByHash", hashOrId],
-    queryFn: () => fetchEnrichedTransaction(hashOrId),
-    enabled: isValidTransactionHash(hashOrId),
-    refetchOnMount: false,
-    retry: false
+  const { refetch: privacyGroupById } = useQuery({
+    queryKey: [`privacy-group-by-id-${idOrContractAddress}`],
+    queryFn: () => getPrivacyGroupById(idOrContractAddress!),
+    retry: false,
+    enabled: false
   });
 
-  const { refetch: paladinTransactionById } = useQuery({
-    queryKey: ["paladinTransactionById", hashOrId],
-    queryFn: () => fetchPaladinTransaction(hashOrId),
-    enabled: isValidUUID(hashOrId),
-    refetchOnMount: false,
-    retry: false
+  const { refetch: privacyGroupByAddress } = useQuery({
+    queryKey: [`privacy-group-by-address-${idOrContractAddress}`],
+    queryFn: () => getPrivacyGroupByAddress(idOrContractAddress!),
+    retry: false,
+    enabled: false
   });
 
   const handleSubmit = () => {
     setNotFound(false);
-    if (isValidTransactionHash(hashOrId)) {
-      blockchainTransactionByHash().then(result => {
-        if (result.isSuccess) {
-          navigate(`/ui/transactions/${hashOrId}`);
+    if (isValidPrivacyGroupId(idOrContractAddress)) {
+      privacyGroupById().then(result => {
+        if (result.data !== null) {
+          navigate(`/ui/privacy-groups/${idOrContractAddress}`);
         } else {
           setNotFound(true);
         }
       });
-    } else if (isValidUUID(hashOrId)) {
-      paladinTransactionById().then(result => {
-        if (result.isSuccess && result.data !== null) {
-          navigate(`/ui/transactions/${hashOrId}`);
+    } else if (isValidAddress(idOrContractAddress)) {
+      privacyGroupByAddress().then(result => {
+        if (result.data !== null) {
+          navigate(`/ui/privacy-groups/${idOrContractAddress}`);
         } else {
           setNotFound(true);
         }
@@ -91,7 +87,7 @@ export const TransactionLookupDialog: React.FC<Props> = ({
     }
   };
 
-  const canSubmit = isValidTransactionHash(hashOrId) || isValidUUID(hashOrId);
+  const canSubmit = isValidPrivacyGroupId(idOrContractAddress) || isValidAddress(idOrContractAddress);
 
   return (
     <Dialog
@@ -108,17 +104,17 @@ export const TransactionLookupDialog: React.FC<Props> = ({
         <DialogTitle>
           {t('lookup')}
           {notFound &&
-            <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{t('transactionNotFound')}</Alert>}
+            <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{t('domainSmartContractNotFound')}</Alert>}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ marginTop: '6px' }}>
             <TextField
-              label={label}
+              label={t('privacyGroupIdOrContractAddress')}
               autoComplete="OFF"
               sx={{ marginBottom: '20px' }}
               fullWidth
-              value={hashOrId}
-              onChange={event => setHashOrId(event.target.value)}
+              value={idOrContractAddress}
+              onChange={event => setIdOrContractAddress(event.target.value)}
             />
           </Box>
         </DialogContent>

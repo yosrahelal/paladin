@@ -17,43 +17,28 @@
 import { Button } from '@mui/material';
 import daysjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import { useEffect, useState } from 'react';
-import { constants } from './config';
+import { useState } from 'react';
 import { TimestampDialog } from '../dialogs/Timestamp';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
 
 daysjs.extend(relativeTime);
 
 type Props = {
   timestamp: string
-  icon?: JSX.Element | null
-  prefix?: string
 };
 
-export const EllapsedTime: React.FC<Props> = ({
+export const Timestamp: React.FC<Props> = ({
   timestamp,
-  icon = <AccessTimeIcon />,
-  prefix
 }) => {
 
-  const [displayValue, setDisplayValue] = useState<string>(daysjs(timestamp).fromNow());
   const [timestampDialogOpen, setTimestampDialogOpen] = useState(false);
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      setDisplayValue(daysjs(timestamp).fromNow())
-    }, constants.ELLAPSED_TIME_AUTO_REFRESH_FREQUENCY_SECONDS * 1000);
-    return () => clearInterval(intervalId);
-  }, []);
 
   return (
     <>
       <Button
-        sx={{ fontWeight: '400' }}
+        sx={{ fontWeight: '400', whiteSpace: 'nowrap' }}
         size="small"
-        startIcon={icon}
         onClick={() => setTimestampDialogOpen(true)}>
-        {prefix} {displayValue}
+        {new Date(timestamp).toLocaleString()}
       </Button>
       <TimestampDialog
         timestamp={timestamp}
