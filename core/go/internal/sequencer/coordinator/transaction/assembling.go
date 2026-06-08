@@ -189,12 +189,7 @@ func validator_MatchesPendingAssembleRequest(ctx context.Context, txn *coordinat
 
 func action_AssembleSuccess(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
 	e := event.(*AssembleSuccessEvent)
-	err := t.applyPostAssembly(ctx, e.PostAssembly, e.RequestID)
-	if err == nil {
-		// Assembling resolves the required verifiers which will need passing on for the endorse step
-		t.pt.PreAssembly.Verifiers = e.PreAssembly.Verifiers
-	}
-	return err
+	return t.applyPostAssembly(ctx, e.PostAssembly, e.RequestID)
 }
 
 func action_AssembleRevertResponse(ctx context.Context, t *coordinatorTransaction, event common.Event) error {

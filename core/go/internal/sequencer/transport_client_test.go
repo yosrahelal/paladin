@@ -172,7 +172,6 @@ func TestHandleAssembleRequest_Success(t *testing.T) {
 		RequiredVerifiers: []*prototk.ResolveVerifierRequest{
 			{Lookup: "verifier1@node1"},
 		},
-		Verifiers: []*prototk.ResolvedVerifier{},
 	}
 	preAssemblyJSON, _ := json.Marshal(preAssembly)
 

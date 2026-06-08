@@ -165,10 +165,6 @@ func TestAssembleSuccessEvent_Fields(t *testing.T) {
 	postAssembly := &components.TransactionPostAssembly{
 		AssemblyResult: prototk.AssembleTransactionResponse_OK,
 	}
-	preAssembly := &components.TransactionPreAssembly{
-		RequiredVerifiers: []*prototk.ResolveVerifierRequest{},
-		Verifiers:         []*prototk.ResolvedVerifier{},
-	}
 
 	event := &AssembleSuccessEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{
@@ -178,13 +174,11 @@ func TestAssembleSuccessEvent_Fields(t *testing.T) {
 			TransactionID: txID,
 		},
 		PostAssembly: postAssembly,
-		PreAssembly:  preAssembly,
 		RequestID:    requestID,
 	}
 
 	assert.Equal(t, txID, event.GetTransactionID())
 	assert.Equal(t, postAssembly, event.PostAssembly)
-	assert.Equal(t, preAssembly, event.PreAssembly)
 	assert.Equal(t, requestID, event.RequestID)
 }
 

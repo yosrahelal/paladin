@@ -132,7 +132,7 @@ func (t *coordinatorTransaction) unfulfilledEndorsementRequirements(ctx context.
 // it is safe to call this function multiple times and on a frequent basis (e.g. every heartbeat interval while in the endorsement gathering state) as it will not send duplicate requests unless they have timedout
 func (t *coordinatorTransaction) sendEndorsementRequests(ctx context.Context) error {
 
-	log.L(ctx).Debugf("sendEndorsementRequests: number of verifiers %d", len(t.pt.PreAssembly.Verifiers))
+	log.L(ctx).Debugf("sendEndorsementRequests: number of verifiers %d", len(t.pt.PostAssembly.ResolvedVerifiers))
 
 	if t.pendingEndorsementRequests == nil {
 		//we are starting a new round of endorsement requests so set an interval to remind us to resend any requests that have not been fulfilled on a periodic basis
@@ -214,7 +214,7 @@ func (t *coordinatorTransaction) requestEndorsement(ctx context.Context, idempot
 		party,
 		attRequest,
 		t.pt.PreAssembly.TransactionSpecification,
-		t.pt.PreAssembly.Verifiers,
+		t.pt.PostAssembly.ResolvedVerifiers,
 		t.pt.PostAssembly.Signatures,
 		toEndorsableList(t.pt.PostAssembly.InputStates),
 		toEndorsableList(t.pt.PostAssembly.ReadStates),

@@ -142,7 +142,6 @@ func (s *ChainedDependenciesSuite) progressToReadyForDispatch(txIDs ...uuid.UUID
 			BaseCoordinatorEvent: transaction.BaseCoordinatorEvent{TransactionID: id},
 			RequestID:            rec.AssembleKeyForTx(id),
 			PostAssembly:         b.BuildPostAssembly(),
-			PreAssembly:          b.BuildPreAssembly(),
 		})
 
 		endorser := b.GetEndorserIdentityLocator(0)

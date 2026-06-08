@@ -92,7 +92,6 @@ func (*AssembleRequestSentEvent) TypeString() string {
 type AssembleSuccessEvent struct {
 	BaseCoordinatorEvent
 	PostAssembly *components.TransactionPostAssembly
-	PreAssembly  *components.TransactionPreAssembly
 	RequestID    uuid.UUID
 }
 

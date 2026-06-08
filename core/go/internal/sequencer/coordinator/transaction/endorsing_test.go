@@ -33,11 +33,8 @@ import (
 func Test_action_NudgeEndorsementRequests_CallsSendEndorsementRequests(t *testing.T) {
 	ctx := t.Context()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
-		PreAssembly(&components.TransactionPreAssembly{Verifiers: []*prototk.ResolvedVerifier{{Lookup: "v1"}}}).
+		PostAssembly(&components.TransactionPostAssembly{}).
 		Build()
-	// No unfulfilled endorsement requirements: PostAssembly nil so unfulfilledEndorsementRequirements returns empty.
-	// PreAssembly must be non-nil because sendEndorsementRequests reads t.pt.PreAssembly.Verifiers.
-	txn.pt.PostAssembly = nil
 
 	err := action_NudgeEndorsementRequests(ctx, txn, nil)
 	require.NoError(t, err)
@@ -47,10 +44,10 @@ func Test_action_NudgeEndorsementRequests_WithUnfulfilledRequirements_Initialize
 	ctx := t.Context()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
 		PostAssembly(&components.TransactionPostAssembly{
-			AttestationPlan: []*prototk.AttestationRequest{{Name: "att1", AttestationType: prototk.AttestationType_ENDORSE, Parties: []string{"party1"}}},
-			Endorsements:    []*prototk.AttestationResult{},
+			AttestationPlan:   []*prototk.AttestationRequest{{Name: "att1", AttestationType: prototk.AttestationType_ENDORSE, Parties: []string{"party1"}}},
+			Endorsements:      []*prototk.AttestationResult{},
+			ResolvedVerifiers: []*prototk.ResolvedVerifier{{Lookup: "v1"}},
 		}).
-		PreAssembly(&components.TransactionPreAssembly{Verifiers: []*prototk.ResolvedVerifier{{Lookup: "v1"}}}).
 		UseMockTransportWriter().
 		WithCurrentBlockHeight(100).
 		Build()
@@ -73,10 +70,10 @@ func Test_sendEndorsementRequests_SendEndorsementRequestReturnsError_LogsAndCont
 	sendErr := errors.New("transport send failed")
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
 		PostAssembly(&components.TransactionPostAssembly{
-			AttestationPlan: []*prototk.AttestationRequest{{Name: "att1", AttestationType: prototk.AttestationType_ENDORSE, Parties: []string{"party1"}}},
-			Endorsements:    []*prototk.AttestationResult{},
+			AttestationPlan:   []*prototk.AttestationRequest{{Name: "att1", AttestationType: prototk.AttestationType_ENDORSE, Parties: []string{"party1"}}},
+			Endorsements:      []*prototk.AttestationResult{},
+			ResolvedVerifiers: []*prototk.ResolvedVerifier{{Lookup: "v1"}},
 		}).
-		PreAssembly(&components.TransactionPreAssembly{Verifiers: []*prototk.ResolvedVerifier{{Lookup: "v1"}}}).
 		UseMockTransportWriter().
 		WithCurrentBlockHeight(100).
 		Build()
@@ -418,4 +415,3 @@ func Test_unfulfilledEndorsementRequirements_Threshold2of3_NotFulfilledAfterOne(
 	assert.Contains(t, parties, "p2@n2")
 	assert.Contains(t, parties, "p3@n3")
 }
-

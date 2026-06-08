@@ -83,7 +83,6 @@ func TestTransaction_HasDependenciesNotReady_TrueOK(t *testing.T) {
 			TransactionID: transaction2.pt.ID,
 		},
 		PostAssembly: transaction2Builder.BuildPostAssembly(),
-		PreAssembly:  transaction2Builder.BuildPreAssembly(),
 		RequestID:    transaction2.pendingAssembleRequest.IdempotencyKey(),
 	})
 	require.NoError(t, err)
@@ -123,7 +122,6 @@ func TestTransaction_HasDependenciesNotReady_TrueWhenStatesAreReadOnly(t *testin
 			TransactionID: transaction2.pt.ID,
 		},
 		PostAssembly: transaction2Builder.BuildPostAssembly(),
-		PreAssembly:  transaction2Builder.BuildPreAssembly(),
 		RequestID:    transaction2.pendingAssembleRequest.IdempotencyKey(),
 	})
 	require.NoError(t, err)
@@ -176,7 +174,6 @@ func TestTransaction_HasDependenciesNotReady(t *testing.T) {
 			TransactionID: transaction3.pt.ID,
 		},
 		PostAssembly: transaction3Builder.BuildPostAssembly(),
-		PreAssembly:  transaction3Builder.BuildPreAssembly(),
 		RequestID:    transaction3.pendingAssembleRequest.IdempotencyKey(),
 	})
 	require.NoError(t, err)

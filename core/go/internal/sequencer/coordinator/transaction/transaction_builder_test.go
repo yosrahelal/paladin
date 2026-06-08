@@ -611,7 +611,6 @@ func (b *TransactionBuilderForTesting) BuildAssembleSuccessEvent() *AssembleSucc
 			TransactionID: b.txn.pt.ID,
 		},
 		PostAssembly: b.BuildPostAssembly(),
-		PreAssembly:  b.BuildPreAssembly(),
 		RequestID:    b.txn.pendingAssembleRequest.IdempotencyKey(),
 	}
 }

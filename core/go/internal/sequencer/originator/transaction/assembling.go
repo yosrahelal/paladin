@@ -72,9 +72,9 @@ func action_AssembleError(ctx context.Context, t *originatorTransaction, event c
 // transaction event loop unblocked while allowing the potentially slow AssembleAndSign
 // call to run concurrently.
 //
-// Relevant fields are snapshotted before spawning to avoid data races: latestAssembleRequest
-// is copied by value and pt.PreAssembly is captured as a pointer at spawn time (the state
-// machine will not mutate PreAssembly while in State_Assembling).
+// handleAssembleAndSign does not modify the private transaction or the latest assembly
+// request, making it safe to call in a separate goroutine. This is enforced via unit tests
+// in the engine integration component.
 func action_AssembleAndSign(ctx context.Context, txn *originatorTransaction, _ common.Event) error {
 	if txn.latestAssembleRequest == nil {
 		//This should never happen unless there is a bug in the state machine logic

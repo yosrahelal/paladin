@@ -69,8 +69,8 @@ type coordinatorTransaction struct {
 	revertCount                        int
 	lastCanRetryRevert                 bool
 	assembleErrorCount                 int
-	endorseToleranceByRequirement      map[string]int // attReqName → max tolerable failures; computed once on entering Endorsement_Gathering
-	endorseFailureCountByRequirement   map[string]int // attReqName → failures seen this round; reset on entering Endorsement_Gathering
+	endorseToleranceByRequirement      map[string]int
+	endorseFailureCountByRequirement   map[string]int
 	heartbeatIntervalsSinceStateChange int
 	stateEntryTime                     time.Time
 
