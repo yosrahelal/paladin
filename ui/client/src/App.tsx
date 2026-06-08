@@ -38,7 +38,13 @@ import { TransactionDetails } from "./views/TransactionDetails";
 import { IPaladinTransactionPagingReference, ITransactionPagingReference } from "./interfaces";
 import { Submissions } from "./views/Submissions";
 import { DomainContract } from "./views/DomainContract";
+import { PrivacyGroups } from "./views/PrivacyGroups";
+import { PrivacyGroup } from "./views/PrivacyGroup";
 import { Navigation } from "./components/Navigation";
+import { States } from "./views/States";
+import { Messages } from "./views/Messages";
+import { Message } from "./views/Message";
+import { State } from "./views/State";
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({}),
@@ -60,7 +66,21 @@ function App() {
   const [submissionsPage, setSubmissionsPage] = useState(0);
   const [submissionsRowsPerPage, setSubmissionsRowsPerPage] = useState(10);
   const [domainsSelectedDomain, setDomainsSelectedDomain] = useState<string>();
+  const [privacyGroupsPage, setPrivacyGroupsPage] = useState(0);
+  const [privacyGroupsRowsPerPage, setPrivacyGroupsRowsPerPage] = useState(10);
+  const [privacyGroupsRefTimestamps, sePrivacyGroupsRefTimestamps] = useState<string[]>([]);
+  const [privacyGroupsSortAscending, setPrivacyGroupsSortAscending] = useState(false);
   const [navigationVisible, setNavigationVisible] = useState(false);
+  const [statesSelectedDomain, setStatesSelectedDomain] = useState<string>();
+  const [statesSelectedSchemaId, setStatesSelectedSchemaId] = useState<string>();
+  const [statePage, setStatePage] = useState(0);
+  const [stateRowsPerPage, setStateRowsPerPage] = useState(10);
+  const [stateRefTimestamps, setStateRefTimestamps] = useState<string[]>([]);
+  const [stateSortAscending, setStateSortAscending] = useState(false);
+  const [messagesPage, setMessagesPage] = useState(0);
+  const [messagesRowsPerPage, setMessagesRowsPerPage] = useState(10);
+  const [messagesRefTimestamps, setMessagesRefTimestamps] = useState<string[]>([]);
+  const [messagesSortAscending, setMessagesSortAscending] = useState(false);
 
   const [systemTheme, setSystemTheme] = useState(
     window.matchMedia &&
@@ -170,6 +190,43 @@ function App() {
                       setSelectedDomain={setDomainsSelectedDomain}
                     />} />
                     <Route path={AppRoutes.DomainContract} element={<DomainContract />} />
+                    <Route path={AppRoutes.PrivactGroups} element={<PrivacyGroups
+                      sortAscending={privacyGroupsSortAscending}
+                      setSortAscending={setPrivacyGroupsSortAscending}
+                      refTimestamps={privacyGroupsRefTimestamps}
+                      setRefTimestamps={sePrivacyGroupsRefTimestamps}
+                      page={privacyGroupsPage}
+                      setPage={setPrivacyGroupsPage}
+                      rowsPerPage={privacyGroupsRowsPerPage}
+                      setRowsPerPage={setPrivacyGroupsRowsPerPage}
+                    />} />
+                    <Route path={AppRoutes.PrivacyGroup} element={<PrivacyGroup />} />
+                    <Route path={AppRoutes.States} element={<States
+                      selectedDomain={statesSelectedDomain}
+                      setSelectedDomain={setStatesSelectedDomain}
+                      selectedSchemaId={statesSelectedSchemaId}
+                      setSelectedSchemaId={setStatesSelectedSchemaId}
+                      sortAscending={stateSortAscending}
+                      setSortAscending={setStateSortAscending}
+                      refTimestamps={stateRefTimestamps}
+                      setRefTimestamps={setStateRefTimestamps}
+                      page={statePage}
+                      setPage={setStatePage}
+                      rowsPerPage={stateRowsPerPage}
+                      setRowsPerPage={setStateRowsPerPage}
+                    />} />
+                    <Route path={AppRoutes.State} element={<State />} />
+                    <Route path={AppRoutes.Messages} element={<Messages
+                      sortAscending={messagesSortAscending}
+                      setSortAscending={setMessagesSortAscending}
+                      page={messagesPage}
+                      setPage={setMessagesPage}
+                      rowsPerPage={messagesRowsPerPage}
+                      setRowsPerPage={setMessagesRowsPerPage}
+                      refTimestamps={messagesRefTimestamps}
+                      setRefTimestamps={setMessagesRefTimestamps}
+                    />} />
+                    <Route path={AppRoutes.Message} element={<Message />} />
                     <Route path="*" element={<Navigate to={AppRoutes.Transactions} replace />} />
                   </Routes>
                 </Box>
