@@ -220,7 +220,7 @@ func (t *coordinatorTransaction) requestEndorsement(ctx context.Context, idempot
 		toEndorsableList(t.pt.PostAssembly.OutputStates),
 		toEndorsableList(t.pt.PostAssembly.InfoStates),
 		t.clock.Now().Add(t.stateTimeout),
-		t.getBlockHeight(ctx),
+		t.getCurrentBlockHeight(ctx),
 		int64(t.blockHeightTolerance),
 	)
 	if err != nil {
