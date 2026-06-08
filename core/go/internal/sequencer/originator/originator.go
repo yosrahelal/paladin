@@ -27,6 +27,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 
@@ -178,10 +179,10 @@ func (o *originator) propagateEventToTransaction(ctx context.Context, event tran
 	switch e := event.(type) {
 	case *transaction.AssembleRequestReceivedEvent:
 		return o.transportWriter.SendAssembleRejection(ctx, e.GetTransactionID(), e.RequestID, e.Coordinator,
-			common.RejectionReason_TransactionUnknown, 0, 0)
+			engineProto.RejectionReason_TRANSACTION_UNKNOWN, 0, 0)
 	case *transaction.PreDispatchRequestReceivedEvent:
 		return o.transportWriter.SendPreDispatchRejection(ctx, e.GetTransactionID(), e.RequestID, e.Coordinator,
-			common.RejectionReason_TransactionUnknown)
+			engineProto.RejectionReason_TRANSACTION_UNKNOWN)
 	default:
 		// Other events can be safely ignored
 		return nil

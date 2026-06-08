@@ -57,6 +57,13 @@ message TransactionConfirmed {
     string failure_message = 8;
 }
 
+enum RejectionReason {
+    BLOCK_HEIGHT_TOLERANCE = 0;         // sender and receiver block heights differ by more than the configured tolerance
+    NOT_CURRENT_DELEGATE = 1;           // receiver does not recognise the sender as its current active coordinator/delegate
+    TRANSACTION_UNKNOWN = 2;            // receiver does not recognise the transaction (likely already cleaned up)
+    ENDORSER_IS_ACTIVE_COORDINATOR = 3; // endorser is currently the active coordinator and will not accept requests from a different coordinator
+}
+
 message EndorsementRequest {
     io.kaleido.paladin.toolkit.AttestationRequest attestation_request = 1;
     string idempotency_key = 2;
@@ -91,7 +98,7 @@ message EndorsementRejection {
     string contract_address = 3;
     string party = 4;
     string attestation_request_name = 5;
-    int32 rejection_reason = 6;
+    RejectionReason rejection_reason = 6;
     int64 coordinator_block_height = 7;
     int64 endorser_block_height = 8;
     int64 block_height_tolerance = 9;   // the tolerance the coordinator was configured with, for diagnostic logging
@@ -118,7 +125,7 @@ message DelegationRejection {
     string delegation_id = 2;           // correlates the rejection back to the delegation request
     string contract_address = 3;
     string active_coordinator = 4;      // the rejecting coordinator's belief of who is currently active, so the originator can fast-redirect
-    int32 rejection_reason = 5;
+    RejectionReason rejection_reason = 5;
     int64 originator_block_height = 6;  // the originator's block height echoed from the request
     int64 coordinator_block_height = 7; // the coordinator's block height at the time of rejection
     int64 block_height_tolerance = 8;   // the tolerance the coordinator was configured with
@@ -168,7 +175,7 @@ message AssembleRejection {
     string transaction_id = 1;
     string assemble_request_id = 2;
     string contract_address = 3;
-    int32 rejection_reason = 4;
+    RejectionReason rejection_reason = 4;
     int64 coordinator_block_height = 5;
     int64 assembler_block_height = 6;
 }
@@ -178,7 +185,7 @@ message PreDispatchRejection {
     string transaction_id = 1;
     string request_id = 2;
     string contract_address = 3;
-    int32 rejection_reason = 4;
+    RejectionReason rejection_reason = 4;
 }
 
 message CoordinatorHeartbeatNotification {

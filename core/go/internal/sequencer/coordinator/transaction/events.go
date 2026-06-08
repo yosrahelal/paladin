@@ -18,6 +18,7 @@ package transaction
 import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -184,7 +185,7 @@ type EndorseRequestRejectedEvent struct {
 	Party                  string
 	AttestationRequestName string
 	RequestID              uuid.UUID
-	RejectionReason        common.RejectionReason
+	RejectionReason        engineProto.RejectionReason
 	CoordinatorBlockHeight int64
 	EndorserBlockHeight    int64
 	BlockHeightTolerance   int64
@@ -201,7 +202,7 @@ func (*EndorseRequestRejectedEvent) TypeString() string {
 type AssembleRequestRejectedEvent struct {
 	BaseCoordinatorEvent
 	RequestID              uuid.UUID
-	RejectionReason        common.RejectionReason
+	RejectionReason        engineProto.RejectionReason
 	CoordinatorBlockHeight int64
 	AssemblerBlockHeight   int64
 	BlockHeightTolerance   int64
@@ -406,7 +407,7 @@ func (*StateTransitionEvent) TypeString() string {
 type PreDispatchRequestRejectedEvent struct {
 	BaseCoordinatorEvent
 	RequestID       uuid.UUID
-	RejectionReason common.RejectionReason
+	RejectionReason engineProto.RejectionReason
 }
 
 func (*PreDispatchRequestRejectedEvent) Type() EventType {

@@ -23,6 +23,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/grapher"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/statevisibilitytracker"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
@@ -240,7 +241,7 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_BlockHeightToleranceExc
 	// Block height difference (100 - 0 = 100) exceeds tolerance (10) → rejection.
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_BlockHeightTolerance, int64(0), int64(100), mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
 	event := newBlockHeightExceedingEndorsementEvent("node2")
@@ -390,7 +391,7 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_BlockHeightToleran
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_BlockHeightTolerance, int64(0), int64(100), mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
 	event := newBlockHeightExceedingEndorsementEvent("node1")
@@ -833,7 +834,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_LowerPriority_RejectsA
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_EndorserIsActiveCoordinator,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_ENDORSER_IS_ACTIVE_COORDINATOR,
 		int64(0), int64(0), int64(0),
 	).Return(nil)
 
@@ -859,7 +860,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_BlockHeightToleranceEx
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_BlockHeightTolerance, int64(0), int64(100), mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
 	event := newBlockHeightExceedingEndorsementEvent("node1") // node1 is higher priority
@@ -1290,7 +1291,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_LowerPriority_Rejec
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_EndorserIsActiveCoordinator,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_ENDORSER_IS_ACTIVE_COORDINATOR,
 		int64(0), int64(0), int64(0),
 	).Return(nil)
 
@@ -1314,7 +1315,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_BlockHeightToleranc
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_BlockHeightTolerance, int64(0), int64(100), mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
 	event := newBlockHeightExceedingEndorsementEvent("node1") // higher priority — rejected before priority check
@@ -1762,7 +1763,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_LowerPriority_Rejects
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_EndorserIsActiveCoordinator,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_ENDORSER_IS_ACTIVE_COORDINATOR,
 		int64(0), int64(0), int64(0),
 	).Return(nil)
 	// After rejecting a lower-priority sender, Active reasserts its coordinator status to all candidates.
@@ -1790,7 +1791,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_BlockHeightToleranceE
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_BlockHeightTolerance, int64(0), int64(100), mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
 	event := newBlockHeightExceedingEndorsementEvent("node2")
@@ -2080,7 +2081,7 @@ func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_LowerPriority_Re
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_EndorserIsActiveCoordinator,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_ENDORSER_IS_ACTIVE_COORDINATOR,
 		int64(0), int64(0), int64(0),
 	).Return(nil)
 
@@ -2104,7 +2105,7 @@ func TestCoordinator_WhenActiveFLush_EndorsementRequestReceived_BlockHeightToler
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_BlockHeightTolerance, int64(0), int64(100), mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
 	event := newBlockHeightExceedingEndorsementEvent("node2")
@@ -2351,7 +2352,7 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_BlockHeightTole
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_BlockHeightTolerance, int64(0), int64(100), mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
 	event := newBlockHeightExceedingEndorsementEvent("node1")
@@ -2631,7 +2632,7 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_BlockHeightTolerance
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, common.RejectionReason_BlockHeightTolerance, int64(0), int64(100), mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, int64(0), int64(100), mock.Anything,
 	).Return(nil)
 
 	event := newBlockHeightExceedingEndorsementEvent("node1")

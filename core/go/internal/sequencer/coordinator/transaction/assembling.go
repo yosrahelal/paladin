@@ -23,6 +23,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -226,13 +227,13 @@ func action_HandleAssembleBlockHeightRejection(ctx context.Context, txn *coordin
 }
 
 func validator_IsAssembleBlockHeightRejection(_ context.Context, _ *coordinatorTransaction, event common.Event) (bool, error) {
-	return event.(*AssembleRequestRejectedEvent).RejectionReason == common.RejectionReason_BlockHeightTolerance, nil
+	return event.(*AssembleRequestRejectedEvent).RejectionReason == engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, nil
 }
 
 func validator_IsAssembleNotCurrentDelegateRejection(_ context.Context, _ *coordinatorTransaction, event common.Event) (bool, error) {
-	return event.(*AssembleRequestRejectedEvent).RejectionReason == common.RejectionReason_NotCurrentDelegate, nil
+	return event.(*AssembleRequestRejectedEvent).RejectionReason == engineProto.RejectionReason_NOT_CURRENT_DELEGATE, nil
 }
 
 func validator_IsAssembleTransactionUnknownRejection(_ context.Context, _ *coordinatorTransaction, event common.Event) (bool, error) {
-	return event.(*AssembleRequestRejectedEvent).RejectionReason == common.RejectionReason_TransactionUnknown, nil
+	return event.(*AssembleRequestRejectedEvent).RejectionReason == engineProto.RejectionReason_TRANSACTION_UNKNOWN, nil
 }

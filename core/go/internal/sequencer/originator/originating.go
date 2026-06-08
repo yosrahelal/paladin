@@ -25,16 +25,17 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/google/uuid"
 	"slices"
 )
 
 func validator_IsDelegationBlockHeightRejection(_ context.Context, _ *originator, event common.Event) (bool, error) {
-	return event.(*DelegationRequestRejectedEvent).RejectionReason == common.RejectionReason_BlockHeightTolerance, nil
+	return event.(*DelegationRequestRejectedEvent).RejectionReason == engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, nil
 }
 
 func validator_IsDelegationNotActiveCoordinatorRejection(_ context.Context, _ *originator, event common.Event) (bool, error) {
-	return event.(*DelegationRequestRejectedEvent).RejectionReason == common.RejectionReason_NotCurrentDelegate, nil
+	return event.(*DelegationRequestRejectedEvent).RejectionReason == engineProto.RejectionReason_NOT_CURRENT_DELEGATE, nil
 }
 
 func action_LogDelegationBlockHeightRejection(ctx context.Context, _ *originator, event common.Event) error {

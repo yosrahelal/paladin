@@ -19,6 +19,7 @@ import (
 	"context"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
@@ -47,7 +48,7 @@ func action_RejectEndorsementBlockHeight(ctx context.Context, c *coordinator, ev
 		e.AttestationRequest.Name,
 		e.Party,
 		e.FromNode,
-		common.RejectionReason_BlockHeightTolerance,
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		e.CoordinatorBlockHeight,
 		int64(c.currentBlockHeight),
 		int64(c.blockHeightTolerance),
@@ -69,7 +70,7 @@ func action_RejectEndorsementEndorserIsActiveCoordinator(ctx context.Context, c 
 		e.AttestationRequest.Name,
 		e.Party,
 		e.FromNode,
-		common.RejectionReason_EndorserIsActiveCoordinator,
+		engineProto.RejectionReason_ENDORSER_IS_ACTIVE_COORDINATOR,
 		0, 0, 0,
 	)
 }

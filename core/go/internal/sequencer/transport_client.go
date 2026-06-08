@@ -267,7 +267,7 @@ func (sMgr *sequencerManager) handleAssembleRejection(ctx context.Context, messa
 	assembleRejectedEvent.RequestID = uuid.MustParse(assembleRejection.AssembleRequestId)
 	assembleRejectedEvent.TransactionID = uuid.MustParse(assembleRejection.TransactionId)
 	assembleRejectedEvent.EventTime = time.Now()
-	assembleRejectedEvent.RejectionReason = common.RejectionReason(assembleRejection.RejectionReason)
+	assembleRejectedEvent.RejectionReason = assembleRejection.RejectionReason
 	assembleRejectedEvent.CoordinatorBlockHeight = assembleRejection.CoordinatorBlockHeight
 	assembleRejectedEvent.AssemblerBlockHeight = assembleRejection.AssemblerBlockHeight
 	seq.GetCoordinator().QueueEvent(ctx, assembleRejectedEvent)
@@ -511,7 +511,7 @@ func (sMgr *sequencerManager) handleDelegationRejection(ctx context.Context, mes
 
 	rejectedEvent := &originator.DelegationRequestRejectedEvent{}
 	rejectedEvent.ActiveCoordinator = delegationRejection.ActiveCoordinator
-	rejectedEvent.RejectionReason = common.RejectionReason(delegationRejection.RejectionReason)
+	rejectedEvent.RejectionReason = delegationRejection.RejectionReason
 	rejectedEvent.OriginatorBlockHeight = delegationRejection.OriginatorBlockHeight
 	rejectedEvent.CoordinatorBlockHeight = delegationRejection.CoordinatorBlockHeight
 	rejectedEvent.BlockHeightTolerance = delegationRejection.BlockHeightTolerance
@@ -666,7 +666,7 @@ func (sMgr *sequencerManager) handleEndorsementRejection(ctx context.Context, me
 	endorseRejectedEvent.EventTime = time.Now()
 	endorseRejectedEvent.Party = endorsementRejection.Party
 	endorseRejectedEvent.AttestationRequestName = endorsementRejection.AttestationRequestName
-	endorseRejectedEvent.RejectionReason = common.RejectionReason(endorsementRejection.RejectionReason)
+	endorseRejectedEvent.RejectionReason = endorsementRejection.RejectionReason
 	endorseRejectedEvent.CoordinatorBlockHeight = endorsementRejection.CoordinatorBlockHeight
 	endorseRejectedEvent.EndorserBlockHeight = endorsementRejection.EndorserBlockHeight
 	endorseRejectedEvent.BlockHeightTolerance = endorsementRejection.BlockHeightTolerance
@@ -837,7 +837,7 @@ func (sMgr *sequencerManager) handlePreDispatchRejection(ctx context.Context, me
 			TransactionID: txID,
 		},
 		RequestID:       requestID,
-		RejectionReason: common.RejectionReason(rejection.RejectionReason),
+		RejectionReason: rejection.RejectionReason,
 	}
 	rejectedEvent.EventTime = time.Now()
 	seq.GetCoordinator().QueueEvent(ctx, rejectedEvent)

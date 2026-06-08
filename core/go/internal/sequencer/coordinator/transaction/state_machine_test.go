@@ -22,6 +22,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -536,7 +537,7 @@ func TestCoordinatorTransaction_Assembling_ToEvicted_OnAssembleRejected_NotCurre
 
 	err := txn.HandleEvent(ctx, &AssembleRequestRejectedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
-		RejectionReason:      common.RejectionReason_NotCurrentDelegate,
+		RejectionReason:      engineProto.RejectionReason_NOT_CURRENT_DELEGATE,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_Evicted, txn.GetCurrentState())
@@ -623,7 +624,7 @@ func TestCoordinatorTransaction_Assembling_ToFinal_OnAssembleRejected_Transactio
 
 	err := txn.HandleEvent(ctx, &AssembleRequestRejectedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
-		RejectionReason:      common.RejectionReason_TransactionUnknown,
+		RejectionReason:      engineProto.RejectionReason_TRANSACTION_UNKNOWN,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_Final, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
@@ -641,7 +642,7 @@ func TestCoordinatorTransaction_Assembling_ToPooled_OnAssembleRequestRejected_Bl
 
 	err := txn.HandleEvent(ctx, &AssembleRequestRejectedEvent{
 		BaseCoordinatorEvent:   BaseCoordinatorEvent{TransactionID: txn.GetID()},
-		RejectionReason:        common.RejectionReason_BlockHeightTolerance,
+		RejectionReason:        engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		CoordinatorBlockHeight: 100,
 		AssemblerBlockHeight:   200,
 		BlockHeightTolerance:   5,
@@ -965,7 +966,7 @@ func TestCoordinatorTransaction_Endorsement_Gathering_StaysInState_OnEndorseRequ
 		BaseCoordinatorEvent:   BaseCoordinatorEvent{TransactionID: txn.pt.ID},
 		Party:                  party1,
 		AttestationRequestName: "endorse-multisig",
-		RejectionReason:        common.RejectionReason_BlockHeightTolerance,
+		RejectionReason:        engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		CoordinatorBlockHeight: 100,
 		EndorserBlockHeight:    200,
 		BlockHeightTolerance:   5,
@@ -1173,7 +1174,7 @@ func TestCoordinatorTransaction_ConfirmingDispatch_ToEvicted_OnPreDispatchReject
 	err := txn.HandleEvent(ctx, &PreDispatchRequestRejectedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
 		RequestID:            uuid.New(),
-		RejectionReason:      common.RejectionReason_NotCurrentDelegate,
+		RejectionReason:      engineProto.RejectionReason_NOT_CURRENT_DELEGATE,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_Evicted, txn.GetCurrentState())
@@ -1186,7 +1187,7 @@ func TestCoordinatorTransaction_ConfirmingDispatch_ToFinal_OnPreDispatchRejected
 	err := txn.HandleEvent(ctx, &PreDispatchRequestRejectedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
 		RequestID:            uuid.New(),
-		RejectionReason:      common.RejectionReason_TransactionUnknown,
+		RejectionReason:      engineProto.RejectionReason_TRANSACTION_UNKNOWN,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, State_Final, txn.GetCurrentState())

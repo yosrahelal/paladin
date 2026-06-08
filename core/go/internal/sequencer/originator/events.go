@@ -18,6 +18,7 @@ package originator
 import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 )
 
 type Event interface {
@@ -51,7 +52,7 @@ func (*OriginatorCreatedEvent) TypeString() string {
 
 type DelegationRequestRejectedEvent struct {
 	common.BaseEvent
-	RejectionReason        common.RejectionReason
+	RejectionReason        engineProto.RejectionReason
 	ActiveCoordinator      string
 	OriginatorBlockHeight  int64
 	CoordinatorBlockHeight int64

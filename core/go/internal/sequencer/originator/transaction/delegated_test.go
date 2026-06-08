@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -448,7 +448,7 @@ func TestAction_SendAssembleRejectionNotCurrentDelegate_Success(t *testing.T) {
 	}
 
 	mocks.TransportWriter.EXPECT().
-		SendAssembleRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", common.RejectionReason_NotCurrentDelegate, int64(0), int64(0)).
+		SendAssembleRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", engineProto.RejectionReason_NOT_CURRENT_DELEGATE, int64(0), int64(0)).
 		Return(nil)
 
 	err := action_SendAssembleRejectionNotCurrentDelegate(ctx, txn, event)
@@ -469,7 +469,7 @@ func TestAction_SendAssembleRejectionNotCurrentDelegate_TransportError_LogsWarnA
 	}
 
 	mocks.TransportWriter.EXPECT().
-		SendAssembleRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", common.RejectionReason_NotCurrentDelegate, int64(0), int64(0)).
+		SendAssembleRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", engineProto.RejectionReason_NOT_CURRENT_DELEGATE, int64(0), int64(0)).
 		Return(errors.New("transport error"))
 
 	err := action_SendAssembleRejectionNotCurrentDelegate(ctx, txn, event)
@@ -491,7 +491,7 @@ func TestAction_SendPreDispatchRejectionNotCurrentDelegate_Success(t *testing.T)
 	}
 
 	mocks.TransportWriter.EXPECT().
-		SendPreDispatchRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", common.RejectionReason_NotCurrentDelegate).
+		SendPreDispatchRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", engineProto.RejectionReason_NOT_CURRENT_DELEGATE).
 		Return(nil)
 
 	err := action_SendPreDispatchRejectionNotCurrentDelegate(ctx, txn, event)
@@ -513,7 +513,7 @@ func TestAction_SendPreDispatchRejectionNotCurrentDelegate_TransportError_LogsWa
 	}
 
 	mocks.TransportWriter.EXPECT().
-		SendPreDispatchRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", common.RejectionReason_NotCurrentDelegate).
+		SendPreDispatchRejection(mock.Anything, txn.pt.ID, reqID, "other@node2", engineProto.RejectionReason_NOT_CURRENT_DELEGATE).
 		Return(errors.New("transport error"))
 
 	err := action_SendPreDispatchRejectionNotCurrentDelegate(ctx, txn, event)

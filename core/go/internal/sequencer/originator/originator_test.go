@@ -24,6 +24,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
@@ -261,7 +262,7 @@ func Test_propagateEventToTransaction_UnknownTransaction_PreDispatchRequestSends
 	}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, event))
 	assert.True(t, mocks.SentMessageRecorder.HasSentPreDispatchRejection(), "SendPreDispatchRejection should be called for unknown transaction")
-	assert.Equal(t, common.RejectionReason_TransactionUnknown, mocks.SentMessageRecorder.PreDispatchRejectionReason())
+	assert.Equal(t, engineProto.RejectionReason_TRANSACTION_UNKNOWN, mocks.SentMessageRecorder.PreDispatchRejectionReason())
 }
 
 func Test_GetTxStatus_KnownTransactionReturnsStatus(t *testing.T) {

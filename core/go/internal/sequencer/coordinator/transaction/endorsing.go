@@ -20,6 +20,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -289,9 +290,9 @@ func action_RecordEndorseFailure(ctx context.Context, t *coordinatorTransaction,
 		reqName = e.AttestationRequestName
 		party = e.Party
 		switch e.RejectionReason {
-		case common.RejectionReason_EndorserIsActiveCoordinator:
+		case engineProto.RejectionReason_ENDORSER_IS_ACTIVE_COORDINATOR:
 			log.L(ctx).Warnf("endorsement request rejected by %s (%s): endorser is the active coordinator", party, reqName)
-		case common.RejectionReason_BlockHeightTolerance:
+		case engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE:
 			log.L(ctx).Warnf("endorsement request rejected by %s (%s) due to block height tolerance: coordinator block height=%d, endorser block height=%d, endorser tolerance=%d",
 				party, reqName, e.CoordinatorBlockHeight, e.EndorserBlockHeight, e.BlockHeightTolerance)
 		}

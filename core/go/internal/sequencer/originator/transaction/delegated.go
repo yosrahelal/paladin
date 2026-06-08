@@ -21,6 +21,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/google/uuid"
 )
 
@@ -107,7 +108,7 @@ func validator_PreDispatchRequestFromCurrentDelegate(ctx context.Context, txn *o
 func action_SendPreDispatchRejectionNotCurrentDelegate(ctx context.Context, txn *originatorTransaction, event common.Event) error {
 	e := event.(*PreDispatchRequestReceivedEvent)
 	log.L(ctx).Debugf("rejecting pre-dispatch request from %s: not current delegate (current=%s)", e.Coordinator, txn.currentDelegate)
-	if err := txn.transportWriter.SendPreDispatchRejection(ctx, txn.pt.ID, e.RequestID, e.Coordinator, common.RejectionReason_NotCurrentDelegate); err != nil {
+	if err := txn.transportWriter.SendPreDispatchRejection(ctx, txn.pt.ID, e.RequestID, e.Coordinator, engineProto.RejectionReason_NOT_CURRENT_DELEGATE); err != nil {
 		log.L(ctx).Warnf("failed to send pre-dispatch rejection to %s: %s", e.Coordinator, err)
 	}
 	return nil

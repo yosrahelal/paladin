@@ -21,6 +21,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
 	"github.com/google/uuid"
@@ -804,7 +805,7 @@ func TestStateMachine_Sending_DelegationRejected_HigherPriority_RedirectsAndRede
 		Return(nil).Once()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRequestRejectedEvent{
-		RejectionReason:   common.RejectionReason_NotCurrentDelegate,
+		RejectionReason:   engineProto.RejectionReason_NOT_CURRENT_DELEGATE,
 		ActiveCoordinator: "node1",
 	}))
 
@@ -823,7 +824,7 @@ func TestStateMachine_Sending_DelegationRejected_LowerPriority_NoChange(t *testi
 		Build()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRequestRejectedEvent{
-		RejectionReason:   common.RejectionReason_NotCurrentDelegate,
+		RejectionReason:   engineProto.RejectionReason_NOT_CURRENT_DELEGATE,
 		ActiveCoordinator: "node3",
 	}))
 
@@ -840,7 +841,7 @@ func TestStateMachine_Sending_DelegationRejected_BlockHeightTolerance_StaysSendi
 		Build()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRequestRejectedEvent{
-		RejectionReason:       common.RejectionReason_BlockHeightTolerance,
+		RejectionReason:       engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		OriginatorBlockHeight: 50,
 		CoordinatorBlockHeight: 100,
 		BlockHeightTolerance:   10,

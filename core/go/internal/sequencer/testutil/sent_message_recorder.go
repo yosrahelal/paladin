@@ -58,7 +58,7 @@ type SentMessageRecorder struct {
 	hasSentAssembleError           bool
 	hasSentAssembleRejection       bool
 	hasSentPreDispatchRejection    bool
-	preDispatchRejectionReason     common.RejectionReason
+	preDispatchRejectionReason     engineProto.RejectionReason
 	hasSentDelegationRequest       bool
 	delegatedTransactions          []*components.PrivateTransaction
 }
@@ -263,12 +263,12 @@ func (r *SentMessageRecorder) SendAssembleError(ctx context.Context, txID uuid.U
 	return nil
 }
 
-func (r *SentMessageRecorder) SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, reason common.RejectionReason, coordinatorBlockHeight, assemblerBlockHeight int64) error {
+func (r *SentMessageRecorder) SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, reason engineProto.RejectionReason, coordinatorBlockHeight, assemblerBlockHeight int64) error {
 	r.hasSentAssembleRejection = true
 	return nil
 }
 
-func (r *SentMessageRecorder) SendPreDispatchRejection(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, coordinatorNode string, reason common.RejectionReason) error {
+func (r *SentMessageRecorder) SendPreDispatchRejection(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, coordinatorNode string, reason engineProto.RejectionReason) error {
 	r.hasSentPreDispatchRejection = true
 	r.preDispatchRejectionReason = reason
 	return nil
@@ -278,7 +278,7 @@ func (r *SentMessageRecorder) HasSentPreDispatchRejection() bool {
 	return r.hasSentPreDispatchRejection
 }
 
-func (r *SentMessageRecorder) PreDispatchRejectionReason() common.RejectionReason {
+func (r *SentMessageRecorder) PreDispatchRejectionReason() engineProto.RejectionReason {
 	return r.preDispatchRejectionReason
 }
 
@@ -338,7 +338,7 @@ func (r *SentMessageRecorder) SendDelegationResponse(ctx context.Context, delega
 	return nil
 }
 
-func (r *SentMessageRecorder) SendDelegationRejection(ctx context.Context, delegatingNodeName string, delegationId string, rejectionReason common.RejectionReason, activeCoordinator string, originatorBlockHeight, coordinatorBlockHeight, blockHeightTolerance int64) error {
+func (r *SentMessageRecorder) SendDelegationRejection(ctx context.Context, delegatingNodeName string, delegationId string, rejectionReason engineProto.RejectionReason, activeCoordinator string, originatorBlockHeight, coordinatorBlockHeight, blockHeightTolerance int64) error {
 	return nil
 }
 
@@ -363,6 +363,6 @@ func (r *SentMessageRecorder) SendEndorsementError(ctx context.Context, transact
 	return nil
 }
 
-func (r *SentMessageRecorder) SendEndorsementRejection(ctx context.Context, transactionId, idempotencyKey, contractAddress, endorsementName, party, node string, reason common.RejectionReason, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance int64) error {
+func (r *SentMessageRecorder) SendEndorsementRejection(ctx context.Context, transactionId, idempotencyKey, contractAddress, endorsementName, party, node string, reason engineProto.RejectionReason, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance int64) error {
 	return nil
 }

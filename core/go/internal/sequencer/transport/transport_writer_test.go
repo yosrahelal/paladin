@@ -447,7 +447,7 @@ func TestSendDelegationRejection_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendDelegationRejection(ctx, delegatingNodeName, delegationId, common.RejectionReason_NotCurrentDelegate, "active-coordinator", int64(blockHeight), int64(90), int64(0))
+	err := tw.SendDelegationRejection(ctx, delegatingNodeName, delegationId, engineProto.RejectionReason_NOT_CURRENT_DELEGATE, "active-coordinator", int64(blockHeight), int64(90), int64(0))
 	require.NoError(t, err)
 }
 
@@ -470,7 +470,7 @@ func TestSendDelegationRejection_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendDelegationRejection(ctx, delegatingNodeName, delegationId, common.RejectionReason_NotCurrentDelegate, "node1", int64(100), int64(90), int64(0))
+	err := tw.SendDelegationRejection(ctx, delegatingNodeName, delegationId, engineProto.RejectionReason_NOT_CURRENT_DELEGATE, "node1", int64(100), int64(90), int64(0))
 	require.NoError(t, err)
 }
 
@@ -812,7 +812,7 @@ func TestSendEndorsementRejection_Success(t *testing.T) {
 			r.ContractAddress == contractAddress &&
 			r.AttestationRequestName == endorsementName &&
 			r.Party == party &&
-			r.RejectionReason == int32(common.RejectionReason_BlockHeightTolerance) && // reason passed explicitly
+			r.RejectionReason == engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE && // reason passed explicitly
 			r.CoordinatorBlockHeight == coordinatorBlockHeight &&
 			r.EndorserBlockHeight == endorserBlockHeight &&
 			r.BlockHeightTolerance == blockHeightTolerance
@@ -825,7 +825,7 @@ func TestSendEndorsementRejection_Success(t *testing.T) {
 		contractAddress:   pldtypes.MustEthAddress(contractAddress),
 	}
 
-	err := tw.SendEndorsementRejection(ctx, transactionId, idempotencyKey, contractAddress, endorsementName, party, node, common.RejectionReason_BlockHeightTolerance, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance)
+	err := tw.SendEndorsementRejection(ctx, transactionId, idempotencyKey, contractAddress, endorsementName, party, node, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance)
 	require.NoError(t, err)
 }
 
@@ -845,7 +845,7 @@ func TestSendEndorsementRejection_SendError(t *testing.T) {
 		contractAddress:   pldtypes.MustEthAddress(contractAddress),
 	}
 
-	err := tw.SendEndorsementRejection(ctx, uuid.New().String(), uuid.New().String(), contractAddress, "att1", "party1@node2", "node2", common.RejectionReason_BlockHeightTolerance, 100, 95, 10)
+	err := tw.SendEndorsementRejection(ctx, uuid.New().String(), uuid.New().String(), contractAddress, "att1", "party1@node2", "node2", engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, 100, 95, 10)
 	require.NoError(t, err)
 }
 
@@ -1285,7 +1285,7 @@ func TestSendAssembleRejection_Success(t *testing.T) {
 		return r.TransactionId == txID.String() &&
 			r.AssembleRequestId == assembleRequestId.String() &&
 			r.ContractAddress == contractAddress.HexString() &&
-			r.RejectionReason == int32(common.RejectionReason_BlockHeightTolerance) &&
+			r.RejectionReason == engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE &&
 			r.CoordinatorBlockHeight == coordinatorBlockHeight &&
 			r.AssemblerBlockHeight == assemblerBlockHeight
 	})).Return(nil)
@@ -1298,7 +1298,7 @@ func TestSendAssembleRejection_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, common.RejectionReason_BlockHeightTolerance, coordinatorBlockHeight, assemblerBlockHeight)
+	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, coordinatorBlockHeight, assemblerBlockHeight)
 	require.NoError(t, err)
 }
 
@@ -1322,7 +1322,7 @@ func TestSendAssembleRejection_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, common.RejectionReason_BlockHeightTolerance, 100, 95)
+	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, 100, 95)
 	require.NoError(t, err)
 }
 
@@ -2372,7 +2372,7 @@ func TestSendPreDispatchRejection_Success(t *testing.T) {
 		return r.TransactionId == txID.String() &&
 			r.RequestId == requestID.String() &&
 			r.ContractAddress == contractAddress.HexString() &&
-			r.RejectionReason == int32(common.RejectionReason_NotCurrentDelegate)
+			r.RejectionReason == engineProto.RejectionReason_NOT_CURRENT_DELEGATE
 	})).Return(nil)
 
 	tw := &transportWriter{
@@ -2383,7 +2383,7 @@ func TestSendPreDispatchRejection_Success(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendPreDispatchRejection(ctx, txID, requestID, coordinatorNode, common.RejectionReason_NotCurrentDelegate)
+	err := tw.SendPreDispatchRejection(ctx, txID, requestID, coordinatorNode, engineProto.RejectionReason_NOT_CURRENT_DELEGATE)
 	require.NoError(t, err)
 }
 
@@ -2404,7 +2404,7 @@ func TestSendPreDispatchRejection_NilContractAddress(t *testing.T) {
 		contractAddress:   nil,
 	}
 
-	err := tw.SendPreDispatchRejection(ctx, txID, requestID, coordinatorNode, common.RejectionReason_NotCurrentDelegate)
+	err := tw.SendPreDispatchRejection(ctx, txID, requestID, coordinatorNode, engineProto.RejectionReason_NOT_CURRENT_DELEGATE)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "attempt to send pre-dispatch rejection without specifying contract address")
 }
@@ -2428,6 +2428,6 @@ func TestSendPreDispatchRejection_SendError(t *testing.T) {
 		contractAddress:   contractAddress,
 	}
 
-	err := tw.SendPreDispatchRejection(ctx, txID, requestID, coordinatorNode, common.RejectionReason_TransactionUnknown)
+	err := tw.SendPreDispatchRejection(ctx, txID, requestID, coordinatorNode, engineProto.RejectionReason_TRANSACTION_UNKNOWN)
 	require.NoError(t, err)
 }

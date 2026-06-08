@@ -21,6 +21,7 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -351,7 +352,7 @@ func TestEndorseRequestRejectedEvent_Fields(t *testing.T) {
 		Party:                  "party1@node1",
 		AttestationRequestName: "endorse-0",
 		RequestID:              requestID,
-		RejectionReason:        common.RejectionReason_BlockHeightTolerance,
+		RejectionReason:        engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		CoordinatorBlockHeight: coordinatorBlockHeight,
 		EndorserBlockHeight:    endorserBlockHeight,
 	}
@@ -360,7 +361,7 @@ func TestEndorseRequestRejectedEvent_Fields(t *testing.T) {
 	assert.Equal(t, "party1@node1", event.Party)
 	assert.Equal(t, "endorse-0", event.AttestationRequestName)
 	assert.Equal(t, requestID, event.RequestID)
-	assert.Equal(t, common.RejectionReason_BlockHeightTolerance, event.RejectionReason)
+	assert.Equal(t, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, event.RejectionReason)
 	assert.Equal(t, coordinatorBlockHeight, event.CoordinatorBlockHeight)
 	assert.Equal(t, endorserBlockHeight, event.EndorserBlockHeight)
 }
@@ -399,14 +400,14 @@ func TestAssembleRequestRejectedEvent_Fields(t *testing.T) {
 			TransactionID: txID,
 		},
 		RequestID:              requestID,
-		RejectionReason:        common.RejectionReason_BlockHeightTolerance,
+		RejectionReason:        engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		CoordinatorBlockHeight: coordinatorBlockHeight,
 		AssemblerBlockHeight:   assemblerBlockHeight,
 	}
 
 	assert.Equal(t, txID, event.GetTransactionID())
 	assert.Equal(t, requestID, event.RequestID)
-	assert.Equal(t, common.RejectionReason_BlockHeightTolerance, event.RejectionReason)
+	assert.Equal(t, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, event.RejectionReason)
 	assert.Equal(t, coordinatorBlockHeight, event.CoordinatorBlockHeight)
 	assert.Equal(t, assemblerBlockHeight, event.AssemblerBlockHeight)
 }
@@ -1197,7 +1198,7 @@ func TestEvent_InterfaceCompliance(t *testing.T) {
 				TransactionID: txID,
 			},
 			RequestID:       txID,
-			RejectionReason: common.RejectionReason_NotCurrentDelegate,
+			RejectionReason: engineProto.RejectionReason_NOT_CURRENT_DELEGATE,
 		},
 	}
 

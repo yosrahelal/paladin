@@ -34,28 +34,32 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Where a request is sent, there are three possible types of message that may be sent back:
+// - response: the result of actioning the request, which may include expected errors (e.g. assembly reverted)
+// - error: an unexpected error occurred while actioning the request
+// - rejection: the request was not actioned, a rejection reason must be included
 type TransportWriter interface {
 	StartLoopbackWriter()
 	WaitForDone(ctx context.Context)
 	SendDelegationRequest(ctx context.Context, coordinatorNode string, transactions []*components.PrivateTransaction, blockHeight uint64) error
 	SendDelegationResponse(ctx context.Context, delegatingNodeName string, delegationId string, transactionIDs []string, errors []int64, blockHeight uint64) error
-	SendDelegationRejection(ctx context.Context, delegatingNodeName string, delegationId string, rejectionReason common.RejectionReason, activeCoordinator string, originatorBlockHeight, coordinatorBlockHeight, blockHeightTolerance int64) error
+	SendDelegationRejection(ctx context.Context, delegatingNodeName string, delegationId string, rejectionReason engineProto.RejectionReason, activeCoordinator string, originatorBlockHeight, coordinatorBlockHeight, blockHeightTolerance int64) error
 	SendHandoverRequest(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress) error
 	SendEndorsementRequest(ctx context.Context, txID uuid.UUID, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest, transactionSpecification *prototk.TransactionSpecification, verifiers []*prototk.ResolvedVerifier, signatures []*prototk.AttestationResult, inputStates []*prototk.EndorsableState, readStates []*prototk.EndorsableState, outputStates []*prototk.EndorsableState, infoStates []*prototk.EndorsableState, expiryTime time.Time, coordinatorBlockHeight int64, blockHeightTolerance int64) error
 	SendEndorsementResponse(ctx context.Context, transactionId, idempotencyKey, contractAddress string, attResult *prototk.AttestationResult, endorsementResult *components.EndorsementResult, revertReason, endorsementName, party, node string) error
 	SendEndorsementError(ctx context.Context, transactionId, idempotencyKey, contractAddress, errorMessage, party, attestationRequestName, node string) error
-	SendEndorsementRejection(ctx context.Context, transactionId, idempotencyKey, contractAddress, endorsementName, party, node string, reason common.RejectionReason, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance int64) error
+	SendEndorsementRejection(ctx context.Context, transactionId, idempotencyKey, contractAddress, endorsementName, party, node string, reason engineProto.RejectionReason, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance int64) error
 	SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, coordinatorBlockHeight int64, expiryTime time.Time, blockHeightTolerance int64) error
 	SendAssembleResponse(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, postAssembly *components.TransactionPostAssembly, preAssembly *components.TransactionPreAssembly, recipient string) error
 	SendAssembleError(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string) error
-	SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, reason common.RejectionReason, coordinatorBlockHeight, assemblerBlockHeight int64) error
-	SendPreDispatchRejection(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, coordinatorNode string, reason common.RejectionReason) error
+	SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, reason engineProto.RejectionReason, coordinatorBlockHeight, assemblerBlockHeight int64) error
 	SendNonceAssigned(ctx context.Context, txID uuid.UUID, originatorNode string, contractAddress *pldtypes.EthAddress, nonce uint64) error
 	SendTransactionSubmitted(ctx context.Context, txID uuid.UUID, originatorNode string, contractAddress *pldtypes.EthAddress, txHash *pldtypes.Bytes32) error
 	SendTransactionConfirmed(ctx context.Context, txID uuid.UUID, originatorNode string, contractAddress *pldtypes.EthAddress, nonce *pldtypes.HexUint64, outcome engineProto.TransactionConfirmed_Outcome, revertReason pldtypes.HexBytes, failureMessage string, willRetry bool) error
 	SendHeartbeat(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress, coordinatorSnapshot *common.CoordinatorSnapshot) error
 	SendPreDispatchRequest(ctx context.Context, originatorNode string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification, hash *pldtypes.Bytes32) error
 	SendPreDispatchResponse(ctx context.Context, transactionOriginator string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification) error
+	SendPreDispatchRejection(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, coordinatorNode string, reason engineProto.RejectionReason) error
 	SendDispatched(ctx context.Context, transactionOriginator string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification) error
 }
 
@@ -164,7 +168,7 @@ func (tw *transportWriter) SendDelegationRejection(
 	ctx context.Context,
 	delegatingNodeName string,
 	delegationId string,
-	rejectionReason common.RejectionReason,
+	rejectionReason engineProto.RejectionReason,
 	activeCoordinator string,
 	originatorBlockHeight, coordinatorBlockHeight, blockHeightTolerance int64,
 ) error {
@@ -173,7 +177,7 @@ func (tw *transportWriter) SendDelegationRejection(
 		DelegateNodeId:         delegatingNodeName,
 		ContractAddress:        tw.contractAddress.String(),
 		ActiveCoordinator:      activeCoordinator,
-		RejectionReason:        int32(rejectionReason),
+		RejectionReason:        rejectionReason,
 		OriginatorBlockHeight:  originatorBlockHeight,
 		CoordinatorBlockHeight: coordinatorBlockHeight,
 		BlockHeightTolerance:   blockHeightTolerance,
@@ -321,14 +325,14 @@ func (tw *transportWriter) SendEndorsementError(ctx context.Context, transaction
 	return nil
 }
 
-func (tw *transportWriter) SendEndorsementRejection(ctx context.Context, transactionId, idempotencyKey, contractAddress, endorsementName, party, node string, reason common.RejectionReason, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance int64) error {
+func (tw *transportWriter) SendEndorsementRejection(ctx context.Context, transactionId, idempotencyKey, contractAddress, endorsementName, party, node string, reason engineProto.RejectionReason, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance int64) error {
 	rejection := &engineProto.EndorsementRejection{
 		TransactionId:          transactionId,
 		IdempotencyKey:         idempotencyKey,
 		ContractAddress:        contractAddress,
 		AttestationRequestName: endorsementName,
 		Party:                  party,
-		RejectionReason:        int32(reason),
+		RejectionReason:        reason,
 		CoordinatorBlockHeight: coordinatorBlockHeight,
 		EndorserBlockHeight:    endorserBlockHeight,
 		BlockHeightTolerance:   blockHeightTolerance,
@@ -421,7 +425,7 @@ func (tw *transportWriter) SendAssembleError(ctx context.Context, txID uuid.UUID
 	return nil
 }
 
-func (tw *transportWriter) SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, reason common.RejectionReason, coordinatorBlockHeight, assemblerBlockHeight int64) error {
+func (tw *transportWriter) SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, reason engineProto.RejectionReason, coordinatorBlockHeight, assemblerBlockHeight int64) error {
 
 	log.L(ctx).Tracef("transport writer attempting to send assemble rejection to node %s (reason=%d)", recipient, reason)
 
@@ -429,7 +433,7 @@ func (tw *transportWriter) SendAssembleRejection(ctx context.Context, txID uuid.
 		TransactionId:          txID.String(),
 		AssembleRequestId:      assembleRequestId.String(),
 		ContractAddress:        tw.contractAddress.HexString(),
-		RejectionReason:        int32(reason),
+		RejectionReason:        reason,
 		CoordinatorBlockHeight: coordinatorBlockHeight,
 		AssemblerBlockHeight:   assemblerBlockHeight,
 	}
@@ -449,7 +453,7 @@ func (tw *transportWriter) SendAssembleRejection(ctx context.Context, txID uuid.
 	return nil
 }
 
-func (tw *transportWriter) SendPreDispatchRejection(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, coordinatorNode string, reason common.RejectionReason) error {
+func (tw *transportWriter) SendPreDispatchRejection(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, coordinatorNode string, reason engineProto.RejectionReason) error {
 	log.L(ctx).Debugf("transport writer sending pre-dispatch rejection for tx %s to coordinator %s (reason=%d)", txID, coordinatorNode, reason)
 
 	if tw.contractAddress == nil {
@@ -460,7 +464,7 @@ func (tw *transportWriter) SendPreDispatchRejection(ctx context.Context, txID uu
 		TransactionId:   txID.String(),
 		RequestId:       requestID.String(),
 		ContractAddress: tw.contractAddress.HexString(),
-		RejectionReason: int32(reason),
+		RejectionReason: reason,
 	})
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling pre-dispatch rejection: %s", err)

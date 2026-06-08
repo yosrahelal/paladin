@@ -22,6 +22,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 )
@@ -186,7 +187,7 @@ func action_SendAssembleBlockHeightRejection(ctx context.Context, t *originatorT
 		t.pt.ID,
 		e.RequestID,
 		e.Coordinator,
-		common.RejectionReason_BlockHeightTolerance,
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		e.CoordinatorsBlockHeight,
 		receiverBlockHeight,
 	)
@@ -202,7 +203,7 @@ func action_SendAssembleRejectionNotCurrentDelegate(ctx context.Context, txn *or
 		txn.pt.ID,
 		assembleRequestEvent.RequestID,
 		assembleRequestEvent.Coordinator,
-		common.RejectionReason_NotCurrentDelegate,
+		engineProto.RejectionReason_NOT_CURRENT_DELEGATE,
 		0, 0,
 	); err != nil {
 		log.L(ctx).Warnf("failed to send assemble rejection (not-current-delegate) to %s: %s", assembleRequestEvent.Coordinator, err)
