@@ -1839,3 +1839,101 @@ func TestInvokeRPCError(t *testing.T) {
 	_, err := psc.InvokeRPC(td.ctx, td.c.dCtx, td.c.dbTX, pldapi.DomainInvokeRPC{Method: "pente_getCodeHash", Params: pldtypes.RawJSON(`[]`)})
 	require.Regexp(t, "pop", err)
 }
+
+func TestInitSmartContractQueryGroupsError(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+
+	gm := td.d.dm.groupManager.(*componentsmocks.GroupManager)
+	gm.On("QueryGroups", mock.Anything, mock.Anything, mock.Anything).Unset()
+	gm.On("QueryGroups", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("groups query error"))
+
+	loadResult, psc, err := td.d.initSmartContract(td.ctx, td.d.dm.persistence.NOTX(), &PrivateSmartContract{
+		DeployTX:        uuid.New(),
+		RegistryAddress: *td.d.RegistryAddress(),
+		Address:         *pldtypes.RandAddress(),
+		ConfigBytes:     []byte{},
+	})
+	require.Error(t, err)
+	assert.Regexp(t, "groups query error", err)
+	assert.Equal(t, pscInitError, loadResult)
+	assert.Nil(t, psc)
+}
+
+func TestInitSmartContractWithPrivacyGroup(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+
+	pg := &pldapi.PrivacyGroup{
+		ID:     pldtypes.RandBytes(32),
+		Domain: "test1",
+	}
+
+	gm := td.d.dm.groupManager.(*componentsmocks.GroupManager)
+	gm.On("QueryGroups", mock.Anything, mock.Anything, mock.Anything).Unset()
+	gm.On("QueryGroups", mock.Anything, mock.Anything, mock.Anything).Return([]*pldapi.PrivacyGroup{pg}, nil)
+
+	td.tp.Functions.InitContract = func(ctx context.Context, icr *prototk.InitContractRequest) (*prototk.InitContractResponse, error) {
+		assert.NotNil(t, icr.PrivacyGroup)
+		return &prototk.InitContractResponse{
+			Valid: true,
+			ContractConfig: &prototk.ContractConfig{
+				ContractConfigJson:   `{}`,
+				CoordinatorSelection: prototk.ContractConfig_COORDINATOR_ENDORSER,
+				SubmitterSelection:   prototk.ContractConfig_SUBMITTER_SENDER,
+			},
+		}, nil
+	}
+
+	loadResult, psc, err := td.d.initSmartContract(td.ctx, td.d.dm.persistence.NOTX(), &PrivateSmartContract{
+		DeployTX:        uuid.New(),
+		RegistryAddress: *td.d.RegistryAddress(),
+		Address:         *pldtypes.RandAddress(),
+		ConfigBytes:     []byte{},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, pscValid, loadResult)
+	assert.NotNil(t, psc)
+}
+
+func TestMapPotentialStatesEmpty(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+
+	psc := goodPSC(t, td)
+
+	stateUpserts, err := psc.MapPotentialStates(td.c.dCtx, nil, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, stateUpserts)
+}
+
+func TestIsBaseLedgerRevertRetryableOK(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+
+	psc := goodPSC(t, td)
+
+	td.tp.Functions.IsBaseLedgerRevertRetryable = func(ctx context.Context, req *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
+		assert.Equal(t, []byte("revert data"), req.RevertData)
+		return &prototk.IsBaseLedgerRevertRetryableResponse{Retryable: true, DecodedReason: "reason"}, nil
+	}
+
+	retryable, reason, err := psc.IsBaseLedgerRevertRetryable(td.ctx, []byte("revert data"))
+	require.NoError(t, err)
+	assert.True(t, retryable)
+	assert.Equal(t, "reason", reason)
+}
+
+func TestIsBaseLedgerRevertRetryableError(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+
+	psc := goodPSC(t, td)
+
+	td.tp.Functions.IsBaseLedgerRevertRetryable = func(ctx context.Context, req *prototk.IsBaseLedgerRevertRetryableRequest) (*prototk.IsBaseLedgerRevertRetryableResponse, error) {
+		return nil, fmt.Errorf("pop")
+	}
+
+	_, _, err := psc.IsBaseLedgerRevertRetryable(td.ctx, []byte("revert data"))
+	require.Regexp(t, "pop", err)
+}
