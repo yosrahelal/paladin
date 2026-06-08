@@ -44,9 +44,8 @@ export interface ITransaction {
 }
 
 export interface IEnrichedTransaction extends ITransaction {
-  receipts: ITransactionReceipt[];
-  paladinTransactions: IPaladinTransaction[];
   events: IEvent[];
+  receipts: ITransactionReceipt[];
 }
 
 export interface IEvent {
@@ -72,7 +71,7 @@ export interface IPaladinTransaction {
   id: string;
   created: string;
   type: string;
-  domain: string;
+  domain?: string;
   function: string;
   to?: string;
   from: string;
@@ -85,10 +84,11 @@ export interface IPaladinTransaction {
 
 export interface ITransactionReceipt {
   blockNumber: number;
-  domain: string;
+  domain?: string;
   id: string;
   success: boolean;
   transactionHash: string;
+  failureMessage?: string;
 }
 
 export interface IStateReceipt {
@@ -221,4 +221,85 @@ export interface ITransactionInput {
   abiReference?: string;
   abi?: any;
   bytecode?: string;
+}
+
+export interface INotoContractConfig {
+  name: string
+  symbol: string
+  isNotary: boolean
+}
+
+export interface IZetoContractConfig {
+  tokenName: string
+}
+
+export type ContractConfig = INotoContractConfig | IZetoContractConfig;
+
+export interface IDomainContract {
+  domainName: string
+  domainAddress: string
+  address: string
+  config: {
+    contractConfig: ContractConfig
+  }
+  created: string
+}
+
+export interface IPrivacyGroup {
+  id: string
+  domain: string
+  created: string
+  name: string,
+  members: string[]
+  properties: any
+  configuration: {
+    endorsementType: string
+    evmVersion: string
+    externalCallsEnabled: boolean
+  },
+  genesisSalt: string
+  genesisSchema: string
+  genesisTransaction: string
+  contractAddress: string
+}
+
+export interface ISchemaComponent {
+  name: string
+  type: string
+  indexed: boolean
+}
+
+export interface ISchema {
+  id: string
+  domain: string
+  type: string
+  signature: string
+  definition: {
+    name: string
+    type: string
+    internalType: string
+    components: ISchemaComponent[]
+  }
+  labels: string[]
+}
+
+export interface IState {
+  id: string
+  created: string
+  domain: string
+  schema: string
+  contractAddress: string | null
+  data: any
+}
+
+export interface IMessage {
+  sequence: string
+  id: string
+  created: string
+  node: string
+  messageType: string
+  metadata: any
+  ack?: {
+    time: string
+  }
 }

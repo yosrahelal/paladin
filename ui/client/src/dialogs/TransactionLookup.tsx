@@ -27,7 +27,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { fetchPaladinTransaction, fetchTransaction } from '../queries/transactions';
+import { fetchPaladinTransaction, fetchEnrichedTransaction } from '../queries/transactions';
 import { isValidTransactionHash, isValidUUID } from '../utils';
 import { useNavigate } from 'react-router-dom';
 
@@ -56,7 +56,7 @@ export const TransactionLookupDialog: React.FC<Props> = ({
 
   const { refetch: blockchainTransactionByHash } = useQuery({
     queryKey: ["blockchainTransactionByHash", hashOrId],
-    queryFn: () => fetchTransaction(hashOrId),
+    queryFn: () => fetchEnrichedTransaction(hashOrId),
     enabled: isValidTransactionHash(hashOrId),
     refetchOnMount: false,
     retry: false
@@ -112,7 +112,6 @@ export const TransactionLookupDialog: React.FC<Props> = ({
         </DialogTitle>
         <DialogContent>
           <Box sx={{ marginTop: '6px' }}>
-
             <TextField
               label={label}
               autoComplete="OFF"
@@ -122,7 +121,6 @@ export const TransactionLookupDialog: React.FC<Props> = ({
               onChange={event => setHashOrId(event.target.value)}
             />
           </Box>
-
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'center', marginBottom: '15px' }}>
           <Button

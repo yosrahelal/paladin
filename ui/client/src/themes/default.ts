@@ -47,6 +47,17 @@ const commonThemeOptions: ThemeOptions = {
           textTransform: 'none'
         }
       }
+    },
+        MuiListItemButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: '4px',
+          '.mainNavigation &.Mui-selected': {
+            color: 'white',
+            backgroundColor: '#107070',
+          }
+        }
+      }
     }
   }
 };
@@ -78,6 +89,17 @@ export const darkThemeOptions: ThemeOptions = {
           color: 'white'
         }
       }
+    },
+    MuiListItemButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: '4px',
+          '.mainNavigation &.Mui-selected': {
+            color: 'black',
+            backgroundColor: '#20dfdf',
+          }
+        }
+      }
     }
   }
 };
@@ -91,7 +113,7 @@ export const lightThemeOptions: ThemeOptions = {
       dark: '#6D6D6D'
     },
     secondary: {
-      main: '#BBEDED'
+      main: '#555555'
     },
     background: {
       default: '#F0F0F0',

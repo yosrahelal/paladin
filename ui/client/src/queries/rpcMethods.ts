@@ -40,6 +40,7 @@ export const RpcMethods = {
   ptx_resolveVerifier: 'ptx_resolveVerifier',
   ptx_sendTransaction: 'ptx_sendTransaction',
   ptx_getTransactionFull: 'ptx_getTransactionFull',
+  ptx_getTransaction: 'ptx_getTransaction',
   reg_QueryEntriesWithProps: 'reg_queryEntriesWithProps',
   reg_Registries: 'reg_registries',
   transport_nodeName: 'transport_nodeName',
@@ -47,4 +48,13 @@ export const RpcMethods = {
   transport_peers: 'transport_peers',
   keymgr_queryKeys: 'keymgr_queryKeys',
   keymgr_reverseKeyLookup: 'keymgr_reverseKeyLookup',
+  ptx_call: 'ptx_call',
+  domain_getSmartContractByAddress: 'domain_getSmartContractByAddress',
+  pgroup_queryGroups: 'pgroup_queryGroups',
+  pgroup_getGroupById: 'pgroup_getGroupById',
+  pgroup_getGroupByAddress: 'pgroup_getGroupByAddress',
+  pstate_listSchemas: 'pstate_listSchemas',
+  pstate_queryStates: 'pstate_queryStates',
+  transport_queryReliableMessages: 'transport_queryReliableMessages',
+  pstate_transferState: 'pstate_transferState'
 };
