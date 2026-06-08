@@ -122,7 +122,7 @@ func (tw *transportWriter) SendDelegationRequest(
 			Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 			Node:        coordinatorNode,
 		}); err != nil {
-			log.L(ctx).Errorf("error sending delegationRequest message: %s", err)
+			log.L(ctx).Warnf("error sending delegationRequest message: %s", err)
 		}
 	}
 	return nil
@@ -149,12 +149,15 @@ func (tw *transportWriter) SendDelegationResponse(
 		return err
 	}
 
-	return tw.send(ctx, &components.FireAndForgetMessageSend{
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
 		MessageType: MessageType_DelegationResponse,
 		Payload:     delegationRequestAcknowledgmentBytes,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        delegatingNodeName,
-	})
+	}); err != nil {
+		log.L(ctx).Warnf("error sending delegationResponse message: %s", err)
+	}
+	return nil
 }
 
 func (tw *transportWriter) SendDelegationRejection(
@@ -181,12 +184,15 @@ func (tw *transportWriter) SendDelegationRejection(
 		return err
 	}
 
-	return tw.send(ctx, &components.FireAndForgetMessageSend{
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
 		MessageType: MessageType_DelegationRejection,
 		Payload:     rejectionBytes,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        delegatingNodeName,
-	})
+	}); err != nil {
+		log.L(ctx).Warnf("error sending delegationRejection message: %s", err)
+	}
+	return nil
 }
 
 func (tw *transportWriter) SendHandoverRequest(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress) error {
@@ -202,12 +208,15 @@ func (tw *transportWriter) SendHandoverRequest(ctx context.Context, targetNode s
 		return err
 	}
 
-	return tw.send(ctx, &components.FireAndForgetMessageSend{
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
 		MessageType: MessageType_HandoverRequest,
 		Payload:     handoverRequestBytes,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        targetNode,
-	})
+	}); err != nil {
+		log.L(ctx).Warnf("error sending handover request: %s", err)
+	}
+	return nil
 }
 
 // TODO do we have duplication here?  contractAddress and transactionID are in the transactionSpecification
@@ -242,13 +251,15 @@ func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, txID uuid
 		return err
 	}
 
-	err = tw.send(ctx, &components.FireAndForgetMessageSend{
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
 		MessageType: MessageType_EndorsementRequest,
 		Node:        partyNode,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Payload:     endorsementRequestBytes,
-	})
-	return err
+	}); err != nil {
+		log.L(ctx).Warnf("error sending endorsement request: %s", err)
+	}
+	return nil
 }
 
 func (tw *transportWriter) SendEndorsementResponse(ctx context.Context, transactionId, idempotencyKey, contractAddress string, attResult *prototk.AttestationResult, endorsementResult *components.EndorsementResult, revertReason, endorsementName, party, node string) error {
@@ -278,9 +289,10 @@ func (tw *transportWriter) SendEndorsementResponse(ctx context.Context, transact
 		Payload:     endorsementResponseBytes,
 	}
 
-	err = tw.send(ctx, payload)
-
-	return err
+	if err = tw.send(ctx, payload); err != nil {
+		log.L(ctx).Warnf("error sending endorsement response: %s", err)
+	}
+	return nil
 }
 
 func (tw *transportWriter) SendEndorsementError(ctx context.Context, transactionId, idempotencyKey, contractAddress, errorMessage, party, attestationRequestName, node string) error {
@@ -298,12 +310,15 @@ func (tw *transportWriter) SendEndorsementError(ctx context.Context, transaction
 		return err
 	}
 
-	return tw.send(ctx, &components.FireAndForgetMessageSend{
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
 		MessageType: MessageType_EndorsementError,
 		Node:        node,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Payload:     endorsementErrorBytes,
-	})
+	}); err != nil {
+		log.L(ctx).Warnf("error sending endorsement error message: %s", err)
+	}
+	return nil
 }
 
 func (tw *transportWriter) SendEndorsementRejection(ctx context.Context, transactionId, idempotencyKey, contractAddress, endorsementName, party, node string, reason common.RejectionReason, coordinatorBlockHeight, endorserBlockHeight, blockHeightTolerance int64) error {
@@ -324,12 +339,15 @@ func (tw *transportWriter) SendEndorsementRejection(ctx context.Context, transac
 		return err
 	}
 
-	return tw.send(ctx, &components.FireAndForgetMessageSend{
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
 		MessageType: MessageType_EndorsementRejection,
 		Node:        node,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Payload:     rejectionBytes,
-	})
+	}); err != nil {
+		log.L(ctx).Warnf("error sending endorsement rejection: %s", err)
+	}
+	return nil
 }
 
 func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNode string, txID uuid.UUID, idempotencyId uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocks grapher.ExportableStates, coordinatorBlockHeight int64, expiryTime time.Time, blockHeightTolerance int64) error {
@@ -372,9 +390,10 @@ func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNo
 		Payload:     assembleRequestBytes,
 	}
 
-	err = tw.send(ctx, payload)
-
-	return err
+	if err = tw.send(ctx, payload); err != nil {
+		log.L(ctx).Warnf("error sending assemble request: %s", err)
+	}
+	return nil
 }
 
 func (tw *transportWriter) SendAssembleError(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string) error {
@@ -391,17 +410,15 @@ func (tw *transportWriter) SendAssembleError(ctx context.Context, txID uuid.UUID
 		return err
 	}
 
-	err = tw.send(ctx, &components.FireAndForgetMessageSend{
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
 		MessageType: MessageType_AssembleError,
 		Node:        recipient,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Payload:     assembleErrorBytes,
-	})
-	if err != nil {
-		log.L(ctx).Errorf("error sending assemble error response to %s: %s", recipient, err)
+	}); err != nil {
+		log.L(ctx).Warnf("error sending assemble error response to %s: %s", recipient, err)
 	}
-
-	return err
+	return nil
 }
 
 func (tw *transportWriter) SendAssembleRejection(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, recipient string, reason common.RejectionReason, coordinatorBlockHeight, assemblerBlockHeight int64) error {
@@ -421,17 +438,15 @@ func (tw *transportWriter) SendAssembleRejection(ctx context.Context, txID uuid.
 		return err
 	}
 
-	err = tw.send(ctx, &components.FireAndForgetMessageSend{
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
 		MessageType: MessageType_AssembleRejection,
 		Node:        recipient,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Payload:     rejectionBytes,
-	})
-	if err != nil {
-		log.L(ctx).Errorf("error sending assemble rejection to %s: %s", recipient, err)
+	}); err != nil {
+		log.L(ctx).Warnf("error sending assemble rejection to %s: %s", recipient, err)
 	}
-
-	return err
+	return nil
 }
 
 func (tw *transportWriter) SendPreDispatchRejection(ctx context.Context, txID uuid.UUID, requestID uuid.UUID, coordinatorNode string, reason common.RejectionReason) error {
@@ -458,9 +473,9 @@ func (tw *transportWriter) SendPreDispatchRejection(ctx context.Context, txID uu
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        coordinatorNode,
 	}); err != nil {
-		log.L(ctx).Errorf("error sending pre-dispatch rejection to %s: %s", coordinatorNode, err)
+		log.L(ctx).Warnf("error sending pre-dispatch rejection to %s: %s", coordinatorNode, err)
 	}
-	return err
+	return nil
 }
 
 func (tw *transportWriter) SendAssembleResponse(ctx context.Context, txID uuid.UUID, assembleRequestId uuid.UUID, postAssembly *components.TransactionPostAssembly, preAssembly *components.TransactionPreAssembly, recipient string) error {
@@ -489,18 +504,15 @@ func (tw *transportWriter) SendAssembleResponse(ctx context.Context, txID uuid.U
 		return err
 	}
 
-	err = tw.send(ctx, &components.FireAndForgetMessageSend{
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
 		MessageType: MessageType_AssembleResponse,
 		Node:        recipient,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Payload:     assembleResponseBytes,
-	})
-	if err != nil {
-		// Log the error but continue sending to the other recipients
-		log.L(ctx).Errorf("error sending assemble response to %s: %s", recipient, err)
+	}); err != nil {
+		log.L(ctx).Warnf("error sending assemble response to %s: %s", recipient, err)
 	}
-
-	return err
+	return nil
 }
 
 func (tw *transportWriter) SendNonceAssigned(ctx context.Context, txID uuid.UUID, originatorNode string, contractAddress *pldtypes.EthAddress, nonce uint64) error {
@@ -528,10 +540,9 @@ func (tw *transportWriter) SendNonceAssigned(ctx context.Context, txID uuid.UUID
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        originatorNode,
 	}); err != nil {
-		log.L(ctx).Errorf("error sending nonce assigned event: %s", err)
+		log.L(ctx).Warnf("error sending nonce assigned event: %s", err)
 	}
-
-	return err
+	return nil
 }
 
 func (tw *transportWriter) SendTransactionSubmitted(ctx context.Context, txID uuid.UUID, originatorNode string, contractAddress *pldtypes.EthAddress, txHash *pldtypes.Bytes32) error {
@@ -559,10 +570,9 @@ func (tw *transportWriter) SendTransactionSubmitted(ctx context.Context, txID uu
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        originatorNode,
 	}); err != nil {
-		log.L(ctx).Errorf("error sending transaction submitted event: %s", err)
+		log.L(ctx).Warnf("error sending transaction submitted event: %s", err)
 	}
-
-	return err
+	return nil
 }
 
 func (tw *transportWriter) SendTransactionConfirmed(ctx context.Context, txID uuid.UUID, originatorNode string, contractAddress *pldtypes.EthAddress, nonce *pldtypes.HexUint64, outcome engineProto.TransactionConfirmed_Outcome, revertReason pldtypes.HexBytes, failureMessage string, willRetry bool) error {
@@ -597,10 +607,9 @@ func (tw *transportWriter) SendTransactionConfirmed(ctx context.Context, txID uu
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        originatorNode,
 	}); err != nil {
-		log.L(ctx).Errorf("error sending transaction confirmed event: %s", err)
+		log.L(ctx).Warnf("error sending transaction confirmed event: %s", err)
 	}
-
-	return err
+	return nil
 }
 
 func (tw *transportWriter) SendHeartbeat(ctx context.Context, targetNode string, contractAddress *pldtypes.EthAddress, coordinatorSnapshot *common.CoordinatorSnapshot) error {
@@ -609,7 +618,8 @@ func (tw *transportWriter) SendHeartbeat(ctx context.Context, targetNode string,
 
 	coordinatorSnapshotBytes, err := json.Marshal(coordinatorSnapshot)
 	if err != nil {
-		log.L(ctx).Error("error marshalling heartbeat", err)
+		log.L(ctx).Errorf("error marshalling heartbeat: %s", err)
+		return err
 	}
 
 	heartbeatRequest := &engineProto.CoordinatorHeartbeatNotification{
@@ -620,7 +630,8 @@ func (tw *transportWriter) SendHeartbeat(ctx context.Context, targetNode string,
 	log.L(ctx).Debugf("sending heartbeat: From 	%s, Contract Address %s", tw.transportManager.LocalNodeName(), contractAddress.HexString())
 	heartbeatRequestBytes, err := proto.Marshal(heartbeatRequest)
 	if err != nil {
-		log.L(ctx).Errorf("error marshalling heartbeat request  message: %s", err)
+		log.L(ctx).Errorf("error marshalling heartbeat request message: %s", err)
+		return err
 	}
 
 	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
@@ -629,10 +640,13 @@ func (tw *transportWriter) SendHeartbeat(ctx context.Context, targetNode string,
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        targetNode,
 	}); err != nil {
-		log.L(ctx).Errorf("error sending heartbeat request  message: %s", err)
+		// Transport failures sending a heartbeat are transient and best-effort — the send layer
+		// itself is fire-and-forget and message loss is expected. Log a warning but don't
+		// propagate the error so callers can continue with subsequent actions.
+		log.L(ctx).Warnf("error sending heartbeat request message: %s", err)
 	}
 
-	return err
+	return nil
 }
 
 func (tw *transportWriter) SendPreDispatchRequest(ctx context.Context, originatorNode string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification, hash *pldtypes.Bytes32) error {
@@ -658,9 +672,9 @@ func (tw *transportWriter) SendPreDispatchRequest(ctx context.Context, originato
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        originatorNode,
 	}); err != nil {
-		log.L(ctx).Errorf("error sending pre-dispatch request  message: %s", err)
+		log.L(ctx).Warnf("error sending pre-dispatch request message: %s", err)
 	}
-	return err
+	return nil
 }
 
 func (tw *transportWriter) SendPreDispatchResponse(ctx context.Context, transactionOriginatorNode string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification) error {
@@ -684,9 +698,9 @@ func (tw *transportWriter) SendPreDispatchResponse(ctx context.Context, transact
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        transactionOriginatorNode,
 	}); err != nil {
-		log.L(ctx).Errorf("error sending dispatched event: %s", err)
+		log.L(ctx).Warnf("error sending pre-dispatch response message: %s", err)
 	}
-	return err
+	return nil
 }
 
 func (tw *transportWriter) SendDispatched(ctx context.Context, transactionOriginator string, idempotencyKey uuid.UUID, transactionSpecification *prototk.TransactionSpecification) error {
@@ -717,9 +731,9 @@ func (tw *transportWriter) SendDispatched(ctx context.Context, transactionOrigin
 		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
 		Node:        node,
 	}); err != nil {
-		log.L(ctx).Errorf("error sending dispatched event: %s", err)
+		log.L(ctx).Warnf("error sending dispatched event: %s", err)
 	}
-	return err
+	return nil
 }
 
 func (tw *transportWriter) send(ctx context.Context, payload *components.FireAndForgetMessageSend) error {
