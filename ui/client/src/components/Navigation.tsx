@@ -93,6 +93,27 @@ export const Navigation: React.FC<Props> = ({
             <ListItemText primary={t('domains')} />
           </ListItemButton>
         </ListItem>
+        <ListItem>
+          <ListItemButton
+            onClick={event => customNavigate(AppRoutes.PrivactGroups, event, navigate)}
+            selected={pathname.startsWith(AppRoutes.PrivactGroups)}>
+            <ListItemText primary={t('privacyGroups')} />
+          </ListItemButton>
+        </ListItem>
+        <ListItem>
+          <ListItemButton
+            onClick={event => customNavigate(AppRoutes.States, event, navigate)}
+            selected={pathname.startsWith(AppRoutes.States)}>
+            <ListItemText primary={t('states')} />
+          </ListItemButton>
+        </ListItem>
+        <ListItem>
+          <ListItemButton
+            onClick={event => customNavigate(AppRoutes.Messages, event, navigate)}
+            selected={pathname.startsWith(AppRoutes.Messages)}>
+            <ListItemText primary={t('messages')} />
+          </ListItemButton>
+        </ListItem>
       </List>
       <Box sx={{ display: 'flex', height: '100%', padding: '5px' }}>
         <IconButton
