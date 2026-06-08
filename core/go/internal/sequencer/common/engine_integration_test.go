@@ -188,7 +188,7 @@ func TestEngineIntegration_CheckStateCompletion_DomainNotOptedIn(t *testing.T) {
 	ei, m := newTestEngineIntegration(t)
 
 	m.domainSmartContract.On("Domain").Return(m.domain).Once()
-	m.domain.On("SupportsCompletionIndex").Return(false).Once()
+	m.domain.On("FullStateAvailablityRequired").Return(false).Once()
 
 	complete, err := ei.CheckStateCompletion(ctx, 100)
 	require.NoError(t, err)
@@ -206,7 +206,7 @@ func TestEngineIntegration_CheckStateCompletion_DomainOptedIn(t *testing.T) {
 	m.allComponents.On("Persistence").Return(mp.P).Once()
 
 	m.domainSmartContract.On("Domain").Return(m.domain).Once()
-	m.domain.On("SupportsCompletionIndex").Return(true).Once()
+	m.domain.On("FullStateAvailablityRequired").Return(true).Once()
 	m.domainSmartContract.On("Address").Return(contractAddr).Once()
 	m.stateManager.On("CheckStateCompletionForContract", ctx, mock.Anything, contractAddr.String(), int64(100)).
 		Return(true, nil).Once()

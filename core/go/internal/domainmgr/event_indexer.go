@@ -319,7 +319,7 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 			return nil, err
 		}
 		stateConfirms[i] = &pldapi.StateConfirmRecord{DomainName: d.name, State: stateID, Transaction: txUUID}
-		if d.SupportsCompletionIndex() {
+		if d.FullStateAvailablityRequired() {
 			if len(stateID) > 0 {
 				if confirmedStateIDsByTX[txUUID] == nil {
 					confirmedStateIDsByTX[txUUID] = make(map[string]pldtypes.HexBytes)

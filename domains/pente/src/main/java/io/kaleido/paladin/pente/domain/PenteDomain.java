@@ -75,7 +75,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
         var domainConfig = DomainConfig.newBuilder()
                 .addAllAbiStateSchemasJson(config.allPenteSchemas())
                 .setAbiEventsJson(config.getEventsABI().toString())
-                .setSupportsCompletionIndex(true)
+                .setFullStateAvailablityRequired(true)
                 .build();
          return CompletableFuture.completedFuture(ConfigureDomainResponse.newBuilder()
                  .setDomainConfig(domainConfig)

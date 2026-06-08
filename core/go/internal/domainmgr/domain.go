@@ -775,9 +775,9 @@ func (d *domain) CustomHashFunction() bool {
 	return d.config.CustomHashFunction
 }
 
-func (d *domain) SupportsCompletionIndex() bool {
+func (d *domain) FullStateAvailablityRequired() bool {
 	// note config assured to be non-nil by GetDomainByName() not returning a domain until init complete
-	return d.config.SupportsCompletionIndex
+	return d.config.FullStateAvailablityRequired
 }
 
 func (d *domain) ValidateStateHashes(ctx context.Context, states []*components.FullState) ([]pldtypes.HexBytes, error) {

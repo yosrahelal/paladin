@@ -54,7 +54,7 @@ type Domain interface {
 	RegistryAddress() *pldtypes.EthAddress
 	Configuration() *prototk.DomainConfig
 	CustomHashFunction() bool
-	SupportsCompletionIndex() bool
+	FullStateAvailablityRequired() bool
 	FixedSigningIdentity() string
 	// GetBlockHeight returns the highest block number that has been fully confirmed as
 	// processed by this domain's event stream. Equivalent to the domain's event stream

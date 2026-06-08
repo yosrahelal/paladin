@@ -107,7 +107,7 @@ func (e *engineIntegration) Domain() components.Domain {
 }
 
 func (e *engineIntegration) CheckStateCompletion(ctx context.Context, block int64) (bool, error) {
-	if !e.domainSmartContract.Domain().SupportsCompletionIndex() {
+	if !e.domainSmartContract.Domain().FullStateAvailablityRequired() {
 		return true, nil
 	}
 	return e.components.StateManager().CheckStateCompletionForContract(
