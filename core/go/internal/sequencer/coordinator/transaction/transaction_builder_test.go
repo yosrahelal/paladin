@@ -541,8 +541,8 @@ func (b *TransactionBuilderForTesting) Build() (*coordinatorTransaction, *transa
 		coordinatorTransactionStateLookup(b.coordinatorTransactions),
 		func(context.Context, ...string) {}, // notifyEndorserCandidates
 		mocks.EngineIntegration,
-		func(_ context.Context) {},              // refreshBlockHeight: no-op in tests
-		func() int64 { return b.currentBlockHeight }, // getBlockHeight: returns builder-configured cached value
+		func(_ context.Context) {},
+		func() int64 { return b.currentBlockHeight },
 		b.blockHeightTolerance,
 		mocks.SyncPoints,
 		mocks.AllComponents,
