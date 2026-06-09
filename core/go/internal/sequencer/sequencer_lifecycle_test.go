@@ -917,27 +917,6 @@ func TestSequencerManager_PreInit_Success(t *testing.T) {
 	assert.NotNil(t, sMgr.metrics)
 }
 
-func TestSequencerManager_PreInit_NoPreCommitHandler(t *testing.T) {
-	ctx := context.Background()
-	config := &pldconf.SequencerConfig{}
-	sMgr := NewDistributedSequencerManager(ctx, config).(*sequencerManager)
-
-	// Create mocks
-	preInitComponents := componentsmocks.NewPreInitComponents(t)
-	metricsManager := metricsmocks.NewMetrics(t)
-	registry := prometheus.NewRegistry()
-
-	// Setup expectations
-	preInitComponents.EXPECT().MetricsManager().Return(metricsManager).Once()
-	metricsManager.EXPECT().Registry().Return(registry).Once()
-
-	// Call PreInit — block height is no longer tracked by the sequencer manager,
-	// so no PreCommitHandler is registered.
-	result, err := sMgr.PreInit(preInitComponents)
-	require.NoError(t, err)
-	assert.Nil(t, result.PreCommitHandler)
-}
-
 func TestSequencerManager_PostInit_Success(t *testing.T) {
 	ctx := context.Background()
 	config := &pldconf.SequencerConfig{

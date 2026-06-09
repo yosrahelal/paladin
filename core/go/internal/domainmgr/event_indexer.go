@@ -252,7 +252,6 @@ func (d *domain) handleEventBatch(ctx context.Context, dbTX persistence.DBTX, ba
 		if err != nil {
 			return err
 		}
-
 	}
 
 	dbTX.AddPostCommit(func(txCtx context.Context) {
