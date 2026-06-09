@@ -51,6 +51,7 @@ const (
 	Event_HandoverRequest            // pushed by transport_client when a CoordinatorHandoverRequest message is received from a higher-priority node
 	Event_RestartDispatchLoop        // queued internally after an in-place key rotation so the loop restarts after TransactionStateTransitionEvents are processed
 	Event_EndorsementRequestReceived // pushed by transport_client when an EndorsementRequest message arrives for this coordinator
+	Event_EpochBoundaryReached       // queued internally by getAndRefreshBlockHeight when the effective block height advances to a new epoch
 )
 
 // Type aliases for the generic statemachine types, specialized for coordinator
@@ -100,6 +101,9 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Actions: []ActionRule{{
 						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
@@ -117,28 +121,19 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_TransactionsDelegated: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
 				}, {
 					// Any node in Idle accepts a delegation and becomes the active coordinator.
 					// A higher-priority node that later announces itself will trigger preemption from Active.
+					Validator:   statemachine.ValidatorNot(validator_IsDelegationBlockHeightToleranceExceeded),
 					Actions:     []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 					Transitions: []Transition{{To: State_Active}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 		},
@@ -162,6 +157,9 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Actions: []ActionRule{{
 						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
@@ -191,11 +189,15 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_TransactionsDelegated: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
 				}, {
+					Validator: statemachine.ValidatorNot(validator_IsDelegationBlockHeightToleranceExceeded),
 					Actions: []ActionRule{
 						{
 							// This node is higher-priority than the current active coordinator — initiate a handover.
@@ -212,19 +214,6 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Elect,
 						If: guard_IsHigherPriorityThanCurrentActive,
 					}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 		},
@@ -337,6 +326,9 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Actions: []ActionRule{{
 						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
@@ -387,26 +379,17 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_TransactionsDelegated: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
 				}, {
 					// Accept delegations while in Elect so originators are not bounced while we wait.
-					Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
+					Validator: statemachine.ValidatorNot(validator_IsDelegationBlockHeightToleranceExceeded),
+					Actions:   []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 				}},
 			},
 			common.Event_TransactionStateTransition: {
@@ -520,6 +503,9 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Actions: []ActionRule{{
 						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
@@ -566,25 +552,16 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_TransactionsDelegated: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
 				}, {
-					Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
+					Validator: statemachine.ValidatorNot(validator_IsDelegationBlockHeightToleranceExceeded),
+					Actions:   []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 				}},
 			},
 			common.Event_TransactionStateTransition: {
@@ -689,6 +666,9 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Actions: []ActionRule{{
 						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
@@ -743,12 +723,16 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_TransactionsDelegated: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
 				}, {
-					Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+					Validator: statemachine.ValidatorNot(validator_IsDelegationBlockHeightToleranceExceeded),
+					Actions:   []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 				}},
 			},
 			common.Event_TransactionStateTransition: {
@@ -783,21 +767,16 @@ var stateDefinitionsMap = StateDefinitions{
 					Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
 				}},
 			},
-			common.Event_NewBlock: {
+			Event_EpochBoundaryReached: {
+				// getAndRefreshBlockHeight queues this event when the effective block height advances to a new
+				// epoch. We need to rotate the coordinator signing key.
+				// If the key has been used AND we have unconfirmed dispatched transactions we need to
+				// take the more expensive route of flushing the dispatched transactions before we can
+				// start signing with the new key. The dispatch loop must be stopped in order to reliably
+				// make this decision. Otherwise we can rotate the key in place and restart the dispatch loop.
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					// We're at an epoch boundary we need to rotate the coordinator signing key
-					// If the key has been used AND we have unconfirmed dispatched transactions we need to
-					// take the more expensive route of flushing the dispatched transactions before we can
-					// start signing with the new key. The dispatch loop must be stopped in order to reliably
-					// make this decision. Otherwise we can rotate the key in place and restart the dispatch loop.
-					Validator: validator_IsOnEpochBoundary,
 					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
 						{Action: action_StopDispatchLoop},
 						{If: statemachine.GuardNot(guard_MustFlushToRotateSigningIdentity), Action: action_NewSigningIdentity},
 						// Queueing this event gives the coordinator a chance to process any state transition events before
@@ -878,6 +857,9 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Actions: []ActionRule{{
 						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
@@ -925,13 +907,17 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_TransactionsDelegated: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
 				}, {
 					// Still the active coordinator — accept delegations normally- we can process transactions, just not dispatch them
-					Actions: []ActionRule{{Action: action_ProcessDelegatedTransactions}},
+					Validator: statemachine.ValidatorNot(validator_IsDelegationBlockHeightToleranceExceeded),
+					Actions:   []ActionRule{{Action: action_ProcessDelegatedTransactions}},
 				}},
 			},
 			common.Event_TransactionStateTransition: {
@@ -964,19 +950,6 @@ var stateDefinitionsMap = StateDefinitions{
 						To: State_Active,
 						If: statemachine.GuardNot(guard_HasUnconfirmedDispatchedTransactions),
 					}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 		},
@@ -1018,6 +991,9 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Actions: []ActionRule{{
 						Action: action_AddEndorsementRequestSenderToEndorserCandidates,
 						If:     guard_IsCoordinatorEndorserSelectionMode,
@@ -1034,11 +1010,15 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_TransactionsDelegated: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
 				}, {
+					Validator: statemachine.ValidatorNot(validator_IsDelegationBlockHeightToleranceExceeded),
 					Actions: []ActionRule{
 						{
 							// This node is now higher-priority than the current active coordinator we stepped down for
@@ -1081,19 +1061,6 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}},
 			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
-				}},
-			},
 		},
 	},
 	State_Closing: {
@@ -1118,6 +1085,9 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_EndorsementRequestReceived: {
 				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Actions: []ActionRule{{Action: action_AddEndorsementRequestSenderToEndorserCandidates, If: guard_IsCoordinatorEndorserSelectionMode}},
 				}, {
 					Validator: validator_IsEndorsementBlockHeightToleranceExceeded,
@@ -1160,11 +1130,15 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_TransactionsDelegated: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh stored block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					Validator: validator_IsDelegationBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_RejectDelegationRequestBlockHeight}},
 				}, {
+					Validator: statemachine.ValidatorNot(validator_IsDelegationBlockHeightToleranceExceeded),
 					Actions: []ActionRule{{
 						// Current active coordinator is still live and higher priority; redirect the originator.
 						If: statemachine.GuardAnd(
@@ -1198,19 +1172,6 @@ var stateDefinitionsMap = StateDefinitions{
 				Handlers: []EventHandler{{
 					Validator: validator_TransactionStateTransitionTo(transaction.State_Final),
 					Actions:   []ActionRule{{Action: action_CleanUpTransaction}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Validator: statemachine.ValidatorNot(validator_IsOnEpochBoundary),
-					Actions:   []ActionRule{{Action: action_UpdateBlockHeight}},
-				}, {
-					Validator: validator_IsOnEpochBoundary,
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 		},

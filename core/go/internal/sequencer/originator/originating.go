@@ -19,6 +19,8 @@ import (
 	"context"
 	"fmt"
 
+	"slices"
+
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
@@ -27,7 +29,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/google/uuid"
-	"slices"
 )
 
 func validator_IsDelegationBlockHeightRejection(_ context.Context, _ *originator, event common.Event) (bool, error) {
@@ -50,8 +51,16 @@ func action_TransactionCreated(ctx context.Context, o *originator, event common.
 	return o.addToTransactions(ctx, e.Transaction, o.newOriginatorTransaction)
 }
 
-func (o *originator) getCurrentBlockHeight() int64 {
-	return int64(o.currentBlockHeight)
+// refreshBlockHeight queries the live block height, updates currentBlockHeight, and updates
+// effectiveBlockHeight (recalculating coordinator priorities) when the epoch changes.
+func (o *originator) refreshBlockHeight(ctx context.Context) {
+	liveHeight := o.engineIntegration.GetBlockHeight(ctx)
+	o.currentBlockHeight = liveHeight
+	newEffective := common.ComputeEffectiveBlockHeight(uint64(liveHeight), o.blockRange)
+	if newEffective != o.effectiveBlockHeight {
+		o.effectiveBlockHeight = newEffective
+		o.calculateCoordinatorPriorities(ctx)
+	}
 }
 
 func (o *originator) newOriginatorTransaction(ctx context.Context, pt *components.PrivateTransaction) (transaction.OriginatorTransaction, error) {
@@ -62,7 +71,8 @@ func (o *originator) newOriginatorTransaction(ctx context.Context, pt *component
 		o.queueEventInternal,
 		o.engineIntegration,
 		o.metrics,
-		o.getCurrentBlockHeight,
+		func(ctx context.Context) { o.refreshBlockHeight(ctx) },
+		func() int64 { return o.currentBlockHeight },
 	)
 }
 
@@ -108,11 +118,18 @@ func sendDelegationRequest(ctx context.Context, o *originator) error {
 
 	log.L(ctx).Debugf("sending delegation request for %d transactions", len(o.transactionsOrdered))
 
-	return o.transportWriter.SendDelegationRequest(ctx, o.currentActiveCoordinator, transactionsToDelegate, o.currentBlockHeight)
+	return o.transportWriter.SendDelegationRequest(ctx, o.currentActiveCoordinator, transactionsToDelegate, uint64(o.currentBlockHeight))
 }
 
 func action_SendDelegationRequest(ctx context.Context, o *originator, _ common.Event) error {
 	return sendDelegationRequest(ctx, o)
+}
+
+// action_RefreshBlockHeight queries the live block height and updates effectiveBlockHeight and the
+// priority list if the epoch has changed.
+func action_RefreshBlockHeight(ctx context.Context, o *originator, _ common.Event) error {
+	o.refreshBlockHeight(ctx)
+	return nil
 }
 
 // resetFailoverIndex sets failoverIndex so the next failover walk step targets the
@@ -264,26 +281,21 @@ func (o *originator) removeTransaction(ctx context.Context, txnID uuid.UUID) {
 	}
 }
 
-func action_UpdateBlockHeight(_ context.Context, o *originator, event common.Event) error {
-	o.currentBlockHeight, o.onEpochBoundary = common.DecodeNewBlockHeight(o.currentBlockHeight, o.blockRange, event)
+func action_CalculateCoordinatorPriorities(ctx context.Context, o *originator, _ common.Event) error {
+	o.calculateCoordinatorPriorities(ctx)
 	return nil
 }
 
-func guard_IsOnEpochBoundary(_ context.Context, o *originator) bool {
-	return o.onEpochBoundary
-}
-
-// action_CalculateCoordinatorPriorities recomputes coordinatorPriorityList from the current
-// endorserCandidates and block height. No-op when endorserCandidates is empty (STATIC/SENDER modes).
-func action_CalculateCoordinatorPriorities(ctx context.Context, o *originator, _ common.Event) error {
+// calculateCoordinatorPriorities recomputes coordinatorPriorityList from the current
+// endorserCandidates and effectiveBlockHeight. No-op when endorserCandidates is empty (STATIC/SENDER modes).
+func (o *originator) calculateCoordinatorPriorities(ctx context.Context) {
 	if len(o.endorserCandidates) == 0 {
-		return nil
+		return
 	}
 	o.coordinatorPriorityList = common.ComputeCoordinatorPriorityList(
 		ctx,
 		o.endorserCandidates,
-		o.currentBlockHeight,
-		o.blockRange,
+		o.effectiveBlockHeight,
 	)
 	if o.currentActiveCoordinator == "" {
 		// this should really only run on start up - after that we never unset the current active coordinator
@@ -292,7 +304,6 @@ func action_CalculateCoordinatorPriorities(ctx context.Context, o *originator, _
 	// whenever we have a new coordinator priority list we want to make sure that a failover walk through the
 	// list, if required, starts from the beginning
 	o.resetFailoverIndex()
-	return nil
 }
 
 // action_UpdateEndorserCandidates replaces the endorser candidates with the full sorted+deduped
@@ -333,8 +344,7 @@ func action_UpdateEndorserCandidatesFromHeartbeat(ctx context.Context, o *origin
 	o.coordinatorPriorityList = common.ComputeCoordinatorPriorityList(
 		ctx,
 		o.endorserCandidates,
-		o.currentBlockHeight,
-		o.blockRange,
+		o.effectiveBlockHeight,
 	)
 	o.resetFailoverIndex()
 	return nil

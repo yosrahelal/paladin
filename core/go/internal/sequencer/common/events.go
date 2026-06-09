@@ -27,7 +27,6 @@ type EventType int
 const (
 	Event_HeartbeatInterval         EventType = iota // emitted on a regular basis, interval defined by the sequencer config
 	Event_TransactionStateTransition                 // transaction state machine transition; originator/coordinator handle cleanup and side effects
-	Event_NewBlock                                   // a new block has been confirmed on the base ledger
 	Event_HeartbeatReceived                          // a heartbeat notification was received from the active coordinator
 	Event_EndorserNodesDiscovered                    // pushed by the coordinator to its co-located originator when new endorser nodes are discovered
 )
@@ -73,19 +72,6 @@ func (*TransactionStateTransitionEvent[S]) Type() EventType {
 
 func (*TransactionStateTransitionEvent[S]) TypeString() string {
 	return "Event_TransactionStateTransition"
-}
-
-type NewBlockEvent struct {
-	BaseEvent
-	BlockHeight uint64
-}
-
-func (*NewBlockEvent) Type() EventType {
-	return Event_NewBlock
-}
-
-func (*NewBlockEvent) TypeString() string {
-	return "Event_NewBlock"
 }
 
 type HeartbeatReceivedEvent struct {

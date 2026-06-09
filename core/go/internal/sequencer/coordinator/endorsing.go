@@ -25,12 +25,13 @@ import (
 )
 
 // validator_IsEndorsementBlockHeightToleranceExceeded returns true when the absolute difference
-// between this coordinator's current block height and the requesting coordinator's block height
-// exceeds the configured block height tolerance.
+// between this coordinator's stored block height (refreshed by action_RefreshBlockHeight)
+// and the requesting coordinator's block height exceeds the configured block height tolerance.
 func validator_IsEndorsementBlockHeightToleranceExceeded(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*EndorsementRequestReceivedEvent)
-	coordinatorBlockHeight := uint64(e.CoordinatorBlockHeight)
-	diff := max(c.currentBlockHeight, coordinatorBlockHeight) - min(c.currentBlockHeight, coordinatorBlockHeight)
+	localHeight := uint64(c.currentBlockHeight)
+	remoteHeight := uint64(e.CoordinatorBlockHeight)
+	diff := max(localHeight, remoteHeight) - min(localHeight, remoteHeight)
 	return diff > c.blockHeightTolerance, nil
 }
 
@@ -50,7 +51,7 @@ func action_RejectEndorsementBlockHeight(ctx context.Context, c *coordinator, ev
 		e.FromNode,
 		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		e.CoordinatorBlockHeight,
-		int64(c.currentBlockHeight),
+		c.currentBlockHeight,
 		int64(c.blockHeightTolerance),
 	)
 }

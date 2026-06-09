@@ -23,6 +23,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -330,6 +331,56 @@ func Test_EndorsementCompletion_ResetsRequests_OnTransitionToBlocked(t *testing.
 // ── Endorsement Threshold Tests ───────────────────────────────────────────────
 
 // threshold=0 (unset): all parties must endorse — preserves existing behaviour.
+func Test_unfulfilledEndorsementRequirements_NilPostAssembly_ReturnsEmpty(t *testing.T) {
+	ctx := t.Context()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
+	txn.pt.PostAssembly = nil
+	unfulfilled := txn.unfulfilledEndorsementRequirements(ctx)
+	assert.Empty(t, unfulfilled)
+}
+
+func Test_extractEndorserNodes_NilPostAssembly_ReturnsEmpty(t *testing.T) {
+	ctx := t.Context()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
+	txn.pt.PostAssembly = nil
+	nodes := txn.extractEndorserNodes(ctx)
+	assert.Empty(t, nodes)
+}
+
+
+func Test_action_RecordEndorseFailure_EndorserIsActiveCoordinator_LogsWarning(t *testing.T) {
+	ctx := t.Context()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
+		AddPendingEndorsementRequest().
+		Build()
+
+	event := &EndorseRequestRejectedEvent{
+		AttestationRequestName: "endorse-0",
+		Party:                  "party1@node2",
+		RejectionReason:        engineProto.RejectionReason_ENDORSER_IS_ACTIVE_COORDINATOR,
+	}
+	err := action_RecordEndorseFailure(ctx, txn, event)
+	require.NoError(t, err)
+}
+
+func Test_action_RecordEndorseFailure_BlockHeightTolerance_LogsWarning(t *testing.T) {
+	ctx := t.Context()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
+		AddPendingEndorsementRequest().
+		Build()
+
+	event := &EndorseRequestRejectedEvent{
+		AttestationRequestName: "endorse-0",
+		Party:                  "party1@node2",
+		RejectionReason:        engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		CoordinatorBlockHeight: 100,
+		EndorserBlockHeight:    200,
+		BlockHeightTolerance:   10,
+	}
+	err := action_RecordEndorseFailure(ctx, txn, event)
+	require.NoError(t, err)
+}
+
 func Test_unfulfilledEndorsementRequirements_ThresholdUnset_AllPartiesRequired(t *testing.T) {
 	ctx := t.Context()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).Build()

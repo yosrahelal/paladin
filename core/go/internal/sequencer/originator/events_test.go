@@ -18,19 +18,8 @@ package originator
 import (
 	"testing"
 
-	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/stretchr/testify/assert"
 )
-
-func Test_NewBlockEvent_Type(t *testing.T) {
-	event := &common.NewBlockEvent{}
-	assert.Equal(t, common.Event_NewBlock, event.Type())
-}
-
-func Test_NewBlockEvent_TypeString(t *testing.T) {
-	event := &common.NewBlockEvent{}
-	assert.Equal(t, "Event_NewBlock", event.TypeString())
-}
 
 func Test_OriginatorEvents_InterfaceCompliance(t *testing.T) {
 	events := []Event{
