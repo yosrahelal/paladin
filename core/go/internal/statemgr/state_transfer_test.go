@@ -159,6 +159,17 @@ func TestTransferStateSendReliableFail(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
+func TestTransferStateNodeLookupFail(t *testing.T) {
+	ctx, ss, _, m, done := newDBMockStateManager(t)
+	defer done()
+
+	m.transportManager.On("LocalNodeName").Return("").Maybe()
+
+	// FullyQualified succeeds with implicit local node, but Node(false) requires an explicit node.
+	_, err := ss.TransferState(ctx, ss.p.NOTX(), "domain1", pldtypes.RandBytes(32), pldtypes.PrivateIdentityLocator("alice"))
+	assert.Regexp(t, "PD020017", err)
+}
+
 func TestTransferStateInTransaction(t *testing.T) {
 	ctx, ss, m, done := newDBTestStateManager(t)
 	defer done()
