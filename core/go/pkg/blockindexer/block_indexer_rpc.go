@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -108,11 +108,12 @@ func (bi *blockIndexer) rpcQueryIndexedBlocks() rpcserver.RPCHandler {
 }
 
 func (bi *blockIndexer) rpcQueryIndexedTransactions() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context,
+	return rpcserver.RPCMethod2(func(ctx context.Context,
 		jq query.QueryJSON,
+		hasPaladinReceipt bool,
 	) ([]*pldapi.IndexedTransaction, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.QueryIndexedTransactions(ctx, &jq)
+		return bi.QueryIndexedTransactions(ctx, &jq, hasPaladinReceipt)
 	})
 }
 

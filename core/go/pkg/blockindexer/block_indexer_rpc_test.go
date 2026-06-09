@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -70,7 +70,7 @@ func TestBlockIndexRPCCalls(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Hash.String(), idxBlocks[0].Hash.String())
 
-	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactions", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query())
+	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactions", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query(), false)
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxTxns[0].Hash.String())
 
