@@ -290,12 +290,12 @@ func Test_action_AssembleRequestReceived_SetsDelegateAndLatestRequest(t *testing
 	coordinator := "coord@node1"
 	preAssembly := []byte("pre")
 	event := &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.pt.ID},
-		RequestID:               requestID,
-		Coordinator:             coordinator,
-		CoordinatorsBlockHeight: 100,
-		StateLocksJSON:          []byte("{}"),
-		PreAssembly:             preAssembly,
+		BaseEvent:              BaseEvent{TransactionID: txn.pt.ID},
+		RequestID:              requestID,
+		Coordinator:            coordinator,
+		CoordinatorBlockHeight: 100,
+		StateLocksJSON:         []byte("{}"),
+		PreAssembly:            preAssembly,
 	}
 	err := action_AssembleRequestReceived(ctx, txn, event)
 	require.NoError(t, err)
@@ -486,9 +486,9 @@ func Test_validator_IsPrivateStateIncompleteForAssembly_Complete_ReturnsFalse(t 
 	txn, _ := NewTransactionBuilderForTesting(t, State_Delegated).BuildWithMocks() // default: checkStateComplete=true
 
 	event := &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.pt.ID},
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10,
+		BaseEvent:              BaseEvent{TransactionID: txn.pt.ID},
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
 	}
 	result, err := validator_IsPrivateStateIncompleteForAssembly(ctx, txn, event)
 	require.NoError(t, err)
@@ -502,9 +502,9 @@ func Test_validator_IsPrivateStateIncompleteForAssembly_Incomplete_ReturnsTrue(t
 		BuildWithMocks()
 
 	event := &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.pt.ID},
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10,
+		BaseEvent:              BaseEvent{TransactionID: txn.pt.ID},
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
 	}
 	result, err := validator_IsPrivateStateIncompleteForAssembly(ctx, txn, event)
 	require.NoError(t, err)
@@ -519,9 +519,9 @@ func Test_validator_IsPrivateStateIncompleteForAssembly_Error_Propagates(t *test
 		BuildWithMocks()
 
 	event := &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.pt.ID},
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10,
+		BaseEvent:              BaseEvent{TransactionID: txn.pt.ID},
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
 	}
 	_, err := validator_IsPrivateStateIncompleteForAssembly(ctx, txn, event)
 	assert.ErrorIs(t, err, dbErr)
@@ -534,11 +534,11 @@ func Test_action_RejectAssemblyPrivateStateIncomplete_SendsRejection(t *testing.
 	coordinator := txn.currentDelegate
 	requestID := uuid.New()
 	event := &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.pt.ID},
-		RequestID:               requestID,
-		Coordinator:             coordinator,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10,
+		BaseEvent:              BaseEvent{TransactionID: txn.pt.ID},
+		RequestID:              requestID,
+		Coordinator:            coordinator,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
 	}
 
 	err := action_RejectAssemblyPrivateStateIncomplete(ctx, txn, event)

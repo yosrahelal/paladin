@@ -24,7 +24,6 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
-	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence/mockpersistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -47,7 +46,6 @@ type eiMocks struct {
 	identityResolver    *componentsmocks.IdentityResolver
 	keyManager          *componentsmocks.KeyManager
 	domainManager       *componentsmocks.DomainManager
-	hooks               *sequencercommonmocks.Hooks
 }
 
 func newTestEngineIntegration(t *testing.T) (EngineIntegration, *eiMocks) {
@@ -62,7 +60,6 @@ func newTestEngineIntegration(t *testing.T) (EngineIntegration, *eiMocks) {
 		identityResolver:    componentsmocks.NewIdentityResolver(t),
 		keyManager:          componentsmocks.NewKeyManager(t),
 		domainManager:       componentsmocks.NewDomainManager(t),
-		hooks:               sequencercommonmocks.NewHooks(t),
 	}
 
 	m.allComponents.On("StateManager").Return(m.stateManager).Maybe()
@@ -70,10 +67,8 @@ func newTestEngineIntegration(t *testing.T) (EngineIntegration, *eiMocks) {
 	m.allComponents.On("IdentityResolver").Return(m.identityResolver).Maybe()
 	m.allComponents.On("KeyManager").Return(m.keyManager).Maybe()
 	m.allComponents.On("DomainManager").Return(m.domainManager).Maybe()
-	// GetBlockHeight is called unconditionally in AssembleAndSign's debug log.
-	m.hooks.On("GetBlockHeight").Return(int64(100)).Maybe()
 
-	ei := NewEngineIntegration(context.Background(), m.allComponents, "node1", m.domainSmartContract, m.domainContext, m.hooks)
+	ei := NewEngineIntegration(context.Background(), m.allComponents, "node1", m.domainSmartContract, m.domainContext)
 	return ei, m
 }
 
@@ -164,7 +159,10 @@ func TestEngineIntegration_WriteStatesForTransaction_WithPotentialStates_Error(t
 
 func TestEngineIntegration_GetBlockHeight(t *testing.T) {
 	ctx := context.Background()
-	ei, _ := newTestEngineIntegration(t)
+	ei, m := newTestEngineIntegration(t)
+
+	m.domainSmartContract.On("Domain").Return(m.domain).Once()
+	m.domain.On("GetBlockHeight").Return(int64(100)).Once()
 
 	bh := ei.GetBlockHeight(ctx)
 	assert.Equal(t, int64(100), bh)

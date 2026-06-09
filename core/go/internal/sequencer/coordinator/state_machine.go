@@ -117,7 +117,7 @@ var stateDefinitionsMap = StateDefinitions{
 				}, {
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
-						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement), // TODO AM: invert this?
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
@@ -179,7 +179,7 @@ var stateDefinitionsMap = StateDefinitions{
 				}, {
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
-						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement), // TODO AM: invert this?
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
@@ -1041,7 +1041,7 @@ var stateDefinitionsMap = StateDefinitions{
 				}, {
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
-						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement), // TODO AM: invert this?
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},
@@ -1138,7 +1138,7 @@ var stateDefinitionsMap = StateDefinitions{
 				}, {
 					Validator: statemachine.ValidatorAnd(
 						statemachine.ValidatorNot(validator_IsEndorsementBlockHeightToleranceExceeded),
-						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement), // TODO AM: invert this?
+						statemachine.ValidatorNot(validator_IsPrivateStateIncompleteForEndorsement),
 					),
 					Actions: []ActionRule{
 						{Action: action_UpdateActiveCoordinatorFromEndorsementRequest},

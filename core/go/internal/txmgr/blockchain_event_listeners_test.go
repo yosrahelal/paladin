@@ -568,13 +568,13 @@ func TestHandleEventBatch(t *testing.T) {
 }
 
 func TestBlockchainEventListenerSetActiveAlreadyActive(t *testing.T) {
+	mockES := blockindexermocks.NewEventStream(t)
+	mockES.On("Definition").Return(&blockindexer.EventStreamDefinition{Name: "test-listener"})
 	el := &blockchainEventListener{
 		tm: &txManager{
 			bgCtx: context.Background(),
 		},
-		definition: &blockindexer.EventStream{
-			Name: "test-listener",
-		},
+		eventStream:  mockES,
 		newReceivers: make(chan bool, 1),
 	}
 

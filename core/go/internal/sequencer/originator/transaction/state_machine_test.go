@@ -258,10 +258,10 @@ func TestOriginatorTransaction_Delegated_StaysInState_OnAssembleRequestReceived_
 	txn, mocks := builder.BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             builder.GetCoordinator(),
-		CoordinatorsBlockHeight: 100, // diff=50 > tolerance=0
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            builder.GetCoordinator(),
+		CoordinatorBlockHeight: 100, // diff=50 > tolerance=0
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -277,10 +277,10 @@ func TestOriginatorTransaction_Delegated_StaysInState_OnAssembleRequestReceived_
 	txn, mocks := builder.BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             builder.GetCoordinator(),
-		CoordinatorsBlockHeight: 50, // originator(100) > coordinator(50), diff=50 > tolerance=0
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            builder.GetCoordinator(),
+		CoordinatorBlockHeight: 50, // originator(100) > coordinator(50), diff=50 > tolerance=0
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -313,11 +313,11 @@ func TestOriginatorTransaction_Delegated_StaysInState_OnAssembleRequestReceived_
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             txn.currentDelegate,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10, // lowWatermark = 90
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10, // lowWatermark = 90
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -341,11 +341,11 @@ func Test_Delegated_PrivateStateComplete_ProceedsToAssembly(t *testing.T) {
 	}, nil).Maybe()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             txn.currentDelegate,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10, // lowWatermark = 90
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10, // lowWatermark = 90
 	})
 	require.NoError(t, err)
 	assert.False(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "must not send rejection when state is complete")
@@ -448,10 +448,10 @@ func TestOriginatorTransaction_Assembling_StaysInState_OnAssembleRequestReceived
 	txn, mocks := builder.BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             builder.GetCoordinator(),
-		CoordinatorsBlockHeight: 100, // diff=50 > tolerance=0
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            builder.GetCoordinator(),
+		CoordinatorBlockHeight: 100, // diff=50 > tolerance=0
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -484,11 +484,11 @@ func TestOriginatorTransaction_Assembling_StaysInState_OnAssembleRequestReceived
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             txn.currentDelegate,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10, // lowWatermark = 90
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10, // lowWatermark = 90
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -652,10 +652,10 @@ func TestOriginatorTransaction_Reverted_StaysInState_OnAssembleRequestReceived_B
 	txn, mocks := builder.BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             builder.GetCoordinator(),
-		CoordinatorsBlockHeight: 100, // diff=50 > tolerance=0
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            builder.GetCoordinator(),
+		CoordinatorBlockHeight: 100, // diff=50 > tolerance=0
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -688,11 +688,11 @@ func TestOriginatorTransaction_Reverted_StaysInState_OnAssembleRequestReceived_P
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             txn.currentDelegate,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10, // lowWatermark = 90
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10, // lowWatermark = 90
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -759,10 +759,10 @@ func TestOriginatorTransaction_Parked_StaysInState_OnAssembleRequestReceived_Blo
 	txn, mocks := builder.BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             builder.GetCoordinator(),
-		CoordinatorsBlockHeight: 100, // diff=50 > tolerance=0
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            builder.GetCoordinator(),
+		CoordinatorBlockHeight: 100, // diff=50 > tolerance=0
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -795,11 +795,11 @@ func TestOriginatorTransaction_Parked_StaysInState_OnAssembleRequestReceived_Pri
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             txn.currentDelegate,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10, // lowWatermark = 90
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10, // lowWatermark = 90
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -841,10 +841,10 @@ func TestOriginatorTransaction_Endorsement_Gathering_StaysInState_OnAssembleRequ
 	txn, mocks := builder.BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             builder.GetCoordinator(),
-		CoordinatorsBlockHeight: 100, // diff=50 > tolerance=0
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            builder.GetCoordinator(),
+		CoordinatorBlockHeight: 100, // diff=50 > tolerance=0
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -877,11 +877,11 @@ func TestOriginatorTransaction_Endorsement_Gathering_StaysInState_OnAssembleRequ
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             txn.currentDelegate,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10, // lowWatermark = 90
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10, // lowWatermark = 90
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -1014,10 +1014,10 @@ func TestOriginatorTransaction_Prepared_StaysInState_OnAssembleRequestReceived_B
 	txn, mocks := builder.BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             builder.GetCoordinator(),
-		CoordinatorsBlockHeight: 100, // diff=50 > tolerance=0
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            builder.GetCoordinator(),
+		CoordinatorBlockHeight: 100, // diff=50 > tolerance=0
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -1050,11 +1050,11 @@ func TestOriginatorTransaction_Prepared_StaysInState_OnAssembleRequestReceived_P
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             txn.currentDelegate,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10, // lowWatermark = 90
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10, // lowWatermark = 90
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -1188,10 +1188,10 @@ func TestOriginatorTransaction_Dispatched_StaysInState_OnAssembleRequestReceived
 	txn, mocks := builder.BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             builder.GetCoordinator(),
-		CoordinatorsBlockHeight: 100, // diff=50 > tolerance=0
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            builder.GetCoordinator(),
+		CoordinatorBlockHeight: 100, // diff=50 > tolerance=0
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -1224,11 +1224,11 @@ func TestOriginatorTransaction_Dispatched_StaysInState_OnAssembleRequestReceived
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             txn.currentDelegate,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10, // lowWatermark = 90
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10, // lowWatermark = 90
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -1346,10 +1346,10 @@ func TestOriginatorTransaction_Sequenced_StaysInState_OnAssembleRequestReceived_
 	txn, mocks := builder.BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             builder.GetCoordinator(),
-		CoordinatorsBlockHeight: 100, // diff=50 > tolerance=0
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            builder.GetCoordinator(),
+		CoordinatorBlockHeight: 100, // diff=50 > tolerance=0
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -1382,11 +1382,11 @@ func TestOriginatorTransaction_Sequenced_StaysInState_OnAssembleRequestReceived_
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             txn.currentDelegate,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10, // lowWatermark = 90
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10, // lowWatermark = 90
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -1531,10 +1531,10 @@ func TestOriginatorTransaction_Submitted_StaysInState_OnAssembleRequestReceived_
 	txn, mocks := builder.BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             builder.GetCoordinator(),
-		CoordinatorsBlockHeight: 100, // diff=50 > tolerance=0
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            builder.GetCoordinator(),
+		CoordinatorBlockHeight: 100, // diff=50 > tolerance=0
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
@@ -1567,11 +1567,11 @@ func TestOriginatorTransaction_Submitted_StaysInState_OnAssembleRequestReceived_
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.GetID()},
-		RequestID:               uuid.New(),
-		Coordinator:             txn.currentDelegate,
-		CoordinatorsBlockHeight: 100,
-		BlockHeightTolerance:    10, // lowWatermark = 90
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              uuid.New(),
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10, // lowWatermark = 90
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")

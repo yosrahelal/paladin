@@ -34,6 +34,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm/clause"
 )
 
 type mockComponents struct {
@@ -204,12 +205,21 @@ func TestGetTransactionStatesFail(t *testing.T) {
 
 func insertTestState(t *testing.T, ss *stateManager, domainName string, id pldtypes.HexBytes) {
 	t.Helper()
+	schemaHash := pldtypes.Bytes32Keccak([]byte("test"))
 	err := ss.p.DB().
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&pldapi.Schema{
+			ID:         schemaHash,
+			DomainName: domainName,
+			Type:       pldapi.SchemaTypeABI.Enum(),
+		}).Error
+	require.NoError(t, err)
+	err = ss.p.DB().
 		Table("states").
 		Create(&pldapi.StateBase{
 			ID:         id,
 			DomainName: domainName,
-			Schema:     pldtypes.Bytes32Keccak([]byte("test")),
+			Schema:     schemaHash,
 		}).Error
 	require.NoError(t, err)
 }

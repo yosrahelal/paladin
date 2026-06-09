@@ -229,7 +229,8 @@ func TestSequencerManager_LoadSequencer_NewSequencer(t *testing.T) {
 	mocks.setupDefaultExpectations(ctx, contractAddr)
 	mockDomainSmartContract := componentsmocks.NewDomainSmartContract(t)
 	mockDomain := componentsmocks.NewDomain(t)
-	mockDomainSmartContract.EXPECT().Domain().Return(mockDomain).Once()
+	mockDomain.EXPECT().GetBlockHeight().Return(int64(0))
+	mockDomainSmartContract.EXPECT().Domain().Return(mockDomain)
 	mockDomainSmartContract.EXPECT().ContractConfig().Return(&prototk.ContractConfig{StaticCoordinator: proto.String("test-identity@test-coordinator")}).Maybe()
 	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(mockDomainSmartContract, nil)
 	mocks.stateManager.EXPECT().NewDomainContext(ctx, mockDomain, *contractAddr).Return(componentsmocks.NewDomainContext(t)).Once()
@@ -894,9 +895,8 @@ func TestSequencerManager_StopAllSequencers_MultipleSequencers(t *testing.T) {
 // Tests for PreInit, PostInit, Start, Stop, and NewDistributedSequencerManager
 
 func TestSequencerManager_PreInit_Success(t *testing.T) {
-	ctx := context.Background()
 	config := &pldconf.SequencerConfig{}
-	sMgr := NewDistributedSequencerManager(ctx, config).(*sequencerManager)
+	sMgr := NewDistributedSequencerManager(t.Context(), config).(*sequencerManager)
 
 	// Create mocks
 	preInitComponents := componentsmocks.NewPreInitComponents(t)
@@ -913,23 +913,11 @@ func TestSequencerManager_PreInit_Success(t *testing.T) {
 	// Verify results
 	require.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.NotNil(t, result.PreCommitHandler)
+	assert.Nil(t, result.PreCommitHandler)
 	assert.NotNil(t, sMgr.metrics)
-
-	// Verify PreCommitHandler can be called
-	testBlocks := []*pldapi.IndexedBlock{
-		{Number: 100},
-		{Number: 101},
-	}
-	testTransactions := []*blockindexer.IndexedTransactionNotify{}
-	mockDBTX := persistencemocks.NewDBTX(t)
-	mockDBTX.EXPECT().AddPostCommit(mock.Anything).Once()
-
-	err = result.PreCommitHandler(ctx, mockDBTX, testBlocks, testTransactions)
-	require.NoError(t, err)
 }
 
-func TestSequencerManager_PreInit_PreCommitHandler_EmptyBlocks(t *testing.T) {
+func TestSequencerManager_PreInit_NoPreCommitHandler(t *testing.T) {
 	ctx := context.Background()
 	config := &pldconf.SequencerConfig{}
 	sMgr := NewDistributedSequencerManager(ctx, config).(*sequencerManager)
@@ -943,13 +931,11 @@ func TestSequencerManager_PreInit_PreCommitHandler_EmptyBlocks(t *testing.T) {
 	preInitComponents.EXPECT().MetricsManager().Return(metricsManager).Once()
 	metricsManager.EXPECT().Registry().Return(registry).Once()
 
-	// Call PreInit
+	// Call PreInit — block height is no longer tracked by the sequencer manager,
+	// so no PreCommitHandler is registered.
 	result, err := sMgr.PreInit(preInitComponents)
 	require.NoError(t, err)
-
-	// Test PreCommitHandler exists
-	// In practice, blocks should never be empty, but we test that the handler exists
-	assert.NotNil(t, result.PreCommitHandler)
+	assert.Nil(t, result.PreCommitHandler)
 }
 
 func TestSequencerManager_PostInit_Success(t *testing.T) {
@@ -1151,7 +1137,6 @@ func TestNewDistributedSequencerManager_Success(t *testing.T) {
 	assert.NotNil(t, sMgr.sequencers)
 	assert.Equal(t, 0, len(sMgr.sequencers))
 	assert.Equal(t, 20, sMgr.targetActiveSequencersLimit)
-	assert.Equal(t, int64(0), sMgr.blockHeight)
 }
 
 func TestNewDistributedSequencerManager_DefaultLimits(t *testing.T) {
@@ -1178,75 +1163,6 @@ func TestNewDistributedSequencerManager_MinimumLimits(t *testing.T) {
 
 	// Verify minimum limits are applied
 	assert.GreaterOrEqual(t, sMgr.targetActiveSequencersLimit, pldconf.SequencerMinimum.TargetActiveSequencers)
-}
-
-func TestSequencerManager_OnNewBlockHeight(t *testing.T) {
-	ctx := context.Background()
-	mocks := newSequencerLifecycleTestMocks(t)
-	sMgr := newSequencerManagerForTesting(t, mocks)
-
-	// Test initial block height is 0
-	assert.Equal(t, int64(0), sMgr.GetBlockHeight())
-
-	// Test setting block height
-	testHeight := int64(100)
-	sMgr.OnNewBlockHeight(ctx, testHeight)
-	assert.Equal(t, testHeight, sMgr.GetBlockHeight())
-
-	// Test updating block height
-	newHeight := int64(200)
-	sMgr.OnNewBlockHeight(ctx, newHeight)
-	assert.Equal(t, newHeight, sMgr.GetBlockHeight())
-
-	// Test concurrent updates to ensure thread safety
-	var wg sync.WaitGroup
-	numGoroutines := 10
-	expectedHeight := int64(1000)
-
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func(height int64) {
-			defer wg.Done()
-			sMgr.OnNewBlockHeight(ctx, height)
-		}(expectedHeight + int64(i))
-	}
-
-	wg.Wait()
-	// After concurrent updates, the height should be one of the values we set
-	// (the exact value depends on which goroutine finished last)
-	finalHeight := sMgr.GetBlockHeight()
-	assert.GreaterOrEqual(t, finalHeight, expectedHeight)
-	assert.Less(t, finalHeight, expectedHeight+int64(numGoroutines))
-}
-
-func TestSequencerManager_GetBlockHeight(t *testing.T) {
-	ctx := context.Background()
-	mocks := newSequencerLifecycleTestMocks(t)
-	sMgr := newSequencerManagerForTesting(t, mocks)
-
-	// Test initial block height
-	assert.Equal(t, int64(0), sMgr.GetBlockHeight())
-
-	// Test after setting block height
-	testHeight := int64(42)
-	sMgr.OnNewBlockHeight(ctx, testHeight)
-	assert.Equal(t, testHeight, sMgr.GetBlockHeight())
-
-	// Test concurrent reads to ensure thread safety
-	var wg sync.WaitGroup
-	numReaders := 20
-	sMgr.OnNewBlockHeight(ctx, int64(500))
-
-	for i := 0; i < numReaders; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			height := sMgr.GetBlockHeight()
-			assert.Equal(t, int64(500), height)
-		}()
-	}
-
-	wg.Wait()
 }
 
 func TestSequencerManager_GetNodeName(t *testing.T) {
@@ -1714,39 +1630,4 @@ func TestHeartbeatLoop_StopsWhenContextCancelled(t *testing.T) {
 
 	cancel()
 	<-done
-}
-
-func TestOnNewBlockHeight_StoresHeight(t *testing.T) {
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
-
-	sm.OnNewBlockHeight(context.Background(), 42)
-
-	assert.Equal(t, int64(42), sm.GetBlockHeight())
-}
-
-func TestOnNewBlockHeight_NoSequencers_NoEvents(t *testing.T) {
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
-
-	// No sequencers registered — QueueEvent must not be called on any mock.
-	// Any unexpected call would cause testify to fail the test immediately.
-	sm.OnNewBlockHeight(context.Background(), 100)
-
-	assert.Equal(t, int64(100), sm.GetBlockHeight())
-}
-
-func TestOnNewBlockHeight_StoresAndReturnsHeight_WithSequencers(t *testing.T) {
-	ctx := context.Background()
-	addr := pldtypes.RandAddress()
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
-
-	sm.sequencers[addr.String()] = newSequencerForTesting(addr, mocks)
-
-	// With pull-based block height, OnNewBlockHeight only stores the value.
-	// Coordinators and originators query it on-demand via engineIntegration.GetBlockHeight.
-	sm.OnNewBlockHeight(ctx, 999)
-
-	assert.Equal(t, int64(999), sm.GetBlockHeight())
 }
