@@ -411,7 +411,7 @@ func TestUpdatePublicTransaction(t *testing.T) {
 		require.Len(ct, tx.Public, 1)
 		require.NotNil(ct, tx.Public[0].Activity[0])
 		assert.Regexp(ct, "ERROR.*Intrinsic", tx.Public[0].Activity[0])
-	}, 10*time.Second, 100*time.Millisecond, "Transaction was not processed with error in time")
+	}, 10*time.Second, 100*time.Millisecond, "Transaction was not processed with error in time (txID: %s)", setRes.ID())
 
 	_, err = c.PTX().UpdateTransaction(ctx, *setRes.ID(), &pldapi.TransactionInput{
 		TransactionBase: pldapi.TransactionBase{
@@ -863,9 +863,7 @@ func TestCreateStateOnOneNodeSpendOnAnother(t *testing.T) {
 	alice.AddPeer(bob.GetNodeConfig())
 	bob.AddPeer(alice.GetNodeConfig())
 
-	domainConfig := &domains.SimpleDomainConfig{
-		SubmitMode: domains.ENDORSER_SUBMISSION,
-	}
+	domainConfig := &domains.SimpleDomainConfig{}
 
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
@@ -1132,7 +1130,7 @@ func TestNotaryDelegatedPrepare(t *testing.T) {
 		},
 		transactionLatencyThreshold(t),
 		100*time.Millisecond,
-		"Prepared transaction not available on originator node",
+		"Prepared transaction not available on originator node (txID: %s)", transferA2BTx.ID(),
 	)
 
 }
@@ -1448,9 +1446,7 @@ func TestPrivacyGroupEndorsement(t *testing.T) {
 	bob.AddPeer(alice.GetNodeConfig(), carol.GetNodeConfig())
 	carol.AddPeer(alice.GetNodeConfig(), bob.GetNodeConfig())
 
-	domainConfig := &domains.SimpleStorageDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleStorageDomainConfig{}
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
 	startNode(t, carol, domainConfig)
@@ -1547,9 +1543,7 @@ func TestPrivacyGroupEndorsementConcurrent(t *testing.T) {
 	bob.AddPeer(alice.GetNodeConfig(), carol.GetNodeConfig())
 	carol.AddPeer(alice.GetNodeConfig(), bob.GetNodeConfig())
 
-	domainConfig := &domains.SimpleStorageDomainConfig{
-		SubmitMode: domains.ONE_TIME_USE_KEYS,
-	}
+	domainConfig := &domains.SimpleStorageDomainConfig{}
 	startNode(t, alice, domainConfig)
 	startNode(t, bob, domainConfig)
 	startNode(t, carol, domainConfig)
