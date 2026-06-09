@@ -29,6 +29,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcserver"
 	"github.com/go-resty/resty/v2"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +71,28 @@ func TestBlockIndexRPCCalls(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Hash.String(), idxBlocks[0].Hash.String())
 
-	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactions", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query(), false)
+	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactions", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query())
+	require.NoError(t, err)
+	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxTxns[0].Hash.String())
+
+	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactionsWithReceiptFilter", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query(), false)
+	require.NoError(t, err)
+	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxTxns[0].Hash.String())
+
+	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactionsWithReceiptFilter", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query(), true)
+	require.NoError(t, err)
+	assert.Empty(t, idxTxns)
+
+	err = bi.persistence.DB().Exec(`INSERT INTO transaction_receipts ("transaction", domain, indexed, success, tx_hash) VALUES (?, ?, ?, ?, ?)`,
+		uuid.New(),
+		"",
+		pldtypes.TimestampNow(),
+		true,
+		rpcBlock.Transactions[0].Hash.HexString(),
+	).Error
+	require.NoError(t, err)
+
+	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactionsWithReceiptFilter", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query(), true)
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxTxns[0].Hash.String())
 
