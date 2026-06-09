@@ -143,8 +143,11 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_AssembleRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh the cached block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					// Assemble request is not from the current delegate; reject without entering the assembly flow.
 					Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
 					Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
@@ -153,6 +156,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
+					// Both checks pass: assemble and transition.
+					Validator: statemachine.ValidatorAnd(
+						validator_AssembleRequestFromCurrentDelegate,
+						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+					),
 					Actions: []ActionRule{{Action: action_AssembleRequestReceived}},
 					Transitions: []Transition{
 						{
@@ -251,8 +259,11 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_AssembleRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh the cached block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					// Assemble request is not from the current delegate; reject without entering the assembly flow.
 					Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
 					Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
@@ -261,6 +272,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
+					// Both checks pass: assemble and proceed.
+					Validator: statemachine.ValidatorAnd(
+						validator_AssembleRequestFromCurrentDelegate,
+						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+					),
 					// For some reason we've been asked to assemble again. We must not have moved to endorsement gathering,
 					// reverted, or parked. This could be because of a temporary issue preventing assembly (e.g. we couldn't
 					// resolve a remote verifier while it was offline). Assuming this is a new request, action it.
@@ -298,8 +314,11 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_AssembleRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh the cached block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					// Assemble request is not from the current delegate; reject without entering the assembly flow.
 					Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
 					Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
@@ -308,6 +327,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
+					// Both checks pass: assemble and proceed.
+					Validator: statemachine.ValidatorAnd(
+						validator_AssembleRequestFromCurrentDelegate,
+						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+					),
 					Actions: []ActionRule{
 						{Action: action_AssembleRequestReceived},
 						//We thought we had got as far as endorsement but it seems like the coordinator had not got the response in time and has resent the assemble request, we simply reply with the same response as before
@@ -375,8 +399,11 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_AssembleRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh the cached block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					// Assemble request is not from the current delegate; reject without entering the assembly flow.
 					Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
 					Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
@@ -385,6 +412,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
+					// Both checks pass: assemble and proceed.
+					Validator: statemachine.ValidatorAnd(
+						validator_AssembleRequestFromCurrentDelegate,
+						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+					),
 					Actions: []ActionRule{
 						{Action: action_AssembleRequestReceived},
 						//We thought we had got as far as prepared but it seems like the coordinator had not got the response in time and has resent the assemble request, we simply reply with the same response as before
@@ -486,8 +518,11 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_AssembleRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh the cached block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					// Assemble request is not from the current delegate; reject without entering the assembly flow.
 					Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
 					Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
@@ -496,6 +531,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
+					// Both checks pass: assemble and proceed.
+					Validator: statemachine.ValidatorAnd(
+						validator_AssembleRequestFromCurrentDelegate,
+						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+					),
 					// The coordinator must have decided that it was necessary to re-assemble with different available
 					// states so we go back to assembling state for another attempt
 					Actions: []ActionRule{{Action: action_AssembleRequestReceived}},
@@ -558,8 +598,11 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_AssembleRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh the cached block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					// Assemble request is not from the current delegate; reject without entering the assembly flow.
 					Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
 					Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
@@ -568,6 +611,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
+					// Both checks pass: assemble and proceed.
+					Validator: statemachine.ValidatorAnd(
+						validator_AssembleRequestFromCurrentDelegate,
+						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+					),
 					// The coordinator must have decided that it was necessary to re-assemble with different available
 					// states so we go back to assembling state for another attempt
 					Actions: []ActionRule{{Action: action_AssembleRequestReceived}},
@@ -628,8 +676,11 @@ var stateDefinitionsMap = StateDefinitions{
 			// reverted. We need to accomodate the coordinator getting there first and sending a new assemble request
 			// before we receive the revert and moved back to delegated.
 			Event_AssembleRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh the cached block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					// Assemble request is not from the current delegate; reject without entering the assembly flow.
 					Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
 					Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
@@ -638,6 +689,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
+					// Both checks pass: assemble and transition.
+					Validator: statemachine.ValidatorAnd(
+						validator_AssembleRequestFromCurrentDelegate,
+						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+					),
 					Actions: []ActionRule{{Action: action_AssembleRequestReceived}},
 					Transitions: []Transition{
 						{
@@ -673,8 +729,11 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_AssembleRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh the cached block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					// Assemble request is not from the current delegate; reject without entering the assembly flow.
 					Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
 					Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
@@ -683,6 +742,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
+					// Both checks pass: assemble and proceed.
+					Validator: statemachine.ValidatorAnd(
+						validator_AssembleRequestFromCurrentDelegate,
+						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+					),
 					Actions: []ActionRule{
 						{
 							Action: action_AssembleRequestReceived,
@@ -729,8 +793,11 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_AssembleRequestReceived: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
+					// Always runs first: refresh the cached block height before any validator reads it.
+					Actions: []ActionRule{{Action: action_RefreshBlockHeight}},
+				}, {
 					// Assemble request is not from the current delegate; reject without entering the assembly flow.
 					Validator: statemachine.ValidatorNot(validator_AssembleRequestFromCurrentDelegate),
 					Actions:   []ActionRule{{Action: action_SendAssembleRejectionNotCurrentDelegate}},
@@ -739,6 +806,11 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
+					// Both checks pass: assemble and proceed.
+					Validator: statemachine.ValidatorAnd(
+						validator_AssembleRequestFromCurrentDelegate,
+						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+					),
 					Actions: []ActionRule{
 						{Action: action_AssembleRequestReceived},
 						{

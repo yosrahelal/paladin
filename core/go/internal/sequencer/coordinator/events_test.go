@@ -75,36 +75,6 @@ func TestTransactionsDelegatedEvent_Fields(t *testing.T) {
 	assert.Equal(t, txID, event.Transactions[0].ID)
 }
 
-func TestNewBlockEvent_Type(t *testing.T) {
-	event := &common.NewBlockEvent{}
-	assert.Equal(t, common.Event_NewBlock, event.Type())
-}
-
-func TestNewBlockEvent_TypeString(t *testing.T) {
-	event := &common.NewBlockEvent{}
-	assert.Equal(t, "Event_NewBlock", event.TypeString())
-}
-
-func TestNewBlockEvent_GetEventTime(t *testing.T) {
-	event := &common.NewBlockEvent{
-		BaseEvent: common.BaseEvent{
-			EventTime: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC),
-		},
-	}
-	assert.Equal(t, time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC), event.GetEventTime())
-}
-
-func TestNewBlockEvent_Fields(t *testing.T) {
-	blockHeight := uint64(200)
-	event := &common.NewBlockEvent{
-		BaseEvent: common.BaseEvent{
-			EventTime: time.Now(),
-		},
-		BlockHeight: blockHeight,
-	}
-	assert.Equal(t, blockHeight, event.BlockHeight)
-}
-
 func TestEvent_InterfaceCompliance(t *testing.T) {
 	// Test that all events with BaseEvent implement the Event interface
 	events := []Event{

@@ -39,7 +39,7 @@ func Test_stopDispatchLoop_StopsRunningLoop(t *testing.T) {
 	defer cancel()
 
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil)
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
 	require.NoError(t, c.Start(ctx))
 
 	c.startDispatchLoop()
@@ -67,7 +67,7 @@ func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
 	builder.OverrideSequencerConfig(config)
 
 	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 
 	ctx, cancel := context.WithCancel(t.Context())
 	require.NoError(t, c.Start(ctx))
@@ -101,7 +101,7 @@ func TestDispatchLoop_StopAtSelect(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	require.NoError(t, c.Start(ctx))
 	c.startDispatchLoop()
 	cancel()

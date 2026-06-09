@@ -48,7 +48,7 @@ type CoordinatorBuilderForTesting struct {
 	sequencerManager                         *componentsmocks.SequencerManager
 	contractAddress                          *pldtypes.EthAddress
 	coordinatorSelectionMode                 *prototk.ContractConfig_CoordinatorSelection
-	currentBlockHeight                       *uint64
+	currentEffectiveBlockHeight              *uint64
 	transactions                             []transaction.CoordinatorTransaction
 	pooledTransactions                       []transaction.CoordinatorTransaction
 	heartbeatsUntilClosingGracePeriodExpires *int
@@ -182,8 +182,8 @@ func (b *CoordinatorBuilderForTesting) GetContractAddress() pldtypes.EthAddress 
 	return *b.contractAddress
 }
 
-func (b *CoordinatorBuilderForTesting) CurrentBlockHeight(currentBlockHeight uint64) *CoordinatorBuilderForTesting {
-	b.currentBlockHeight = &currentBlockHeight
+func (b *CoordinatorBuilderForTesting) CurrentBlockHeight(h uint64) *CoordinatorBuilderForTesting {
+	b.currentEffectiveBlockHeight = &h
 	return b
 }
 
@@ -403,8 +403,9 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 	}
 	coordinator.stateMachineEventLoop.StateMachine().SetCurrentState(b.state)
 
-	if b.currentBlockHeight != nil {
-		coordinator.currentBlockHeight = *b.currentBlockHeight
+	if b.currentEffectiveBlockHeight != nil {
+		coordinator.effectiveBlockHeight = *b.currentEffectiveBlockHeight
+		coordinator.currentBlockHeight = int64(*b.currentEffectiveBlockHeight)
 	}
 	if b.endorserCandidates != nil {
 		coordinator.endorserCandidates = *b.endorserCandidates

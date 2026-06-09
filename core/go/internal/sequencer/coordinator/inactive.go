@@ -42,11 +42,11 @@ func validator_IsHandoverRequestFromHigherPriorityCoordinator(_ context.Context,
 }
 
 // validator_IsDelegationBlockHeightToleranceExceeded returns true when the absolute difference
-// between this coordinator's current block height and the originator's block height exceeds the
-// configured block height tolerance.
+// between this coordinator's stored block height (refreshed by action_RefreshBlockHeight)
+// and the originator's block height exceeds the configured block height tolerance.
 func validator_IsDelegationBlockHeightToleranceExceeded(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*TransactionsDelegatedEvent)
-	ch := c.currentBlockHeight
+	ch := uint64(c.currentBlockHeight)
 	oh := e.OriginatorsBlockHeight
 	diff := max(ch, oh) - min(ch, oh)
 	return diff > c.blockHeightTolerance, nil
@@ -66,7 +66,7 @@ func action_RejectDelegationRequestBlockHeight(ctx context.Context, c *coordinat
 		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		"", // no active coordinator redirect for block height rejections
 		int64(e.OriginatorsBlockHeight),
-		int64(c.currentBlockHeight),
+		c.currentBlockHeight,
 		int64(c.blockHeightTolerance),
 	)
 }
@@ -81,7 +81,7 @@ func action_RejectDelegationRequest(ctx context.Context, c *coordinator, event c
 		engineProto.RejectionReason_NOT_CURRENT_DELEGATE,
 		c.currentActiveCoordinator,
 		int64(e.OriginatorsBlockHeight),
-		int64(c.currentBlockHeight),
+		c.currentBlockHeight,
 		0, // tolerance not relevant for non-block-height rejections
 	)
 }

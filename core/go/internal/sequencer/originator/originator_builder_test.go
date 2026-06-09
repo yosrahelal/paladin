@@ -31,7 +31,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/stretchr/testify/mock"
 )
 
 const (
@@ -48,7 +47,7 @@ type OriginatorBuilderForTesting struct {
 	metrics                            metrics.DistributedSequencerMetrics
 	sequencerConfig                    *pldconf.SequencerConfig
 	blockRange                         *uint64
-	currentBlockHeight                 *uint64
+	currentEffectiveBlockHeight        *uint64
 	endorserCandidates                 []string
 	coordinatorPriorityList            []string
 	currentActiveCoordinator           *string
@@ -111,7 +110,7 @@ func (b *OriginatorBuilderForTesting) BlockRange(n uint64) *OriginatorBuilderFor
 }
 
 func (b *OriginatorBuilderForTesting) CurrentBlockHeight(n uint64) *OriginatorBuilderForTesting {
-	b.currentBlockHeight = &n
+	b.currentEffectiveBlockHeight = &n
 	return b
 }
 
@@ -179,9 +178,6 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		SentMessageRecorder: testutil.NewSentMessageRecorder(),
 		EngineIntegration:   sequencercommonmocks.NewEngineIntegration(b.t),
 	}
-	// Default stub so tests that call Start() don't need to set up GetBlockHeight explicitly.
-	// Individual tests can override this with a more specific expectation.
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
 
 	if b.useMockTransportWriter {
 		mocks.TransportWriter = sequencertransportmocks.NewTransportWriter(b.t)
@@ -226,8 +222,8 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	if b.blockRange != nil {
 		originator.blockRange = *b.blockRange
 	}
-	if b.currentBlockHeight != nil {
-		originator.currentBlockHeight = *b.currentBlockHeight
+	if b.currentEffectiveBlockHeight != nil {
+		originator.effectiveBlockHeight = *b.currentEffectiveBlockHeight
 	}
 	if b.endorserCandidates != nil {
 		originator.endorserCandidates = b.endorserCandidates
