@@ -191,8 +191,7 @@ func (c *coordinator) updateEndorserCandidates(ctx context.Context, nodes ...str
 		c.coordinatorPriorityList = common.ComputeCoordinatorPriorityList(
 			ctx,
 			c.endorserCandidates,
-			c.currentBlockHeight,
-			c.coordinatorSelectionBlockRange,
+			c.effectiveBlockHeight,
 		)
 		c.notifyOriginator(ctx, &common.EndorserNodesDiscoveredEvent{
 			// Put a copy of the candidates in the event so the originator can't modify the coordinator's internal state.
@@ -224,8 +223,24 @@ func (c *coordinator) getCoordinatorSigningIdentity() string {
 	return c.signingIdentity.value
 }
 
-func (c *coordinator) getCurrentBlockHeight() int64 {
-	return int64(c.currentBlockHeight)
+func action_RefreshBlockHeight(ctx context.Context, c *coordinator, _ common.Event) error {
+	c.refreshBlockHeight(ctx)
+	return nil
+}
+
+// refreshBlockHeight queries the live block height, caches it in c.currentBlockHeight,
+// calls grapher.ForgetLocks, recomputes the priority list, and queues an internal
+// EpochBoundaryReachedEvent when the effective block height advances to a new epoch.
+func (c *coordinator) refreshBlockHeight(ctx context.Context) {
+	liveHeight := c.engineIntegration.GetBlockHeight(ctx)
+	c.currentBlockHeight = liveHeight
+	c.grapher.ForgetLocks(ctx, uint64(liveHeight))
+	c.calculateCoordinatorPriorities(ctx)
+	newEffective := common.ComputeEffectiveBlockHeight(uint64(liveHeight), c.coordinatorSelectionBlockRange)
+	if newEffective != c.effectiveBlockHeight {
+		c.effectiveBlockHeight = newEffective
+		c.queueEventInternal(ctx, &EpochBoundaryReachedEvent{})
+	}
 }
 
 func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator string, originatorNode string, nodeName string, pt *components.PrivateTransaction) transaction.CoordinatorTransaction {
@@ -243,7 +258,8 @@ func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator 
 		c.getCoordinatorTransactionState,
 		func(ctx context.Context, nodes ...string) { c.updateEndorserCandidates(ctx, nodes...) },
 		c.engineIntegration,
-		c.getCurrentBlockHeight,
+		c.refreshBlockHeight,                         
+		func() int64 { return c.currentBlockHeight }, 
 		c.blockHeightTolerance,
 		c.syncPoints,
 		c.components,
@@ -374,7 +390,7 @@ func (c *coordinator) addToDelegatedTransactions(
 	}
 
 	// Acknowledge the delegate request. Optionally errors can be returned which the originator may use to base re-delegate decisions on
-	err = c.transportWriter.SendDelegationResponse(ctx, originatorNode, delegationID, delegateAcknowledgementIDs, delegateAcknowledgementErrors, c.currentBlockHeight)
+	err = c.transportWriter.SendDelegationResponse(ctx, originatorNode, delegationID, delegateAcknowledgementIDs, delegateAcknowledgementErrors, uint64(c.currentBlockHeight))
 	if err != nil {
 		return err
 	}

@@ -65,7 +65,7 @@ func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 	builder.OverrideSequencerConfig(config)
 	builder.CurrentActiveCoordinator("node1")
 	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil)
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
 	mocks.EngineIntegration.On("WriteStatesForTransaction", mock.Anything, mock.Anything).Return(nil)
 	mocks.EngineIntegration.On("MapPotentialStates", mock.Anything, mock.Anything, mock.Anything).Return(([]*components.StateUpsert)(nil), nil)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -482,7 +482,7 @@ func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	require.NoError(t, c.Start(ctx))
 
 	// Verify event loop is running
@@ -509,7 +509,7 @@ func TestCoordinator_CancelContext_WaitsForTransportShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle).WithMockTransportWriter()
 	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	defer func() {
 		cancel()
 		c.WaitForDone(t.Context())
@@ -522,7 +522,7 @@ func TestCoordinator_CancelContext_CompletesSuccessfullyWhenCalledOnce(t *testin
 	ctx, cancel := context.WithCancel(t.Context())
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	require.NoError(t, c.Start(ctx))
 
 	cancel()
@@ -537,7 +537,7 @@ func TestCoordinator_CancelContext_StopsLoopsEvenWhenProcessingEvents(t *testing
 	ctx, cancel := context.WithCancel(t.Context())
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	require.NoError(t, c.Start(ctx))
 
 	// Queue some events to ensure loops are busy
@@ -557,7 +557,7 @@ func TestCoordinator_CancelContext_WhenAlreadyCancelled_ReturnsImmediately(t *te
 	ctx, cancel := context.WithCancel(t.Context())
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	require.NoError(t, c.Start(ctx))
 
 	cancel()
@@ -751,8 +751,7 @@ func TestCoordinator_PropagateEventToAllTransactions_HandleEventReturnsError(t *
 
 func TestStart_Idempotent_SecondCallReturnsNil(t *testing.T) {
 	ctx := context.Background()
-	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 	// Mark as already started without launching goroutines
 	c.started = true
 	err := c.Start(ctx)
@@ -783,7 +782,7 @@ func TestCoordinator_WaitForDone_ReturnsEarlyWhenContextCancelled(t *testing.T) 
 	ctx, cancel := context.WithCancel(t.Context())
 
 	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 	require.NoError(t, c.Start(ctx))
 
 	defer func() {
@@ -822,18 +821,6 @@ func TestCoordinator_WaitForDone_CtxCancelledWhileDispatchLoopRunning_ReturnsEar
 	case <-time.After(time.Second):
 		t.Fatal("WaitForDone should have returned early when context is cancelled and dispatch loop is running")
 	}
-}
-
-func TestCoordinator_Start_GetBlockHeightError_ReturnsError(t *testing.T) {
-	ctx := context.Background()
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	c, mocks := builder.Build()
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), fmt.Errorf("block height unavailable"))
-
-	err := c.Start(ctx)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "block height unavailable")
-	assert.False(t, c.started, "coordinator should not mark itself as started on error")
 }
 
 func TestNewCoordinator_SenderMode_SetsCurrentActiveCoordinatorToNodeName(t *testing.T) {

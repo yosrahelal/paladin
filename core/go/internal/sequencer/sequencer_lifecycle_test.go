@@ -1733,142 +1733,20 @@ func TestOnNewBlockHeight_NoSequencers_NoEvents(t *testing.T) {
 	// Any unexpected call would cause testify to fail the test immediately.
 	sm.OnNewBlockHeight(context.Background(), 100)
 
-	// Give the goroutine time to run and confirm it exits without calling any mock.
-	time.Sleep(20 * time.Millisecond)
 	assert.Equal(t, int64(100), sm.GetBlockHeight())
 }
 
-func TestOnNewBlockHeight_DispatchesNewBlockToAllSequencers(t *testing.T) {
+func TestOnNewBlockHeight_StoresAndReturnsHeight_WithSequencers(t *testing.T) {
 	ctx := context.Background()
-
-	addr1 := pldtypes.RandAddress()
-	addr2 := pldtypes.RandAddress()
-
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
-
-	// Create separate mock coordinator and originator for the second sequencer.
-	coord2 := coordinatormocks.NewCoordinator(t)
-	orig2 := originatormocks.NewOriginator(t)
-
-	const expectedHeight = int64(999)
-
-	coordReceived := make(chan struct{}, 2)
-	origReceived := make(chan struct{}, 2)
-
-	mocks.coordinator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == uint64(expectedHeight)
-	})).Run(func(_ context.Context, _ common.Event) {
-		coordReceived <- struct{}{}
-	}).Return().Once()
-
-	mocks.originator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == uint64(expectedHeight)
-	})).Run(func(_ context.Context, _ common.Event) {
-		origReceived <- struct{}{}
-	}).Return().Once()
-
-	coord2.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == uint64(expectedHeight)
-	})).Run(func(_ context.Context, _ common.Event) {
-		coordReceived <- struct{}{}
-	}).Return().Once()
-
-	orig2.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == uint64(expectedHeight)
-	})).Run(func(_ context.Context, _ common.Event) {
-		origReceived <- struct{}{}
-	}).Return().Once()
-
-	sm.sequencers[addr1.String()] = &sequencer{
-		contractAddress: addr1.String(),
-		coordinator:     mocks.coordinator,
-		originator:      mocks.originator,
-		cancelCtx:       func() {},
-	}
-	sm.sequencers[addr2.String()] = &sequencer{
-		contractAddress: addr2.String(),
-		coordinator:     coord2,
-		originator:      orig2,
-		cancelCtx:       func() {},
-	}
-
-	sm.OnNewBlockHeight(ctx, expectedHeight)
-
-	// Wait for all four QueueEvent calls to arrive.
-	for i := 0; i < 2; i++ {
-		select {
-		case <-coordReceived:
-		case <-time.After(5 * time.Second):
-			t.Fatal("timed out waiting for coordinator NewBlockEvent dispatch")
-		}
-	}
-	for i := 0; i < 2; i++ {
-		select {
-		case <-origReceived:
-		case <-time.After(5 * time.Second):
-			t.Fatal("timed out waiting for originator NewBlockEvent dispatch")
-		}
-	}
-
-	assert.Equal(t, expectedHeight, sm.GetBlockHeight())
-}
-
-func TestNotifySequencersNewBlock_NewBlockCancelsPrevious(t *testing.T) {
-	ctx := context.Background()
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
 	addr := pldtypes.RandAddress()
-
-	block1CoordCalled := make(chan struct{})
-	block2CoordDone := make(chan struct{})
-	block2OrigDone := make(chan struct{})
-
-	// Block 1 coordinator: block inside Run until context is cancelled, simulating a full event channel.
-	mocks.coordinator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == 1
-	})).Run(func(ctx context.Context, _ common.Event) {
-		close(block1CoordCalled)
-		<-ctx.Done()
-	}).Return().Once()
-
-	// Block 1 originator: may be called with an already-cancelled context after coordinator unblocks.
-	mocks.originator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == 1
-	})).Return().Maybe()
-
-	// Block 2: both coordinator and originator must receive the event.
-	mocks.coordinator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == 2
-	})).Run(func(_ context.Context, _ common.Event) {
-		close(block2CoordDone)
-	}).Return().Once()
-
-	mocks.originator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == 2
-	})).Run(func(_ context.Context, _ common.Event) {
-		close(block2OrigDone)
-	}).Return().Once()
+	mocks := newSequencerLifecycleTestMocks(t)
+	sm := newSequencerManagerForTesting(t, mocks)
 
 	sm.sequencers[addr.String()] = newSequencerForTesting(addr, mocks)
 
-	sm.OnNewBlockHeight(ctx, 1)
+	// With pull-based block height, OnNewBlockHeight only stores the value.
+	// Coordinators and originators query it on-demand via engineIntegration.GetBlockHeight.
+	sm.OnNewBlockHeight(ctx, 999)
 
-	// Wait until block 1's goroutine is blocking inside coordinator.QueueEvent.
-	<-block1CoordCalled
-
-	// Arrival of block 2 must cancel block 1's context and then deliver itself.
-	sm.OnNewBlockHeight(ctx, 2)
-
-	<-block2CoordDone
-	<-block2OrigDone
-	assert.Equal(t, int64(2), sm.GetBlockHeight())
+	assert.Equal(t, int64(999), sm.GetBlockHeight())
 }

@@ -16,7 +16,6 @@ package originator
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -24,12 +23,12 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/metrics"
-	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencercommonmocks"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -45,6 +44,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	coordinatorNode := "coordinatorNode"
 	builder := NewOriginatorBuilderForTesting(t, State_Idle).CurrentActiveCoordinator(coordinatorNode)
 	o, mocks := builder.Build()
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
 	require.NoError(t, o.Start(ctx))
 	defer func() {
 		cancel()
@@ -197,6 +197,7 @@ func TestOriginator_EventLoop_ErrorHandling(t *testing.T) {
 	originatorLocator := "sender@senderNode"
 	builder := NewOriginatorBuilderForTesting(t, State_Observing)
 	o, mocks := builder.Build()
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
 	// Process a TransactionCreatedEvent with a nil transaction to trigger an error
 	_ = o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: nil})
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originatorLocator).NumberOfRequiredEndorsers(1)
@@ -291,7 +292,8 @@ func Test_GetTxStatus_UnknownTransactionReturnsUnknown(t *testing.T) {
 
 func TestOriginator_Start_Idempotent(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
+	o, mocks := NewOriginatorBuilderForTesting(t, State_Idle).Build()
+	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
 	require.NoError(t, o.Start(ctx))
 	defer func() {
 		cancel()
@@ -301,19 +303,6 @@ func TestOriginator_Start_Idempotent(t *testing.T) {
 	require.NoError(t, o.Start(ctx))
 }
 
-func TestOriginator_Start_GetBlockHeightError(t *testing.T) {
-	ctx := t.Context()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).Build()
-
-	mockEI := sequencercommonmocks.NewEngineIntegration(t)
-	mockEI.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0), fmt.Errorf("block height error"))
-	o.engineIntegration = mockEI
-
-	err := o.Start(ctx)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "block height error")
-	assert.False(t, o.started)
-}
 
 func TestOriginator_WaitForDone_NotStarted_ReturnsImmediately(t *testing.T) {
 	ctx := t.Context()
