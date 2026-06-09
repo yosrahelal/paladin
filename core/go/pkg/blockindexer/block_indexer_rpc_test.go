@@ -75,11 +75,7 @@ func TestBlockIndexRPCCalls(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxTxns[0].Hash.String())
 
-	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactionsWithReceiptFilter", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query(), false)
-	require.NoError(t, err)
-	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxTxns[0].Hash.String())
-
-	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactionsWithReceiptFilter", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query(), true)
+	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactionsWithReceipt", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query())
 	require.NoError(t, err)
 	assert.Empty(t, idxTxns)
 
@@ -92,7 +88,7 @@ func TestBlockIndexRPCCalls(t *testing.T) {
 	).Error
 	require.NoError(t, err)
 
-	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactionsWithReceiptFilter", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query(), true)
+	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactionsWithReceipt", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query())
 	require.NoError(t, err)
 	assert.Equal(t, rpcBlock.Transactions[0].Hash.String(), idxTxns[0].Hash.String())
 

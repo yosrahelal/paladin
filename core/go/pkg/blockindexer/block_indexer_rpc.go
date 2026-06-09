@@ -40,7 +40,7 @@ func (bi *blockIndexer) initRPC() {
 		Add("bidx_getTransactionEventsByHash", bi.rpcGetTransactionEventsByHash()).
 		Add("bidx_queryIndexedBlocks", bi.rpcQueryIndexedBlocks()).
 		Add("bidx_queryIndexedTransactions", bi.rpcQueryIndexedTransactions()).
-		Add("bidx_queryIndexedTransactionsWithReceiptFilter", bi.rpcQueryIndexedTransactionsWithReceiptFilter()).
+		Add("bidx_queryIndexedTransactionsWithReceipt", bi.rpcQueryIndexedTransactionsWithReceipt()).
 		Add("bidx_queryIndexedEvents", bi.rpcQueryIndexedEvents()).
 		Add("bidx_getConfirmedBlockHeight", bi.rpcGetConfirmedBlockHeight()).
 		Add("bidx_decodeTransactionEvents", bi.rpcDecodeTransactionEvents())
@@ -117,13 +117,12 @@ func (bi *blockIndexer) rpcQueryIndexedTransactions() rpcserver.RPCHandler {
 	})
 }
 
-func (bi *blockIndexer) rpcQueryIndexedTransactionsWithReceiptFilter() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod2(func(ctx context.Context,
+func (bi *blockIndexer) rpcQueryIndexedTransactionsWithReceipt() rpcserver.RPCHandler {
+	return rpcserver.RPCMethod1(func(ctx context.Context,
 		jq query.QueryJSON,
-		hasPaladinReceipt bool,
 	) ([]*pldapi.IndexedTransaction, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.QueryIndexedTransactions(ctx, &jq, hasPaladinReceipt)
+		return bi.QueryIndexedTransactions(ctx, &jq, true)
 	})
 }
 
