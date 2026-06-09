@@ -321,9 +321,12 @@ func subscribeAndSendDataToChannel(ctx context.Context, t *testing.T, wsClient p
 							t.Logf("Discarding duplicate event on %s from %d/%d/%d", listenerName, e.BlockNumber, e.TransactionIndex, e.LogIndex)
 						default:
 							// Event position went backwards - this is a serious bug
+							// We can't fail the test from a goroutine but exiting will stop us from processing any more events
+							// which whould stop the test expecations from being met
 							t.Errorf("Event on %s went backwards: received %d/%d/%d after last seen %d/%d/%d",
 								listenerName, e.BlockNumber, e.TransactionIndex, e.LogIndex,
 								lastBlock, lastTxIndex, lastLogIndex)
+							return
 						}
 					}
 					require.NoError(t, subNotification.Ack(ctx))
