@@ -56,5 +56,6 @@ export const RpcMethods = {
   pstate_listSchemas: 'pstate_listSchemas',
   pstate_queryStates: 'pstate_queryStates',
   transport_queryReliableMessages: 'transport_queryReliableMessages',
-  pstate_transferState: 'pstate_transferState'
+  pstate_transferState: 'pstate_transferState',
+  bidx_QueryIndexedTransactionsWithReceipt: 'bidx_queryIndexedTransactionsWithReceipt'
 };
