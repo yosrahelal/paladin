@@ -79,14 +79,13 @@ func TestBlockIndexRPCCalls(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, idxTxns)
 
-	err = bi.persistence.DB().Exec(`INSERT INTO transaction_receipts ("transaction", domain, indexed, success, tx_hash) VALUES (?, ?, ?, ?, ?)`,
+	require.NoError(t, bi.persistence.DB().Exec(`INSERT INTO transaction_receipts ("transaction", domain, indexed, success, tx_hash) VALUES (?, ?, ?, ?, ?)`,
 		uuid.New(),
 		"",
 		pldtypes.TimestampNow(),
 		true,
-		rpcBlock.Transactions[0].Hash.HexString(),
-	).Error
-	require.NoError(t, err)
+		pldtypes.Bytes32(rpcBlock.Transactions[0].Hash).HexString(),
+	).Error)
 
 	err = rpc.CallRPC(ctx, &idxTxns, "bidx_queryIndexedTransactionsWithReceipt", query.NewQueryBuilder().Equal("hash", rpcBlock.Transactions[0].Hash).Limit(1).Query())
 	require.NoError(t, err)
