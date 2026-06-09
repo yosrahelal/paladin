@@ -166,10 +166,6 @@ func action_SendAssembleError(ctx context.Context, txn *originatorTransaction, _
 	return txn.transportWriter.SendAssembleError(ctx, txn.pt.ID, txn.latestFulfilledAssembleRequestID, txn.currentDelegate)
 }
 
-// action_RefreshBlockHeight calls refreshBlockHeight on the originator, caching the result
-// in o.currentBlockHeight. It must be the first handler in every Event_AssembleRequestReceived
-// handler set so that validator_AssembleBlockHeightToleranceExceeded and
-// action_SendAssembleBlockHeightRejection always operate on a freshly-fetched, consistent value.
 func action_RefreshBlockHeight(ctx context.Context, t *originatorTransaction, _ common.Event) error {
 	t.refreshBlockHeight(ctx)
 	return nil
