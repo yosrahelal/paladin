@@ -34,7 +34,7 @@ type EventType = common.EventType
 // Note: inline comments on State_* constants are used in auto-generated documentation.
 // Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
-	State_Initial   State = iota // Coordinator created
+	State_Initial   State = iota // Coordinator state machine created
 	State_Idle                   // Not acting as a coordinator and not aware of any other active coordinators
 	State_Observing              // Not acting as a coordinator but aware of another node acting as a coordinator
 	State_Elect                  // Elected to take over from another coordinator and waiting for handover information
