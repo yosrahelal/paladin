@@ -33,7 +33,7 @@ type StateStore interface {
 	QueryContractStates(ctx context.Context, domain string, contractAddress pldtypes.EthAddress, schemaRef pldtypes.Bytes32, query *query.QueryJSON, qualifier pldapi.StateStatusQualifier) (states []*pldapi.State, err error)
 	QueryNullifiers(ctx context.Context, domain string, schemaRef pldtypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (states []*pldapi.State, err error)
 	QueryContractNullifiers(ctx context.Context, domain string, contractAddress pldtypes.EthAddress, schemaRef pldtypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (states []*pldapi.State, err error)
-	TransferState(ctx context.Context, domain string, stateID pldtypes.HexBytes, recipient pldtypes.PrivateIdentityLocator) (reliableMessageID uuid.UUID, err error)
+	TransferPrivateState(ctx context.Context, domain string, stateID pldtypes.HexBytes, recipient pldtypes.PrivateIdentityLocator) (reliableMessageID uuid.UUID, err error)
 }
 
 // This is necessary because there's no way to introspect function parameter names via reflection
@@ -110,7 +110,7 @@ func (r *stateStore) QueryContractNullifiers(ctx context.Context, domain string,
 	return
 }
 
-func (r *stateStore) TransferState(ctx context.Context, domain string, stateID pldtypes.HexBytes, recipient pldtypes.PrivateIdentityLocator) (reliableMessageID uuid.UUID, err error) {
+func (r *stateStore) TransferPrivateState(ctx context.Context, domain string, stateID pldtypes.HexBytes, recipient pldtypes.PrivateIdentityLocator) (reliableMessageID uuid.UUID, err error) {
 	err = r.c.CallRPC(ctx, &reliableMessageID, "pstate_transferPrivateState", domain, stateID, recipient)
 	return
 }
