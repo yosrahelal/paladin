@@ -102,32 +102,34 @@ func (tw *transportWriter) SendDelegationRequest(
 	transactions []*components.PrivateTransaction,
 	blockHeight uint64,
 ) error {
+	allTxBytes := make([][]byte, 0, len(transactions))
 	for _, transaction := range transactions {
 		transactionBytes, err := json.Marshal(transaction)
-
 		if err != nil {
-			log.L(ctx).Errorf("error marshalling transaction message: %s", err)
+			log.L(ctx).Errorf("error marshalling transaction for delegation request: %v", err)
+			return err
 		}
+		allTxBytes = append(allTxBytes, transactionBytes)
+	}
 
-		delegationRequest := &engineProto.DelegationRequest{
-			TransactionId:         transaction.ID.String(),
-			DelegateNodeId:        coordinatorNode,
-			PrivateTransaction:    transactionBytes,
-			OriginatorBlockHeight: int64(blockHeight),
-		}
-		delegationRequestBytes, err := proto.Marshal(delegationRequest)
-		if err != nil {
-			log.L(ctx).Errorf("error marshalling delegationRequest  message: %s", err)
-		}
+	delegationRequest := &engineProto.DelegationRequest{
+		DelegateNodeId:        coordinatorNode,
+		OriginatorBlockHeight: int64(blockHeight),
+		PrivateTransactions:   allTxBytes,
+	}
+	delegationRequestBytes, err := proto.Marshal(delegationRequest)
+	if err != nil {
+		log.L(ctx).Errorf("error marshalling delegationRequest message: %s", err)
+		return err
+	}
 
-		if err = tw.send(ctx, &components.FireAndForgetMessageSend{
-			MessageType: MessageType_DelegationRequest,
-			Payload:     delegationRequestBytes,
-			Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
-			Node:        coordinatorNode,
-		}); err != nil {
-			log.L(ctx).Warnf("error sending delegationRequest message: %s", err)
-		}
+	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
+		MessageType: MessageType_DelegationRequest,
+		Payload:     delegationRequestBytes,
+		Component:   prototk.PaladinMsg_TRANSACTION_ENGINE,
+		Node:        coordinatorNode,
+	}); err != nil {
+		log.L(ctx).Warnf("error sending delegationRequest message: %s", err)
 	}
 	return nil
 }

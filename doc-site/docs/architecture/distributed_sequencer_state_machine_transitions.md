@@ -1,6 +1,6 @@
-# Sequencer and transaction state machines
+# State machine transition detail
 
-The distributed sequencer is designed as a set of state machines, each of which manages the state of the sequencer components (originator and coordinator) and of sequencer transactions (at the originator and at the coordinator).
+Detailed state diagrams showing every transition event and guard condition for each of the four distributed sequencer state machines.
 
 *Auto-generated from source*
 
@@ -12,9 +12,9 @@ stateDiagram-v2
     direction LR
 ```
 
-### States
+### Transition Events
 
-| State | Description |
+| Event | Description |
 | --- | --- |
 
 ---
@@ -27,9 +27,9 @@ stateDiagram-v2
     direction LR
 ```
 
-### States
+### Transition Events
 
-| State | Description |
+| Event | Description |
 | --- | --- |
 
 ---
@@ -42,9 +42,9 @@ stateDiagram-v2
     direction LR
 ```
 
-### States
+### Transition Events
 
-| State | Description |
+| Event | Description |
 | --- | --- |
 
 ---
@@ -57,7 +57,7 @@ stateDiagram-v2
     direction LR
 ```
 
-### States
+### Transition Events
 
-| State | Description |
+| Event | Description |
 | --- | --- |
