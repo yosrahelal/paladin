@@ -205,7 +205,7 @@ func TestRPCTransferState(t *testing.T) {
 	require.NotNil(t, storedState)
 
 	var msgID uuid.UUID
-	rpcErr = c.CallRPC(ctx, &msgID, "pstate_transferState", "domain1", storedState.ID, "alice@node2")
+	rpcErr = c.CallRPC(ctx, &msgID, "pstate_transferPrivateState", "domain1", storedState.ID, "alice@node2")
 	assert.Nil(t, rpcErr)
 	assert.Equal(t, expectedMsgID, msgID)
 }

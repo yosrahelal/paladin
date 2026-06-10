@@ -39,16 +39,16 @@ func (ss *stateManager) TransferState(ctx context.Context, dbTX persistence.DBTX
 		return uuid.Nil, err
 	}
 
+	if node == ss.transportManager.LocalNodeName() {
+		log.L(ctx).Debugf("State transfer to local recipient %s is a no-op", recipient)
+		return uuid.Nil, nil
+	}
+
 	states, err := ss.GetStatesByID(ctx, dbTX, domain, nil, []pldtypes.HexBytes{stateID}, true, false)
 	if err != nil {
 		return uuid.Nil, err
 	}
 	state := states[0]
-
-	if node == ss.transportManager.LocalNodeName() {
-		log.L(ctx).Debugf("State %s transfer to local recipient %s is a no-op", state.ID, recipient)
-		return uuid.Nil, nil
-	}
 
 	sd := &components.StateDistribution{
 		StateID:         state.ID.String(),

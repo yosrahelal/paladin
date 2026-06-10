@@ -64,7 +64,7 @@ var stateStoreInfo = &rpcModuleInfo{
 			Inputs: []string{"domain", "contractAddress", "schemaRef", "query", "qualifier"},
 			Output: "states",
 		},
-		"pstate_transferState": {
+		"pstate_transferPrivateState": {
 			Inputs: []string{"domain", "stateId", "recipient"},
 			Output: "reliableMessageId",
 		},
@@ -111,6 +111,6 @@ func (r *stateStore) QueryContractNullifiers(ctx context.Context, domain string,
 }
 
 func (r *stateStore) TransferState(ctx context.Context, domain string, stateID pldtypes.HexBytes, recipient pldtypes.PrivateIdentityLocator) (reliableMessageID uuid.UUID, err error) {
-	err = r.c.CallRPC(ctx, &reliableMessageID, "pstate_transferState", domain, stateID, recipient)
+	err = r.c.CallRPC(ctx, &reliableMessageID, "pstate_transferPrivateState", domain, stateID, recipient)
 	return
 }
