@@ -105,11 +105,10 @@ message EndorsementRejection {
 }
 
 message DelegationRequest {
-    string transaction_id = 1;
-    string delegate_node_id = 2;
-    string delegation_id = 3; //this is used to correlate the acknowledgement back to the delegation. unlike the transport message id / correlation id, this is not unique across retries
-    bytes private_transaction = 4; //json serialized copy of the in-memory private transaction object
-    int64 originator_block_height = 5; // the originator's block height upon which this delegation was calculated
+    string delegate_node_id = 1;
+    string delegation_id = 2; //this is used to correlate the acknowledgement back to the delegation. unlike the transport message id / correlation id, this is not unique across retries
+    int64 originator_block_height = 3; // the originator's block height upon which this delegation was calculated
+    repeated bytes private_transactions = 4; // json serialized copies of all in-memory private transaction objects, batched into a single message
 }
 
 message DelegationResponse {

@@ -422,15 +422,33 @@ func (sMgr *sequencerManager) handleDelegationRequest(ctx context.Context, messa
 		return
 	}
 
-	privateTransaction := &components.PrivateTransaction{}
-	err = json.Unmarshal(delegationRequest.PrivateTransaction, privateTransaction)
-	if err != nil {
-		sMgr.logPaladinMessageJsonUnmarshalError(ctx, "PrivateTransaction", message, err)
-		return
+	transactionDelegatedEvent := &coordinator.TransactionsDelegatedEvent{}
+	transactionDelegatedEvent.FromNode = message.FromNode
+	transactionDelegatedEvent.OriginatorsBlockHeight = uint64(delegationRequest.OriginatorBlockHeight)
+	transactionDelegatedEvent.DelegationID = delegationRequest.DelegationId
+	transactionDelegatedEvent.EventTime = time.Now()
+
+	var contractAddress *pldtypes.EthAddress
+	for _, txBytes := range delegationRequest.PrivateTransactions {
+		privateTransaction := &components.PrivateTransaction{}
+		if err = json.Unmarshal(txBytes, privateTransaction); err != nil {
+			sMgr.logPaladinMessageJsonUnmarshalError(ctx, "PrivateTransaction", message, err)
+			return
+		}
+		if contractAddress == nil {
+			contractAddress = sMgr.parseContractAddressString(ctx, privateTransaction.PreAssembly.TransactionSpecification.ContractInfo.ContractAddress, message)
+			if contractAddress == nil {
+				return
+			}
+		}
+		if transactionDelegatedEvent.Originator == "" {
+			transactionDelegatedEvent.Originator = privateTransaction.PreAssembly.TransactionSpecification.From
+		}
+		transactionDelegatedEvent.Transactions = append(transactionDelegatedEvent.Transactions, privateTransaction)
 	}
 
-	contractAddress := sMgr.parseContractAddressString(ctx, privateTransaction.PreAssembly.TransactionSpecification.ContractInfo.ContractAddress, message)
 	if contractAddress == nil {
+		log.L(ctx).Warnf("delegation request from %s contained no transactions", message.FromNode)
 		return
 	}
 
@@ -439,14 +457,6 @@ func (sMgr *sequencerManager) handleDelegationRequest(ctx context.Context, messa
 		log.L(ctx).Errorf("failed to obtain sequencer to handle delegation request event %v:", err)
 		return
 	}
-
-	transactionDelegatedEvent := &coordinator.TransactionsDelegatedEvent{}
-	transactionDelegatedEvent.FromNode = message.FromNode
-	transactionDelegatedEvent.Originator = privateTransaction.PreAssembly.TransactionSpecification.From
-	transactionDelegatedEvent.Transactions = append(transactionDelegatedEvent.Transactions, privateTransaction)
-	transactionDelegatedEvent.OriginatorsBlockHeight = uint64(delegationRequest.OriginatorBlockHeight)
-	transactionDelegatedEvent.DelegationID = delegationRequest.DelegationId
-	transactionDelegatedEvent.EventTime = time.Now()
 
 	seq.GetCoordinator().QueueEvent(ctx, transactionDelegatedEvent)
 }
