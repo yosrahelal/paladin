@@ -237,6 +237,8 @@
 	"root": "Root",
 	"schema": "Schema",
 	"send": "Send",
+	"sendPrivateState": "Send Private State",
+	"sendPrivateStateWarning": "Private state information will be transmitted to the recepient",
 	"sendState": "Send State",
 	"set": "Set",
 	"showProperties": "Show Properties",
