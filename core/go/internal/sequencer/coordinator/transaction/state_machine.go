@@ -30,19 +30,19 @@ type State int
 // Note: inline comments on State_* constants are used in auto-generated documentation.
 // Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
-	State_Initial                 State = iota // Transaction state machine created
-	State_Pooled                               // Waiting in the pool to be selected and sent for assembly to the transaction's originator
-	State_PreAssembly_Blocked                  // Has not been assembled yet and cannot be assembled because a dependency never got assembled successfully, typically because it was parked or reverted
+	State_Initial                 State = iota // Transaction state machine has been created
+	State_Pooled                               // The transaction is waiting in the pool to be selected and sent for assembly to the its originator
+	State_PreAssembly_Blocked                  // The transaction cannot yet be put in the pool to be selected for assembly because a dependency must be assembled first
 	State_Assembling                           // An assemble request has been sent to the originator and we are waiting for the response
-	State_Reverted                             // The transaction has been reverted at assembly time by the originator
-	State_Endorsement_Gathering                // Assembly completed successfully and we are now waiting for endorsement of the assembled transaction
+	State_Reverted                             // The transaction has been reverted, either at assembly time by the originator or on the base ledger
+	State_Endorsement_Gathering                // The transaction has been successfully assembled and endorsement requests have been sent
 	State_Blocked                              // All endorsements have been received but the transaction cannot proceed due to dependencies not being ready for dispatch
-	State_Confirming_Dispatchable              // Endorsed and waiting for confirmation that were are OK to dispatch. The originator can still request not to proceed at this point.
-	State_Ready_For_Dispatch                   // Dispatch confirmation has been received from the originator and we are waiting to be collected by the dispatcher thread. Going into this state is the point of no return to the base ledger.
+	State_Confirming_Dispatchable              // The transaction has been endorsed. Confirmation from the originator is required before the transaction can be dispatched. The originator may still request not to proceed at this point.
+	State_Ready_For_Dispatch                   // Dispatch confirmation has been received from the originator and the transaction is waiting to be collected by the dispatch goroutine
 	State_Dispatched                           // Collected by the dispatcher thread and submitted by the public TX manager to the base ledger
-	State_Confirmed                            // Confirmed on the base ledger in recent blocks.  NOTE: confirmed transactions are not held in memory for ever so getting a list of confirmed transactions will only return those confirmed recently
-	State_Final                                // Final state for the transaction. Transactions are removed from memory as soon as they enter this state
-	State_Evicted                              // Evicted state for a problematic transaction. Transactions are removed from memory as soon as they enter this state. Distinct from State_Final because it might just be used for memory or in-flight slot management
+	State_Confirmed                            // The transaction has been confirmed on the base ledger. It will remain in this state for a number heartbeat intervals before moving to State_Final to removed from memory.
+	State_Final                                // The transaction will be removed from memory upon entry to this state
+	State_Evicted                              // A problematic transaction is being evicted. Transactions are removed from memory upon entry to this this state. Distinct from State_Final because it might just be used for memory or in-flight slot management
 )
 
 type EventType = common.EventType

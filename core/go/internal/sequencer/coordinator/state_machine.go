@@ -35,14 +35,14 @@ type EventType = common.EventType
 // Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
 	State_Initial   State = iota // Coordinator state machine created
-	State_Idle                   // Not acting as a coordinator and not aware of any other active coordinators
-	State_Observing              // Not acting as a coordinator but aware of another node acting as a coordinator
-	State_Elect                  // Elected to take over from another coordinator and waiting for handover information
+	State_Idle                   // Not actively coordinating and not aware of any other active coordinators
+	State_Observing              // Not actively coordinating but aware of another node actively coordinating
+	State_Elect                  // Has sent a handover request to an active coordinator and is waiting for that node to stop coordinating
 	State_Standby                // Going to be coordinator on the next block range but local indexer is not at that block yet
-	State_Prepared               // Have received the handover response but haven't seen the flush point confirmed
+	State_Prepared               // Has seen the previous active coordinator begin to flush and is waiting for the flush to complete
 	State_Active                 // Actively coordinating transactions for this domain instance
 	State_Flush                  // Stopped dispatching new transactions but continuing to process transactions that are already dispatched
-	State_Closing                // Have flushed and am continuing to send closing status for configured number of heartbeats
+	State_Closing                // Has flushed and is continuing to send closing status for configured number of heartbeats
 )
 
 const (

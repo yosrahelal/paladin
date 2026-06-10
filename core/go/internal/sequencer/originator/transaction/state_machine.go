@@ -31,10 +31,10 @@ type State int
 // Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
 	State_Initial               State = iota // Transaction state machine created
-	State_Pending                            // Intent for the transaction has been created in the database and has been assigned a unique ID but is no confirmation yet that a coordinator is processing it
-	State_Delegated                          // The transaction has been sent to the current active coordinator - we do not know that the coordinator has accepted the transaction as there is no confirmation response to a delegation request but heartbeats will confirm this indirectly
+	State_Pending                            // The transaction has not yet been delegated to a coordinator
+	State_Delegated                          // The transaction has been sent to the current active coordinator
 	State_Assembling                         // The coordinator has sent an assemble request to us and we have not yet sent the assembled transaction back to the coordinator
-	State_Endorsement_Gathering              // We have responded to an assemble request and are waiting the coordinator to gather endorsements before sending us a dispatch confirmation request
+	State_Endorsement_Gathering              // An assemble response has been sent to the active coordinator, who should now be gathering endorsements for the transaction. A dispatch confirmation request is expected in this state.
 	State_Signing                            // We have assembled the transaction and are waiting for the signing module at the coordinator to sign the respective base ledger transaction
 	State_Prepared                           // We know that the coordinator has got as far as preparing a public transaction for this transaction
 	State_Sequenced                          // The public transaction manager at the coordinator has allocated a nonce for this transaction's base ledger transaction
