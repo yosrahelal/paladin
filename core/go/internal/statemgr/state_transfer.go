@@ -18,6 +18,7 @@ package statemgr
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
@@ -30,14 +31,11 @@ import (
 func (ss *stateManager) TransferState(ctx context.Context, dbTX persistence.DBTX, domain string, stateID pldtypes.HexBytes, recipient pldtypes.PrivateIdentityLocator) (uuid.UUID, error) {
 	ctx = log.WithComponent(ctx, "statemanager")
 
-	recipient, err := recipient.FullyQualified(ctx, ss.transportManager.LocalNodeName())
+	identity, node, err := recipient.Validate(ctx, ss.transportManager.LocalNodeName(), false)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	node, err := recipient.Node(ctx, false)
-	if err != nil {
-		return uuid.Nil, err
-	}
+	recipient = pldtypes.PrivateIdentityLocator(fmt.Sprintf("%s@%s", identity, node))
 
 	if node == ss.transportManager.LocalNodeName() {
 		log.L(ctx).Debugf("State transfer to local recipient %s is a no-op", recipient)
