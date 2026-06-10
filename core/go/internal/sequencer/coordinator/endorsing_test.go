@@ -150,6 +150,24 @@ func Test_validator_IsEndorsementRequestFromSelf_DifferentNode_ReturnsFalse(t *t
 	assert.False(t, result, "request from a different node should not match")
 }
 
+
+func Test_handleEndorsementRequest_SendEndorsementErrorFails_LogsAndContinues(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
+		WithMockTransportWriter().
+		Build()
+
+	// Trigger sendErr via a party identity error (empty identity), and have SendEndorsementError itself fail.
+	mocks.TransportWriter.EXPECT().
+		SendEndorsementError(mock.Anything, "tx-1", "ik-1", mock.Anything, mock.Anything, mock.Anything, mock.Anything, "node2").
+		Return(fmt.Errorf("transport failure"))
+
+	event := buildEndorsementEvent("node2")
+	event.Party = "@node2" // empty identity — triggers sendErr immediately
+	c.handleEndorsementRequest(ctx, event)
+	// Should not panic; the SendEndorsementError error is only logged.
+}
+
 // --- action_UpdateActiveCoordinatorFromEndorsementRequest tests ---
 
 func Test_action_UpdateActiveCoordinatorFromEndorsementRequest_SetsFromNode(t *testing.T) {

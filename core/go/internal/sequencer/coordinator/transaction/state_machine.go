@@ -253,6 +253,7 @@ var stateDefinitionsMap = StateDefinitions{
 	State_Assembling: {
 		OnTransitionTo: []ActionRule{
 			{Action: action_ScheduleStateTimeout},
+			{Action: action_RefreshBlockHeight},
 			{Action: action_SendAssembleRequest},
 		},
 		Events: map[EventType]EventHandlers{
@@ -415,6 +416,7 @@ var stateDefinitionsMap = StateDefinitions{
 		OnTransitionTo: []ActionRule{
 			{Action: action_ScheduleStateTimeout},
 			{Action: action_ComputeEndorseTolerances},
+			{Action: action_RefreshBlockHeight},
 			{Action: action_SendEndorsementRequests},
 		},
 		Events: map[EventType]EventHandlers{

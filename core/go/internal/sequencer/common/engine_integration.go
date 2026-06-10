@@ -39,7 +39,7 @@ type Hooks interface {
 type EngineIntegration interface {
 	WriteStatesForTransaction(ctx context.Context, txn *components.PrivateTransaction) error
 	MapPotentialStates(ctx context.Context, potentialStates []*prototk.NewState, createdByTX *components.PrivateTransaction) (stateUpserts []*components.StateUpsert, err error)
-	GetBlockHeight(ctx context.Context) (int64, error)
+	GetBlockHeight(ctx context.Context) int64
 	//Assemble and sign is a single, synchronous operation that assembles a transaction using the domain smart contract
 	// and then fulfills any signature requests in the attestation plan
 	// there would be a benefit in separating this out to `assemble` and `sign` steps and to make then asynchronous
@@ -93,8 +93,8 @@ func (e *engineIntegration) WriteStatesForTransaction(ctx context.Context, txn *
 
 }
 
-func (e *engineIntegration) GetBlockHeight(ctx context.Context) (int64, error) {
-	return e.environment.GetBlockHeight(), nil
+func (e *engineIntegration) GetBlockHeight(_ context.Context) int64 {
+	return e.environment.GetBlockHeight()
 }
 
 // assemble a transaction that we are not coordinating, using the provided state locks

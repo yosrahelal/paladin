@@ -123,3 +123,12 @@ func (*EndorsementRequestReceivedEvent) Type() EventType {
 func (*EndorsementRequestReceivedEvent) TypeString() string {
 	return "Event_EndorsementRequestReceived"
 }
+
+type EpochBoundaryReachedEvent struct {
+	common.BaseEvent
+}
+
+func (*EpochBoundaryReachedEvent) Type() EventType { return Event_EpochBoundaryReached }
+func (*EpochBoundaryReachedEvent) TypeString() string {
+	return "Event_EpochBoundaryReached"
+}

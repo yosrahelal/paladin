@@ -164,12 +164,17 @@ func action_SendAssembleError(ctx context.Context, txn *originatorTransaction, _
 	return txn.transportWriter.SendAssembleError(ctx, txn.pt.ID, txn.latestFulfilledAssembleRequestID, txn.currentDelegate)
 }
 
+func action_RefreshBlockHeight(ctx context.Context, t *originatorTransaction, _ common.Event) error {
+	t.refreshBlockHeight(ctx)
+	return nil
+}
+
 // validator_AssembleBlockHeightToleranceExceeded returns true when the absolute difference between
 // the coordinator's block height (from the assemble request) and this originator's block height
 // exceeds the tolerance carried on the event.
 func validator_AssembleBlockHeightToleranceExceeded(_ context.Context, t *originatorTransaction, event common.Event) (bool, error) {
 	e := event.(*AssembleRequestReceivedEvent)
-	receiverBH := uint64(t.getCurrentBlockHeight())
+	receiverBH := uint64(t.getBlockHeight())
 	coordinatorBH := uint64(e.CoordinatorsBlockHeight)
 	diff := max(receiverBH, coordinatorBH) - min(receiverBH, coordinatorBH)
 	return diff > uint64(e.BlockHeightTolerance), nil
@@ -179,7 +184,7 @@ func validator_AssembleBlockHeightToleranceExceeded(_ context.Context, t *origin
 // difference between coordinator and originator exceeds the tolerance carried on the event.
 func action_SendAssembleBlockHeightRejection(ctx context.Context, t *originatorTransaction, event common.Event) error {
 	e := event.(*AssembleRequestReceivedEvent)
-	receiverBlockHeight := t.getCurrentBlockHeight()
+	receiverBlockHeight := t.getBlockHeight()
 	log.L(ctx).Warnf("rejecting assemble request from coordinator due to block height tolerance (coordinator=%d, assembler=%d, tolerance=%d)",
 		e.CoordinatorsBlockHeight, receiverBlockHeight, e.BlockHeightTolerance)
 	return t.transportWriter.SendAssembleRejection(

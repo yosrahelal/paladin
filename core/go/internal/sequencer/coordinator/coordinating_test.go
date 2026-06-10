@@ -60,6 +60,7 @@ func Test_addToDelegatedTransactions_NewTransactionError_ReturnsError(t *testing
 	assert.Equal(t, 0, len(c.transactionsByID), "transaction should not be added when NewTransaction fails")
 }
 
+
 func Test_addToDelegatedTransactions_AddsTransactionInPreDispatchFlowState(t *testing.T) {
 	ctx := t.Context()
 	originator := "sender@senderNode"
@@ -1041,6 +1042,24 @@ func Test_addToDelegatedTransactions_PreviousTransactionNotInPreAssemblyState_No
 	require.NoError(t, err)
 }
 
+func Test_action_CleanUpTransactionsNotYetDispatched_DrainsPendingDispatchQueueItems(t *testing.T) {
+	ctx := context.Background()
+
+	txPooled := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	idPooled := uuid.New()
+	txPooled.EXPECT().GetID().Return(idPooled)
+	txPooled.EXPECT().GetCurrentState().Return(transaction.State_Pooled)
+
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txPooled).Build()
+
+	// Pre-populate the dispatch queue with a transaction reference to exercise the drain path.
+	c.dispatchQueue <- txPooled
+
+	err := action_CleanUpTransactionsNotYetDispatched(ctx, c, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(c.dispatchQueue), "dispatch queue must be drained")
+}
+
 func Test_action_CleanUpTransactionsNotYetDispatched_RemovesNonDispatchedTransactions(t *testing.T) {
 	ctx := context.Background()
 
@@ -1276,15 +1295,14 @@ func Test_updateOriginatorActivity_DoesNotPruneActiveNode(t *testing.T) {
 	assert.Equal(t, 0, c.originatorActivity["node2"])
 }
 
-func Test_action_CalculateCoordinatorPriorities_UpdatesPriorityList(t *testing.T) {
+func Test_calculateCoordinatorPriorities_UpdatesPriorityList(t *testing.T) {
 	ctx := context.Background()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
 		EndorserCandidates("node1", "node2").
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Build()
 
-	err := action_CalculateCoordinatorPriorities(ctx, c, nil)
-	require.NoError(t, err)
+	c.calculateCoordinatorPriorities(ctx)
 	assert.NotEmpty(t, c.coordinatorPriorityList)
 	assert.Contains(t, []string{"node1", "node2"}, c.coordinatorPriorityList[0])
 }
