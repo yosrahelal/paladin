@@ -23,7 +23,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/query"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcserver"
 )
 
@@ -41,8 +40,8 @@ func (rm *registryManager) initRPC() {
 
 func (rm *registryManager) rpcListRegistries() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod0(func(ctx context.Context,
-	) ([]string, rpcclient.RPCCode, error) {
-		return rm.getRegistryNames(), 0, nil
+	) ([]string, error) {
+		return rm.getRegistryNames(), nil
 	})
 }
 
@@ -59,12 +58,12 @@ func (rm *registryManager) rpcQueryEntries() rpcserver.RPCHandler {
 		registryName string,
 		jq query.QueryJSON,
 		activeFilter pldtypes.Enum[pldapi.ActiveFilter],
-	) ([]*pldapi.RegistryEntry, rpcclient.RPCCode, error) {
+	) ([]*pldapi.RegistryEntry, error) {
 		entries, err := withRegistry(ctx, rm, registryName,
 			func(r components.Registry) ([]*pldapi.RegistryEntry, error) {
 				return r.QueryEntries(ctx, rm.p.NOTX(), activeFilter.V(), &jq)
 			})
-		return entries, 0, err
+		return entries, err
 	})
 }
 
@@ -73,12 +72,12 @@ func (rm *registryManager) rpcQueryEntriesWithProps() rpcserver.RPCHandler {
 		registryName string,
 		jq query.QueryJSON,
 		activeFilter pldtypes.Enum[pldapi.ActiveFilter],
-	) ([]*pldapi.RegistryEntryWithProperties, rpcclient.RPCCode, error) {
+	) ([]*pldapi.RegistryEntryWithProperties, error) {
 		entriesWithProps, err := withRegistry(ctx, rm, registryName,
 			func(r components.Registry) ([]*pldapi.RegistryEntryWithProperties, error) {
 				return r.QueryEntriesWithProps(ctx, rm.p.NOTX(), activeFilter.V(), &jq)
 			})
-		return entriesWithProps, 0, err
+		return entriesWithProps, err
 	})
 }
 
@@ -87,11 +86,11 @@ func (rm *registryManager) rpcGetEntryProperties() rpcserver.RPCHandler {
 		registryName string,
 		entryID pldtypes.HexBytes,
 		activeFilter pldtypes.Enum[pldapi.ActiveFilter],
-	) ([]*pldapi.RegistryProperty, rpcclient.RPCCode, error) {
+	) ([]*pldapi.RegistryProperty, error) {
 		properties, err := withRegistry(ctx, rm, registryName,
 			func(r components.Registry) ([]*pldapi.RegistryProperty, error) {
 				return r.GetEntryProperties(ctx, rm.p.NOTX(), activeFilter.V(), entryID)
 			})
-		return properties, 0, err
+		return properties, err
 	})
 }

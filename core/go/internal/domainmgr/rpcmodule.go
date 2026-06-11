@@ -27,7 +27,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/query"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcserver"
 )
 
@@ -42,44 +41,44 @@ func (dm *domainManager) buildRPCModule() {
 }
 
 func (dm *domainManager) rpcListDomains() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod0(func(ctx context.Context) ([]string, rpcclient.RPCCode, error) {
+	return rpcserver.RPCMethod0(func(ctx context.Context) ([]string, error) {
 		res := []string{}
 		for name := range dm.ConfiguredDomains() {
 			res = append(res, name)
 		}
-		return res, 0, nil
+		return res, nil
 	})
 }
 
 func (dm *domainManager) rpcGetDomain() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context, name string) (*pldapi.Domain, rpcclient.RPCCode, error) {
+	return rpcserver.RPCMethod1(func(ctx context.Context, name string) (*pldapi.Domain, error) {
 		ctx = log.WithComponent(ctx, "domainmanager")
 		domain, err := dm.getDomainByName(ctx, name)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		result := &pldapi.Domain{
 			Name:            domain.name,
 			RegistryAddress: domain.registryAddress,
 		}
 		dm.populateDomainConfig(result, domain.Configuration())
-		return result, 0, nil
+		return result, nil
 	})
 }
 
 func (dm *domainManager) rpcGetDomainByAddress() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context, address pldtypes.EthAddress) (*pldapi.Domain, rpcclient.RPCCode, error) {
+	return rpcserver.RPCMethod1(func(ctx context.Context, address pldtypes.EthAddress) (*pldapi.Domain, error) {
 		ctx = log.WithComponent(ctx, "domainmanager")
 		domain, err := dm.getDomainByAddress(ctx, &address)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		result := &pldapi.Domain{
 			Name:            domain.name,
 			RegistryAddress: domain.registryAddress,
 		}
 		dm.populateDomainConfig(result, domain.Configuration())
-		return result, 0, nil
+		return result, nil
 	})
 }
 
@@ -95,7 +94,7 @@ func (dm *domainManager) populateDomainConfig(result *pldapi.Domain, config *pro
 func (dm *domainManager) rpcQuerySmartContracts() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.DomainSmartContract, rpcclient.RPCCode, error) {
+	) ([]*pldapi.DomainSmartContract, error) {
 		ctx = log.WithComponent(ctx, "domainmanager")
 		var results []*pldapi.DomainSmartContract
 		err := dm.persistence.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
@@ -103,12 +102,12 @@ func (dm *domainManager) rpcQuerySmartContracts() rpcserver.RPCHandler {
 			results, err = dm.querySmartContracts(ctx, dbTX, &query)
 			return err
 		})
-		return results, 0, err
+		return results, err
 	})
 }
 
 func (dm *domainManager) rpcGetSmartContractByAddress() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context, address pldtypes.EthAddress) (*pldapi.DomainSmartContract, rpcclient.RPCCode, error) {
+	return rpcserver.RPCMethod1(func(ctx context.Context, address pldtypes.EthAddress) (*pldapi.DomainSmartContract, error) {
 		ctx = log.WithComponent(ctx, "domainmanager")
 		var sc components.DomainSmartContract
 		var err error
@@ -117,7 +116,7 @@ func (dm *domainManager) rpcGetSmartContractByAddress() rpcserver.RPCHandler {
 			return err
 		})
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		result := &pldapi.DomainSmartContract{
 			DomainName:    sc.Domain().Name(),
@@ -125,7 +124,7 @@ func (dm *domainManager) rpcGetSmartContractByAddress() rpcserver.RPCHandler {
 			Address:       sc.Address(),
 		}
 		dm.populateContractConfig(result, sc.ContractConfig())
-		return result, 0, nil
+		return result, nil
 	})
 }
 
@@ -134,7 +133,7 @@ func (dm *domainManager) rpcInvokeRPC() rpcserver.RPCHandler {
 		address pldtypes.EthAddress,
 		stateQualifier pldapi.StateStatusQualifier,
 		rpcCall pldapi.DomainInvokeRPC,
-	) (pldtypes.RawJSON, rpcclient.RPCCode, error) {
+	) (pldtypes.RawJSON, error) {
 		ctx = log.WithComponent(ctx, "domainmanager")
 		var sc components.DomainSmartContract
 		var err error
@@ -153,8 +152,8 @@ func (dm *domainManager) rpcInvokeRPC() rpcserver.RPCHandler {
 			return err
 		})
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
-		return resultJSON, 0, nil
+		return resultJSON, nil
 	})
 }

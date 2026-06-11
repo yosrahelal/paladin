@@ -27,10 +27,9 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
-	sdkrpcclient "github.com/LFDT-Paladin/paladin/sdk/go/pkg/rpcclient"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/httpserver"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/router"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/staticserver"
 	"github.com/gorilla/websocket"
 )
@@ -174,7 +173,7 @@ func (s *rpcServer) httpHandler(res http.ResponseWriter, req *http.Request) {
 			if rc := recover(); rc != nil {
 				log.L(ctx).Errorf("Panic in RPC handler: %v", rc)
 				r = handlerResult{httpStatus: http.StatusInternalServerError, sendRes: true,
-					res: sdkrpcclient.NewRPCErrorResponse(fmt.Errorf("%v", rc), nil, rpcclient.RPCCodeInternalError)}
+					res: rpcclient.NewRPCErrorResponse(fmt.Errorf("%v", rc), nil, rpcclient.RPCCodeInternalError)}
 			}
 		}()
 		r = s.rpcHandler(ctx, req.Body, nil /* not websockets */)
@@ -203,9 +202,9 @@ func (s *rpcServer) httpHandler(res http.ResponseWriter, req *http.Request) {
 // pre-v1 batch behaviour: 200 if at least one request succeeded).
 func rpcResponseHasError(res any) bool {
 	switch v := res.(type) {
-	case *sdkrpcclient.RPCResponse:
+	case *rpcclient.RPCResponse:
 		return v != nil && v.Error != nil
-	case []*sdkrpcclient.RPCResponse:
+	case []*rpcclient.RPCResponse:
 		if len(v) == 0 {
 			return false
 		}

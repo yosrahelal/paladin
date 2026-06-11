@@ -23,7 +23,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/query"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcserver"
 )
 
@@ -46,8 +45,8 @@ func (km *keyManager) initRPC() {
 
 func (km *keyManager) rpcWallets() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod0(func(ctx context.Context,
-	) ([]*pldapi.WalletInfo, rpcclient.RPCCode, error) {
-		return km.getWalletList(), 0, nil
+	) ([]*pldapi.WalletInfo, error) {
+		return km.getWalletList(), nil
 	})
 }
 
@@ -56,20 +55,20 @@ func (km *keyManager) rpcResolveKey() rpcserver.RPCHandler {
 		identifier string,
 		algorithm string,
 		verifierType string,
-	) (*pldapi.KeyMappingAndVerifier, rpcclient.RPCCode, error) {
+	) (*pldapi.KeyMappingAndVerifier, error) {
 		ctx = log.WithComponent(ctx, "keymanager")
 		mapping, err := km.ResolveKeyNewDatabaseTX(ctx, identifier, algorithm, verifierType)
-		return mapping, 0, err
+		return mapping, err
 	})
 }
 
 func (km *keyManager) rpcResolveEthAddress() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		identifier string,
-	) (*pldtypes.EthAddress, rpcclient.RPCCode, error) {
+	) (*pldtypes.EthAddress, error) {
 		ctx = log.WithComponent(ctx, "keymanager")
 		ethAddress, err := km.ResolveEthAddressNewDatabaseTX(ctx, identifier)
-		return ethAddress, 0, err
+		return ethAddress, err
 	})
 }
 
@@ -78,20 +77,20 @@ func (km *keyManager) rpcReverseKeyLookup() rpcserver.RPCHandler {
 		algorithm string,
 		verifierType string,
 		verifier string,
-	) (*pldapi.KeyMappingAndVerifier, rpcclient.RPCCode, error) {
+	) (*pldapi.KeyMappingAndVerifier, error) {
 		ctx = log.WithComponent(ctx, "keymanager")
 		mapping, err := km.ReverseKeyLookup(ctx, km.p.NOTX(), algorithm, verifierType, verifier)
-		return mapping, 0, err
+		return mapping, err
 	})
 }
 
 func (km *keyManager) rpcQueryKeys() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		jq query.QueryJSON,
-	) ([]*pldapi.KeyQueryEntry, rpcclient.RPCCode, error) {
+	) ([]*pldapi.KeyQueryEntry, error) {
 		ctx = log.WithComponent(ctx, "keymanager")
 		keys, err := km.QueryKeys(ctx, km.p.DB(), &jq)
-		return keys, 0, err
+		return keys, err
 	})
 }
 
@@ -112,16 +111,16 @@ func (km *keyManager) rpcSign() rpcserver.RPCHandler {
 		verifierType string,
 		payloadType string,
 		payload pldtypes.HexBytes,
-	) (pldtypes.HexBytes, rpcclient.RPCCode, error) {
+	) (pldtypes.HexBytes, error) {
 		ctx = log.WithComponent(ctx, "keymanager")
 		resolvedKey, err := km.ResolveKeyNewDatabaseTX(ctx, identifier, algorithm, verifierType)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		signature, err := km.Sign(ctx, resolvedKey, payloadType, payload)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
-		return signature, 0, nil
+		return signature, nil
 	})
 }

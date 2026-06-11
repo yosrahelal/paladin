@@ -25,6 +25,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/pldmsgs"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldclient"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/rpcclient"
 )
 
@@ -61,7 +62,7 @@ func (s *rpcServer) processRPC(ctx context.Context, rpcReq *rpcclient.RPCRequest
 			return rpcclient.NewRPCErrorResponse(
 				i18n.NewError(ctx, pldmsgs.MsgJSONRPCUnauthorized),
 				rpcReq.ID,
-				rpcclient.RPCCodeUnauthorized,
+				pldclient.RPCCodeUnauthorized,
 			), http.StatusForbidden, nil
 		}
 
@@ -73,7 +74,7 @@ func (s *rpcServer) processRPC(ctx context.Context, rpcReq *rpcclient.RPCRequest
 				return rpcclient.NewRPCErrorResponse(
 					i18n.NewError(ctx, pldmsgs.MsgJSONRPCUnauthorized),
 					rpcReq.ID,
-					rpcclient.RPCCodeUnauthorized,
+					pldclient.RPCCodeUnauthorized,
 				), http.StatusForbidden, nil
 			}
 
@@ -83,7 +84,7 @@ func (s *rpcServer) processRPC(ctx context.Context, rpcReq *rpcclient.RPCRequest
 				return rpcclient.NewRPCErrorResponse(
 					i18n.NewError(ctx, pldmsgs.MsgJSONRPCUnauthorized),
 					rpcReq.ID,
-					rpcclient.RPCCodeUnauthorized,
+					pldclient.RPCCodeUnauthorized,
 				), http.StatusForbidden, nil
 			}
 		}

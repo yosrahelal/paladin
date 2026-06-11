@@ -7,7 +7,6 @@ toolchain go1.24.3
 require (
 	github.com/LFDT-Paladin/paladin/common/go v0.0.0-00010101000000-000000000000
 	github.com/LFDT-Paladin/paladin/config v0.0.0-00010101000000-000000000000
-	github.com/LFDT-Paladin/paladin/toolkit v0.0.0-00010101000000-000000000000
 	github.com/aidarkhanov/nanoid v1.0.8
 	github.com/go-resty/resty/v2 v2.14.0
 	github.com/google/uuid v1.6.0
@@ -46,5 +45,3 @@ require (
 replace github.com/LFDT-Paladin/paladin/common/go => ../../common/go
 
 replace github.com/LFDT-Paladin/paladin/config => ../../config
-
-replace github.com/LFDT-Paladin/paladin/toolkit => ../../toolkit/go

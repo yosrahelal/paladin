@@ -22,7 +22,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/query"
-	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcserver"
 )
 
@@ -43,56 +42,56 @@ func (tm *transportManager) initRPC() {
 
 func (tm *transportManager) rpcNodeName() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod0(func(ctx context.Context,
-	) (string, rpcclient.RPCCode, error) {
+	) (string, error) {
 		// ctx = log.WithComponent(ctx, "transportmanager")
-		return tm.localNodeName, 0, nil
+		return tm.localNodeName, nil
 	})
 }
 
 func (tm *transportManager) rpcLocalTransports() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod0(func(ctx context.Context,
-	) ([]string, rpcclient.RPCCode, error) {
+	) ([]string, error) {
 		// ctx = log.WithComponent(ctx, "transportmanager")
-		return tm.getTransportNames(), 0, nil
+		return tm.getTransportNames(), nil
 	})
 }
 
 func (tm *transportManager) rpcLocalTransportDetails() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		transportName string,
-	) (string, rpcclient.RPCCode, error) {
+	) (string, error) {
 		ctx = log.WithComponent(ctx, "transportmanager")
 		transportDetails, err := tm.getLocalTransportDetails(ctx, transportName)
-		return transportDetails, 0, err
+		return transportDetails, err
 	})
 }
 
 func (tm *transportManager) rpcPeers() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod0(func(ctx context.Context) ([]*pldapi.PeerInfo, rpcclient.RPCCode, error) {
+	return rpcserver.RPCMethod0(func(ctx context.Context) ([]*pldapi.PeerInfo, error) {
 		// ctx = log.WithComponent(ctx, "transportmanager")
-		return tm.listActivePeerInfo(), 0, nil
+		return tm.listActivePeerInfo(), nil
 	})
 }
 
 func (tm *transportManager) rpcPeerInfo() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context, nodeName string) (*pldapi.PeerInfo, rpcclient.RPCCode, error) {
+	return rpcserver.RPCMethod1(func(ctx context.Context, nodeName string) (*pldapi.PeerInfo, error) {
 		// ctx = log.WithComponent(ctx, "transportmanager")
-		return tm.getPeerInfo(nodeName), 0, nil
+		return tm.getPeerInfo(nodeName), nil
 	})
 }
 
 func (tm *transportManager) rpcQueryReliableMessages() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.ReliableMessage, rpcclient.RPCCode, error) {
+	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.ReliableMessage, error) {
 		ctx = log.WithComponent(ctx, "transportmanager")
 		reliableMessages, err := tm.QueryReliableMessages(ctx, tm.persistence.NOTX(), &jq)
-		return reliableMessages, 0, err
+		return reliableMessages, err
 	})
 }
 
 func (tm *transportManager) rpcQueryReliableMessageAcks() rpcserver.RPCHandler {
-	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.ReliableMessageAck, rpcclient.RPCCode, error) {
+	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.ReliableMessageAck, error) {
 		ctx = log.WithComponent(ctx, "transportmanager")
 		reliableMessageAcks, err := tm.QueryReliableMessageAcks(ctx, tm.persistence.NOTX(), &jq)
-		return reliableMessageAcks, 0, err
+		return reliableMessageAcks, err
 	})
 }
