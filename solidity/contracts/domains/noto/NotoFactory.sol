@@ -9,30 +9,15 @@ import {INoto} from "../interfaces/INoto.sol";
 import {IPaladinContractRegistry_V0} from "../interfaces/IPaladinContractRegistry.sol";
 
 // NotoFactory version: 2
+error UnknownImplementation(string name);
+
 contract NotoFactory is
     Initializable,
     OwnableUpgradeable,
     UUPSUpgradeable,
     IPaladinContractRegistry_V0
 {
-    /// @custom:storage-location erc7201:paladin.storage.NotoFactory
-    struct NotoFactoryStorage {
-        mapping(string => address) implementations;
-    }
-
-    // keccak256(abi.encode(uint256(keccak256("paladin.storage.NotoFactory")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant NOTO_FACTORY_STORAGE_LOCATION =
-        0xe67f96c01195ce35b5ff7e8a6398509283372467daaa337070e1893bae2d8600;
-
-    function _getNotoFactoryStorage()
-        private
-        pure
-        returns (NotoFactoryStorage storage $)
-    {
-        assembly {
-            $.slot := NOTO_FACTORY_STORAGE_LOCATION
-        }
-    }
+    mapping(string => address) internal implementations;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -46,8 +31,7 @@ contract NotoFactory is
     function initialize(address defaultImplementation) public initializer {
         __Ownable_init(_msgSender());
         __UUPSUpgradeable_init();
-        NotoFactoryStorage storage $ = _getNotoFactoryStorage();
-        $.implementations["default"] = defaultImplementation;
+        implementations["default"] = defaultImplementation;
     }
 
     /**
@@ -60,8 +44,7 @@ contract NotoFactory is
         address notary,
         bytes calldata data
     ) external {
-        NotoFactoryStorage storage $ = _getNotoFactoryStorage();
-        _deploy($.implementations["default"], transactionId, name, symbol, notary, data);
+        _deploy(implementations["default"], transactionId, name, symbol, notary, data);
     }
 
     /**
@@ -71,8 +54,7 @@ contract NotoFactory is
         string calldata name,
         address implementation
     ) public onlyOwner {
-        NotoFactoryStorage storage $ = _getNotoFactoryStorage();
-        $.implementations[name] = implementation;
+        implementations[name] = implementation;
     }
 
     /**
@@ -81,8 +63,7 @@ contract NotoFactory is
     function getImplementation(
         string calldata name
     ) public view returns (address implementation) {
-        NotoFactoryStorage storage $ = _getNotoFactoryStorage();
-        return $.implementations[name];
+        return implementations[name];
     }
 
     /**
@@ -96,8 +77,9 @@ contract NotoFactory is
         address notary,
         bytes calldata data
     ) external {
-        NotoFactoryStorage storage $ = _getNotoFactoryStorage();
-        _deploy($.implementations[implementationName], transactionId, name, symbol, notary, data);
+        address impl = implementations[implementationName];
+        if (impl == address(0)) revert UnknownImplementation(implementationName);
+        _deploy(impl, transactionId, name, symbol, notary, data);
     }
 
     function _deploy(

@@ -190,7 +190,7 @@ Example output:
 NAME                                  STATUS      DOMAIN_REGISTRY                              DEPLOYMENT            LIBRARY
 paladindomain.core.paladin.io/noto    Available   0xa1de12834d636299d28d974a2742f203daa1c131   noto-factory-proxy    /app/domains/libnoto.so
 paladindomain.core.paladin.io/pente   Available   0xa146d815872f0b6f83e0b608d07b70102860764b   pente-factory-proxy   /app/domains/pente.jar
-paladindomain.core.paladin.io/zeto    Available   0x270b25f87da05af06fc99eebdc39dffc29cdf0e1   zeto-factory          /app/domains/libzeto.so
+paladindomain.core.paladin.io/zeto    Available   0x270b25f87da05af06fc99eebdc39dffc29cdf0e1   zeto-factory-proxy    /app/domains/libzeto.so
 
 NAME                                           TYPE   STATUS      CONTRACT
 paladinregistry.core.paladin.io/evm-registry   evm    Available   0xcd61b9b1efb57e46210c6eb52942bfcd5ce502a2
@@ -225,7 +225,7 @@ Here is a full example of the `values-attach.yaml`:
 ```yaml
 mode: attach
 smartContractsReferences:
-  notoFactorProxy:
+  notoFactoryProxy:
     address: "0xd93630936d854fb718b89537cce4acc97fd50463"
   zetoFactoryProxy:
     address: "0xc29ed8a902ff787445bdabee9ae5e2380089959d"

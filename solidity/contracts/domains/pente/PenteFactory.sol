@@ -14,24 +14,7 @@ contract PenteFactory is
     UUPSUpgradeable,
     IPaladinContractRegistry_V0
 {
-    /// @custom:storage-location erc7201:paladin.storage.PenteFactory
-    struct PenteFactoryStorage {
-        address implementation;
-    }
-
-    // keccak256(abi.encode(uint256(keccak256("paladin.storage.PenteFactory")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant PENTE_FACTORY_STORAGE_LOCATION =
-        0xadb3aa9174002b5e885df4cdfe8d596d5a9e86def387597bd1db82a714a08000;
-
-    function _getPenteFactoryStorage()
-        private
-        pure
-        returns (PenteFactoryStorage storage $)
-    {
-        assembly {
-            $.slot := PENTE_FACTORY_STORAGE_LOCATION
-        }
-    }
+    address internal implementation;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -41,18 +24,16 @@ contract PenteFactory is
     function initialize() public initializer {
         __Ownable_init(_msgSender());
         __UUPSUpgradeable_init();
-        PenteFactoryStorage storage $ = _getPenteFactoryStorage();
-        $.implementation = address(new PentePrivacyGroup());
+        implementation = address(new PentePrivacyGroup());
     }
 
     function newPrivacyGroup(
         bytes32 transactionId,
         bytes memory data
     ) external {
-        PenteFactoryStorage storage $ = _getPenteFactoryStorage();
         address instance = address(
             new ERC1967Proxy(
-                $.implementation,
+                implementation,
                 abi.encodeCall(PentePrivacyGroup.initialize, (data))
             )
         );
