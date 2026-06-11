@@ -689,7 +689,11 @@ func (es *eventStream) dispatcher() {
 			if msg.confirmed != nil {
 				// A block (or catchup range) was confirmed to contain no matching events- advance the checkpoint
 				if msg.confirmed.blockNumber > es.checkpoint.Load() {
-					es.updateCheckpoint(es.ctx, es.bi.persistence.NOTX(), msg.confirmed.blockNumber)
+					err := es.updateCheckpoint(es.ctx, es.bi.persistence.NOTX(), int64(msg.confirmed.blockNumber))
+					if err != nil {
+						l.Debugf("event stream dispatcher ending (during checkpoint update)")
+						return
+					}
 				}
 				continue
 			}
