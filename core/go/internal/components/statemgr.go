@@ -75,8 +75,6 @@ type StateManager interface {
 	CheckPendingPrivateStateDataForContract(ctx context.Context, dbTX persistence.DBTX, contract string, block int64) (complete bool, err error)
 }
 
-// PendingPrivateStateDataEntry represents a single private state referenced by a confirmed transaction.
-// It carries the minimum context needed to write a pending_private_state_data row.
 type PendingPrivateStateDataEntry struct {
 	StateID     pldtypes.HexBytes
 	Contract    pldtypes.EthAddress

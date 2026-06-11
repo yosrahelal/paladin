@@ -646,7 +646,8 @@ func (es *eventStream) processNotifiedBlock(block *eventStreamBlock, fullBlock b
 		}
 	}
 	if dispatched == 0 {
-		// No matching events in this block — advance the in-memory checkpoint without a DB write.
+		// No matching events in this block - tell the dispatcher so it can advance the checkpoint
+		// in correct sequence with blocks it is dispatching events for.
 		es.sendCheckpointAdvance(int64(block.block.Number))
 	}
 }
@@ -686,12 +687,9 @@ func (es *eventStream) dispatcher() {
 		select {
 		case msg := <-es.dispatch:
 			if msg.confirmed != nil {
-				// A block (or catchup range) was confirmed to contain no matching events- advance the in-memory checkpoint.
-				// This checkpoint could also be persisted for use on restart. It's a tradeoff between writing a checkpoint
-				// per block, per event indexer in normal operation vs. needing to catch up over a bigger range of blocks
-				// on node restart. I've opted to take the hit at start up but this could be changed in the future.
+				// A block (or catchup range) was confirmed to contain no matching events- advance the checkpoint
 				if msg.confirmed.blockNumber > es.checkpoint.Load() {
-					es.checkpoint.Store(msg.confirmed.blockNumber)
+					es.updateCheckpoint(es.ctx, es.bi.persistence.NOTX(), msg.confirmed.blockNumber)
 				}
 				continue
 			}

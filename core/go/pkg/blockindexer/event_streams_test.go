@@ -1014,6 +1014,62 @@ func TestSendToDispatcherClosedNoBlock(t *testing.T) {
 	}, false)
 }
 
+func TestProcessNotifiedBlockNoMatch(t *testing.T) {
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	es := &eventStream{
+		bi:  bi,
+		ctx: ctx,
+		definition: &EventStreamDefinition{
+			Sources: []EventStreamSource{{
+				ABI: abi.ABI{testABI[0]}, // EventA (no params)
+			}},
+		},
+		dispatch:   make(chan *detectorMsg, 5),
+		serializer: pldtypes.JSONFormatOptions("").GetABISerializerIgnoreErrors(ctx),
+	}
+
+	// Empty block (no logs at all) → blockConfirmed sent, nothing else
+	es.processNotifiedBlock(&eventStreamBlock{
+		block: &BlockInfoJSONRPC{Number: 1},
+	}, true)
+	require.Len(t, es.dispatch, 1)
+	msg := <-es.dispatch
+	assert.NotNil(t, msg.confirmed)
+	assert.Nil(t, msg.event)
+	assert.Equal(t, int64(1), msg.confirmed.blockNumber)
+
+	// Block with a log that doesn't match the ABI (wrong topic) → blockConfirmed
+	es.processNotifiedBlock(&eventStreamBlock{
+		block: &BlockInfoJSONRPC{Number: 2},
+		events: []*LogJSONRPC{{
+			BlockNumber:     2,
+			TransactionHash: ethtypes.MustNewHexBytes0xPrefix(pldtypes.RandHex(32)),
+			Topics:          []ethtypes.HexBytes0xPrefix{topicB}, // EventB, not in our sources
+		}},
+	}, true)
+	require.Len(t, es.dispatch, 1)
+	msg = <-es.dispatch
+	assert.NotNil(t, msg.confirmed)
+	assert.Nil(t, msg.event)
+	assert.Equal(t, int64(2), msg.confirmed.blockNumber)
+
+	// Block with a matching log → eventDispatch sent, no blockConfirmed
+	es.processNotifiedBlock(&eventStreamBlock{
+		block: &BlockInfoJSONRPC{Number: 3},
+		events: []*LogJSONRPC{{
+			BlockNumber:     3,
+			TransactionHash: ethtypes.MustNewHexBytes0xPrefix(pldtypes.RandHex(32)),
+			Topics:          []ethtypes.HexBytes0xPrefix{topicA}, // EventA matches
+		}},
+	}, true)
+	require.Len(t, es.dispatch, 1)
+	msg = <-es.dispatch
+	assert.Nil(t, msg.confirmed)
+	assert.NotNil(t, msg.event)
+}
+
 func TestDispatcherDispatchClosed(t *testing.T) {
 	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
 	defer done()
@@ -1059,6 +1115,49 @@ func TestDispatcherDispatchClosed(t *testing.T) {
 	<-es.dispatcherDone
 
 	assert.True(t, called)
+}
+
+func TestDispatcherBlockConfirmedCheckpoint(t *testing.T) {
+	ctx, bi, _, p, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	cancellableCtx, cancelCtx := context.WithCancel(ctx)
+
+	esID := uuid.New()
+	es := &eventStream{
+		bi:  bi,
+		ctx: cancellableCtx,
+		definition: &EventStreamDefinition{
+			ID:   esID,
+			Type: EventStreamTypeInternal.Enum(),
+		},
+		batchSize:         10,
+		batchTimeout:      1 * time.Second,
+		dispatch:          make(chan *detectorMsg, 5),
+		dispatcherDone:    make(chan struct{}),
+		dispatcherStarted: make(chan struct{}),
+	}
+
+	// Expect one DB write for block 5; block 3 is below the checkpoint so it should be skipped.
+	p.Mock.ExpectExec("INSERT.*event_stream_checkpoints").WillReturnResult(sqlmock.NewResult(1, 1))
+
+	go func() {
+		assert.NotPanics(t, func() { es.dispatcher() })
+	}()
+	<-es.dispatcherStarted
+
+	// Advance checkpoint to block 5 — expect a DB write.
+	es.dispatch <- &detectorMsg{confirmed: &blockConfirmed{blockNumber: 5}}
+
+	// Wait until the checkpoint has been stored in memory before sending the stale one.
+	require.Eventually(t, func() bool { return es.checkpoint.Load() == 5 }, testTimeout(t), time.Millisecond)
+	assert.Equal(t, int64(5), es.checkpoint.Load())
+
+	cancelCtx()
+	<-es.dispatcherDone
+
+	assert.Equal(t, int64(5), es.checkpoint.Load())
+	require.NoError(t, p.Mock.ExpectationsWereMet())
 }
 
 func TestProcessCatchupEventPageFailRPC(t *testing.T) {
