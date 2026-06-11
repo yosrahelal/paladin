@@ -81,6 +81,7 @@ type coordinatorTransaction struct {
 	pendingPreDispatchRequest    *common.IdempotentRequest
 
 	//Configuration
+	blockHeightTolerance           uint64
 	requestTimeout                 time.Duration
 	stateTimeout                   time.Duration
 	finalizingGracePeriod          int // number of heartbeat intervals that the transaction will remain in one of the terminal states ( Reverted or Confirmed) before it is removed from memory and no longer reported in heartbeats
@@ -96,7 +97,6 @@ type coordinatorTransaction struct {
 	engineIntegration                 common.EngineIntegration
 	refreshBlockHeight                func(context.Context)
 	getBlockHeight                    func() int64
-	blockHeightTolerance              uint64
 	syncPoints                        syncpoints.SyncPoints
 	components                        components.AllComponents
 	domainAPI                         components.DomainSmartContract

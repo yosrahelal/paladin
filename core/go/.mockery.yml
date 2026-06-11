@@ -20,6 +20,7 @@ packages:
   github.com/LFDT-Paladin/paladin/core/pkg/blockindexer:    
     interfaces:
       BlockIndexer:
+      EventStream:
   github.com/LFDT-Paladin/paladin/core/pkg/ethclient:
     config:
       all: true
@@ -55,7 +56,7 @@ packages:
   github.com/LFDT-Paladin/paladin/core/internal/sequencer/common:
     interfaces:
       EngineIntegration:
-      Clock: 
+      Clock:
     config:
       pkgname: sequencercommonmocks
       dir: mocks/sequencercommonmocks

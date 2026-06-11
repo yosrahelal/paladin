@@ -29,6 +29,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/statevisibilitytrackermocks"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -878,4 +879,69 @@ func Test_action_NotifyPreAssembleDependentOfSelection_Success(t *testing.T) {
 
 	err := action_NotifyDependentsOfSelection(ctx, txn, nil)
 	require.NoError(t, err)
+}
+
+func Test_action_LogAssembleRejection_LogsAndReturnsNil(t *testing.T) {
+	ctx := t.Context()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
+
+	event := &AssembleRequestRejectedEvent{
+		BaseCoordinatorEvent:   BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		RejectionReason:        engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
+		CoordinatorBlockHeight: 100,
+		AssemblerBlockHeight:   100,
+	}
+
+	err := action_LogAssembleRejection(ctx, txn, event)
+	require.NoError(t, err)
+}
+
+func Test_validator_IsAssembleRejection_MatchesSingleReason(t *testing.T) {
+	ctx := t.Context()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
+
+	v := validator_IsAssembleRejection(engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE)
+	event := &AssembleRequestRejectedEvent{
+		RejectionReason: engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+	}
+
+	match, err := v(ctx, txn, event)
+	require.NoError(t, err)
+	assert.True(t, match)
+}
+
+func Test_validator_IsAssembleRejection_MatchesAnyOfMultipleReasons(t *testing.T) {
+	ctx := t.Context()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
+
+	v := validator_IsAssembleRejection(
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
+	)
+
+	for _, reason := range []engineProto.RejectionReason{
+		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
+	} {
+		t.Run(reason.String(), func(t *testing.T) {
+			event := &AssembleRequestRejectedEvent{RejectionReason: reason}
+			match, err := v(ctx, txn, event)
+			require.NoError(t, err)
+			assert.True(t, match)
+		})
+	}
+}
+
+func Test_validator_IsAssembleRejection_NoMatch(t *testing.T) {
+	ctx := t.Context()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).Build()
+
+	v := validator_IsAssembleRejection(engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE)
+	event := &AssembleRequestRejectedEvent{
+		RejectionReason: engineProto.RejectionReason_NOT_CURRENT_DELEGATE,
+	}
+
+	match, err := v(ctx, txn, event)
+	require.NoError(t, err)
+	assert.False(t, match)
 }

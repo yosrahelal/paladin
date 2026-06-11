@@ -158,10 +158,15 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
-					// Both checks pass: assemble and transition.
+					// Private state incomplete: reject so the coordinator retries once states have arrived.
+					Validator: validator_IsPrivateStateDataPendingForAssembly,
+					Actions:   []ActionRule{{Action: action_RejectAssemblyPrivateStateDataPending}},
+				}, {
+					// All checks pass: assemble and transition.
 					Validator: statemachine.ValidatorAnd(
 						validator_AssembleRequestFromCurrentDelegate,
 						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateDataPendingForAssembly),
 					),
 					Actions: []ActionRule{{Action: action_AssembleRequestReceived}},
 					Transitions: []Transition{
@@ -274,10 +279,15 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
-					// Both checks pass: assemble and proceed.
+					// Private state incomplete: reject without entering the assembly flow.
+					Validator: validator_IsPrivateStateDataPendingForAssembly,
+					Actions:   []ActionRule{{Action: action_RejectAssemblyPrivateStateDataPending}},
+				}, {
+					// All checks pass: assemble and proceed.
 					Validator: statemachine.ValidatorAnd(
 						validator_AssembleRequestFromCurrentDelegate,
 						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateDataPendingForAssembly),
 					),
 					// For some reason we've been asked to assemble again. We must not have moved to endorsement gathering,
 					// reverted, or parked. This could be because of a temporary issue preventing assembly (e.g. we couldn't
@@ -329,10 +339,15 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
-					// Both checks pass: assemble and proceed.
+					// Private state incomplete: reject without entering the assembly flow.
+					Validator: validator_IsPrivateStateDataPendingForAssembly,
+					Actions:   []ActionRule{{Action: action_RejectAssemblyPrivateStateDataPending}},
+				}, {
+					// All checks pass: assemble and proceed.
 					Validator: statemachine.ValidatorAnd(
 						validator_AssembleRequestFromCurrentDelegate,
 						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateDataPendingForAssembly),
 					),
 					Actions: []ActionRule{
 						{Action: action_AssembleRequestReceived},
@@ -414,10 +429,15 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
-					// Both checks pass: assemble and proceed.
+					// Private state incomplete: reject without entering the assembly flow.
+					Validator: validator_IsPrivateStateDataPendingForAssembly,
+					Actions:   []ActionRule{{Action: action_RejectAssemblyPrivateStateDataPending}},
+				}, {
+					// All checks pass: assemble and proceed.
 					Validator: statemachine.ValidatorAnd(
 						validator_AssembleRequestFromCurrentDelegate,
 						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateDataPendingForAssembly),
 					),
 					Actions: []ActionRule{
 						{Action: action_AssembleRequestReceived},
@@ -533,10 +553,15 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
-					// Both checks pass: assemble and proceed.
+					// Private state incomplete: reject without entering the assembly flow.
+					Validator: validator_IsPrivateStateDataPendingForAssembly,
+					Actions:   []ActionRule{{Action: action_RejectAssemblyPrivateStateDataPending}},
+				}, {
+					// All checks pass: assemble and proceed.
 					Validator: statemachine.ValidatorAnd(
 						validator_AssembleRequestFromCurrentDelegate,
 						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateDataPendingForAssembly),
 					),
 					// The coordinator must have decided that it was necessary to re-assemble with different available
 					// states so we go back to assembling state for another attempt
@@ -613,10 +638,15 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
-					// Both checks pass: assemble and proceed.
+					// Private state incomplete: reject without entering the assembly flow.
+					Validator: validator_IsPrivateStateDataPendingForAssembly,
+					Actions:   []ActionRule{{Action: action_RejectAssemblyPrivateStateDataPending}},
+				}, {
+					// All checks pass: assemble and proceed.
 					Validator: statemachine.ValidatorAnd(
 						validator_AssembleRequestFromCurrentDelegate,
 						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateDataPendingForAssembly),
 					),
 					// The coordinator must have decided that it was necessary to re-assemble with different available
 					// states so we go back to assembling state for another attempt
@@ -691,10 +721,15 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
+					// Private state incomplete: reject without entering the assembly flow.
+					Validator: validator_IsPrivateStateDataPendingForAssembly,
+					Actions:   []ActionRule{{Action: action_RejectAssemblyPrivateStateDataPending}},
+				}, {
 					// Both checks pass: assemble and transition.
 					Validator: statemachine.ValidatorAnd(
 						validator_AssembleRequestFromCurrentDelegate,
 						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateDataPendingForAssembly),
 					),
 					Actions: []ActionRule{{Action: action_AssembleRequestReceived}},
 					Transitions: []Transition{
@@ -744,10 +779,15 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
-					// Both checks pass: assemble and proceed.
+					// Private state incomplete: reject without entering the assembly flow.
+					Validator: validator_IsPrivateStateDataPendingForAssembly,
+					Actions:   []ActionRule{{Action: action_RejectAssemblyPrivateStateDataPending}},
+				}, {
+					// All checks pass: assemble and proceed.
 					Validator: statemachine.ValidatorAnd(
 						validator_AssembleRequestFromCurrentDelegate,
 						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateDataPendingForAssembly),
 					),
 					Actions: []ActionRule{
 						{
@@ -808,10 +848,15 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_AssembleBlockHeightToleranceExceeded,
 					Actions:   []ActionRule{{Action: action_SendAssembleBlockHeightRejection}},
 				}, {
-					// Both checks pass: assemble and proceed.
+					// Private state incomplete: reject without entering the assembly flow.
+					Validator: validator_IsPrivateStateDataPendingForAssembly,
+					Actions:   []ActionRule{{Action: action_RejectAssemblyPrivateStateDataPending}},
+				}, {
+					// All checks pass: assemble and proceed.
 					Validator: statemachine.ValidatorAnd(
 						validator_AssembleRequestFromCurrentDelegate,
 						statemachine.ValidatorNot(validator_AssembleBlockHeightToleranceExceeded),
+						statemachine.ValidatorNot(validator_IsPrivateStateDataPendingForAssembly),
 					),
 					Actions: []ActionRule{
 						{Action: action_AssembleRequestReceived},

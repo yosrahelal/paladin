@@ -34,6 +34,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm/clause"
 )
 
 type mockComponents struct {
@@ -197,5 +198,105 @@ func TestGetTransactionStatesFail(t *testing.T) {
 	db.ExpectQuery("SELECT.*states").WillReturnError(fmt.Errorf("pop"))
 
 	_, err := ss.GetTransactionStates(ctx, ss.p.NOTX(), uuid.New())
+	assert.Regexp(t, "pop", err)
+}
+
+// ─── GetStateIDsMissingPrivateData ────────────────────────────────────────────
+
+func insertTestState(t *testing.T, ss *stateManager, domainName string, id pldtypes.HexBytes) {
+	t.Helper()
+	schemaHash := pldtypes.Bytes32Keccak([]byte("test"))
+	err := ss.p.DB().
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&pldapi.Schema{
+			ID:         schemaHash,
+			DomainName: domainName,
+			Type:       pldapi.SchemaTypeABI.Enum(),
+		}).Error
+	require.NoError(t, err)
+	err = ss.p.DB().
+		Table("states").
+		Create(&pldapi.StateBase{
+			ID:         id,
+			DomainName: domainName,
+			Schema:     schemaHash,
+		}).Error
+	require.NoError(t, err)
+}
+
+func TestGetStateIDsMissingPrivateData_EmptyInput(t *testing.T) {
+	ctx, ss, _, done := newDBTestStateManager(t)
+	defer done()
+
+	missing, err := ss.getStateIDsMissingPrivateData(ctx, ss.p.NOTX(), "domain1", nil)
+	require.NoError(t, err)
+	assert.Nil(t, missing)
+}
+
+func TestGetStateIDsMissingPrivateData_AllPresent(t *testing.T) {
+	ctx, ss, _, done := newDBTestStateManager(t)
+	defer done()
+
+	id1 := pldtypes.HexBytes(pldtypes.RandBytes(32))
+	id2 := pldtypes.HexBytes(pldtypes.RandBytes(32))
+	insertTestState(t, ss, "domain1", id1)
+	insertTestState(t, ss, "domain1", id2)
+
+	missing, err := ss.getStateIDsMissingPrivateData(ctx, ss.p.NOTX(), "domain1", []pldtypes.HexBytes{id1, id2})
+	require.NoError(t, err)
+	assert.Empty(t, missing)
+}
+
+func TestGetStateIDsMissingPrivateData_NonePresent(t *testing.T) {
+	ctx, ss, _, done := newDBTestStateManager(t)
+	defer done()
+
+	id1 := pldtypes.HexBytes(pldtypes.RandBytes(32))
+	id2 := pldtypes.HexBytes(pldtypes.RandBytes(32))
+
+	missing, err := ss.getStateIDsMissingPrivateData(ctx, ss.p.NOTX(), "domain1", []pldtypes.HexBytes{id1, id2})
+	require.NoError(t, err)
+	require.Len(t, missing, 2)
+	missingSet := map[string]bool{missing[0].String(): true, missing[1].String(): true}
+	assert.True(t, missingSet[id1.String()])
+	assert.True(t, missingSet[id2.String()])
+}
+
+func TestGetStateIDsMissingPrivateData_Mixed(t *testing.T) {
+	ctx, ss, _, done := newDBTestStateManager(t)
+	defer done()
+
+	presentID := pldtypes.HexBytes(pldtypes.RandBytes(32))
+	missingID := pldtypes.HexBytes(pldtypes.RandBytes(32))
+	insertTestState(t, ss, "domain1", presentID)
+
+	missing, err := ss.getStateIDsMissingPrivateData(ctx, ss.p.NOTX(), "domain1", []pldtypes.HexBytes{presentID, missingID})
+	require.NoError(t, err)
+	require.Len(t, missing, 1)
+	assert.Equal(t, missingID.String(), missing[0].String())
+}
+
+func TestGetStateIDsMissingPrivateData_DomainScopedCorrectly(t *testing.T) {
+	// A state present in domain2 must not count as present when querying domain1.
+	ctx, ss, _, done := newDBTestStateManager(t)
+	defer done()
+
+	id := pldtypes.HexBytes(pldtypes.RandBytes(32))
+	insertTestState(t, ss, "domain2", id)
+
+	missing, err := ss.getStateIDsMissingPrivateData(ctx, ss.p.NOTX(), "domain1", []pldtypes.HexBytes{id})
+	require.NoError(t, err)
+	require.Len(t, missing, 1)
+	assert.Equal(t, id.String(), missing[0].String())
+}
+
+func TestGetStateIDsMissingPrivateData_DBError(t *testing.T) {
+	ctx, ss, db, _, done := newDBMockStateManager(t)
+	defer done()
+
+	db.ExpectQuery("SELECT.*id.*states").WillReturnError(fmt.Errorf("pop"))
+
+	id := pldtypes.HexBytes(pldtypes.RandBytes(32))
+	_, err := ss.getStateIDsMissingPrivateData(ctx, ss.p.NOTX(), "domain1", []pldtypes.HexBytes{id})
 	assert.Regexp(t, "pop", err)
 }

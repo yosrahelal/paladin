@@ -21,9 +21,9 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
-	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -97,8 +97,7 @@ func TestStateMachine_Idle_TransactionCreated_EpochBoundary_EndorserMode_ResetsT
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
 
-	// action_refreshBlockHeight + sendDelegationRequest (OnTransitionTo Sending) both query GetBlockHeight.
-	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(10)).Times(2)
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(10))
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "A", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -208,7 +207,6 @@ func TestStateMachine_Idle_TransactionCreated_TransitionsToSending_SendsDelegati
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
 
-	// action_refreshBlockHeight (in Idle) + sendDelegationRequest (OnTransitionTo Sending)
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Times(2)
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
@@ -238,7 +236,6 @@ func TestStateMachine_Idle_TransactionCreated_DuplicateID_StaysIdle(t *testing.T
 	assert.Equal(t, State_Idle, o.GetCurrentState())
 	assert.Len(t, o.transactionsByID, 1, "duplicate transaction must not be double-tracked")
 }
-
 
 // EndorserNodesDiscovered in Idle updates endorserCandidates, recomputes the priority list, and
 // resets currentActiveCoordinator to priorityList[0] via action_ResetToTopPriorityCoordinator.
@@ -484,7 +481,6 @@ func TestStateMachine_Observing_TransactionCreated_DuplicateID_StaysObserving(t 
 	assert.Equal(t, State_Observing, o.GetCurrentState())
 	assert.Len(t, o.transactionsByID, 1, "duplicate must not be tracked twice")
 }
-
 
 // TransactionStateTransition to Final in Observing removes the transaction from memory.
 func TestStateMachine_Observing_TransactionStateTransition_ToFinal_CleansUpTransaction(t *testing.T) {
@@ -842,8 +838,8 @@ func TestStateMachine_Sending_DelegationRejected_BlockHeightTolerance_StaysSendi
 		Build()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRequestRejectedEvent{
-		RejectionReason:       engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
-		OriginatorBlockHeight: 50,
+		RejectionReason:        engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		OriginatorBlockHeight:  50,
 		CoordinatorBlockHeight: 100,
 		BlockHeightTolerance:   10,
 	}))
@@ -913,7 +909,6 @@ func TestStateMachine_Sending_EndorserNodesDiscovered_UpdatesCandidatesAndRecomp
 	assert.Equal(t, []string{"new-node1", "new-node2"}, o.endorserCandidates)
 	assert.ElementsMatch(t, []string{"new-node1", "new-node2"}, o.coordinatorPriorityList)
 }
-
 
 // HeartbeatReceived in Sending from a new node → endorser pool grows and priority list is recomputed.
 func TestStateMachine_Sending_HeartbeatReceived_NewSender_UpdatesEndorserCandidates(t *testing.T) {
