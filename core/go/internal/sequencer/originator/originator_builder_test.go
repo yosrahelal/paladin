@@ -31,7 +31,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/mocks/sequencertransportmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/stretchr/testify/mock"
 )
 
 const (
@@ -48,7 +47,7 @@ type OriginatorBuilderForTesting struct {
 	metrics                            metrics.DistributedSequencerMetrics
 	sequencerConfig                    *pldconf.SequencerConfig
 	blockRange                         *uint64
-	currentBlockHeight                 *uint64
+	currentEffectiveBlockHeight        *uint64
 	endorserCandidates                 []string
 	coordinatorPriorityList            []string
 	currentActiveCoordinator           *string
@@ -57,6 +56,8 @@ type OriginatorBuilderForTesting struct {
 	failoverIndex                      *int
 	transactions                       []transaction.OriginatorTransaction
 	useMockTransportWriter             bool
+	checkStateComplete                 bool
+	checkStateErr                      error
 }
 
 type OriginatorDependencyMocks struct {
@@ -67,10 +68,11 @@ type OriginatorDependencyMocks struct {
 
 func NewOriginatorBuilderForTesting(t *testing.T, state State) *OriginatorBuilderForTesting {
 	return &OriginatorBuilderForTesting{
-		t:               t,
-		state:           state,
-		metrics:         metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
-		sequencerConfig: &pldconf.SequencerDefaults,
+		t:                  t,
+		state:              state,
+		metrics:            metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
+		sequencerConfig:    &pldconf.SequencerDefaults,
+		checkStateComplete: true, // default: state is complete
 	}
 }
 
@@ -111,7 +113,7 @@ func (b *OriginatorBuilderForTesting) BlockRange(n uint64) *OriginatorBuilderFor
 }
 
 func (b *OriginatorBuilderForTesting) CurrentBlockHeight(n uint64) *OriginatorBuilderForTesting {
-	b.currentBlockHeight = &n
+	b.currentEffectiveBlockHeight = &n
 	return b
 }
 
@@ -149,6 +151,17 @@ func (b *OriginatorBuilderForTesting) Transactions(txns ...transaction.Originato
 	return b
 }
 
+func (b *OriginatorBuilderForTesting) WithCheckPendingPrivateStateData(complete bool) *OriginatorBuilderForTesting {
+	b.checkStateComplete = complete
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) WithCheckPendingPrivateStateDataError(err error) *OriginatorBuilderForTesting {
+	b.checkStateComplete = false
+	b.checkStateErr = err
+	return b
+}
+
 // WithMockTransportWriter switches the transport writer from the default SentMessageRecorder to a
 // full testify mock. This enables per-call assertions (e.g. assert the exact coordinator node that
 // a delegation request was sent to). Requires a *testing.T for mock cleanup registration.
@@ -179,9 +192,6 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 		SentMessageRecorder: testutil.NewSentMessageRecorder(),
 		EngineIntegration:   sequencercommonmocks.NewEngineIntegration(b.t),
 	}
-	// Default stub so tests that call Start() don't need to set up GetBlockHeight explicitly.
-	// Individual tests can override this with a more specific expectation.
-	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0), nil).Maybe()
 
 	if b.useMockTransportWriter {
 		mocks.TransportWriter = sequencertransportmocks.NewTransportWriter(b.t)
@@ -226,8 +236,8 @@ func (b *OriginatorBuilderForTesting) Build() (*originator, *OriginatorDependenc
 	if b.blockRange != nil {
 		originator.blockRange = *b.blockRange
 	}
-	if b.currentBlockHeight != nil {
-		originator.currentBlockHeight = *b.currentBlockHeight
+	if b.currentEffectiveBlockHeight != nil {
+		originator.effectiveBlockHeight = *b.currentEffectiveBlockHeight
 	}
 	if b.endorserCandidates != nil {
 		originator.endorserCandidates = b.endorserCandidates

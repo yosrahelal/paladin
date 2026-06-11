@@ -34,7 +34,7 @@ func TestDedupeSortedCoordinatorEndorserNodes_RemovesDuplicatesAndSorts(t *testi
 
 func Test_ComputeCoordinatorPriorityList_SingleNode_ReturnsThatNode(t *testing.T) {
 	ctx := context.Background()
-	list := ComputeCoordinatorPriorityList(ctx, []string{"node1"}, 1000, 100)
+	list := ComputeCoordinatorPriorityList(ctx, []string{"node1"}, 1000)
 	require.Len(t, list, 1)
 	assert.Equal(t, "node1", list[0])
 }
@@ -42,31 +42,33 @@ func Test_ComputeCoordinatorPriorityList_SingleNode_ReturnsThatNode(t *testing.T
 func Test_ComputeCoordinatorPriorityList_MultipleNodes_TopIsInPool(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2", "node3"}
-	list := ComputeCoordinatorPriorityList(ctx, pool, 1000, 100)
+	list := ComputeCoordinatorPriorityList(ctx, pool, 1000)
 	require.Len(t, list, len(pool))
 	assert.Contains(t, pool, list[0], "highest-priority node must be a member of the pool")
 }
 
-func Test_ComputeCoordinatorPriorityList_SameBlockRange_ReturnsSameTop(t *testing.T) {
+func Test_ComputeCoordinatorPriorityList_SameEpoch_ReturnsSameTop(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2", "node3"}
-	blockRange := uint64(100)
+	// heights 1000, 1050, 1099 all map to effective=1000 with blockRange=100
+	effectiveHeight := ComputeEffectiveBlockHeight(1000, 100)
 
-	l1 := ComputeCoordinatorPriorityList(ctx, pool, 1000, blockRange)
-	l2 := ComputeCoordinatorPriorityList(ctx, pool, 1050, blockRange)
-	l3 := ComputeCoordinatorPriorityList(ctx, pool, 1099, blockRange)
+	l1 := ComputeCoordinatorPriorityList(ctx, pool, effectiveHeight)
+	l2 := ComputeCoordinatorPriorityList(ctx, pool, ComputeEffectiveBlockHeight(1050, 100))
+	l3 := ComputeCoordinatorPriorityList(ctx, pool, ComputeEffectiveBlockHeight(1099, 100))
 
-	assert.Equal(t, l1[0], l2[0], "same block range epoch should produce the same top node")
-	assert.Equal(t, l2[0], l3[0], "same block range epoch should produce the same top node")
+	assert.Equal(t, l1[0], l2[0], "same epoch should produce the same top node")
+	assert.Equal(t, l2[0], l3[0], "same epoch should produce the same top node")
 }
 
-func Test_ComputeCoordinatorPriorityList_DifferentBlockRanges_CanSelectDifferentTopNode(t *testing.T) {
+func Test_ComputeCoordinatorPriorityList_DifferentEpochs_CanSelectDifferentTopNode(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2"}
 	blockRange := uint64(50)
 
-	l1 := ComputeCoordinatorPriorityList(ctx, pool, 100, blockRange)
-	l2 := ComputeCoordinatorPriorityList(ctx, pool, 150, blockRange)
+	// heights 100 and 150 are both epoch-aligned with blockRange=50
+	l1 := ComputeCoordinatorPriorityList(ctx, pool, ComputeEffectiveBlockHeight(100, blockRange))
+	l2 := ComputeCoordinatorPriorityList(ctx, pool, ComputeEffectiveBlockHeight(150, blockRange))
 
 	assert.Contains(t, pool, l1[0])
 	assert.Contains(t, pool, l2[0])
@@ -75,11 +77,10 @@ func Test_ComputeCoordinatorPriorityList_DifferentBlockRanges_CanSelectDifferent
 func Test_ComputeCoordinatorPriorityList_TwoCallsAgree(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2", "node3"}
-	blockRange := uint64(100)
-	blockHeight := uint64(1000)
+	effectiveHeight := ComputeEffectiveBlockHeight(1000, 100)
 
-	first := ComputeCoordinatorPriorityList(ctx, pool, blockHeight, blockRange)
-	second := ComputeCoordinatorPriorityList(ctx, pool, blockHeight, blockRange)
+	first := ComputeCoordinatorPriorityList(ctx, pool, effectiveHeight)
+	second := ComputeCoordinatorPriorityList(ctx, pool, effectiveHeight)
 
 	assert.Equal(t, first, second, "two independent calls with the same inputs must return the same list")
 }
@@ -88,28 +89,29 @@ func Test_ComputeCoordinatorPriorityList_EpochBoundary_SameBoundaryProducesSameT
 	ctx := context.Background()
 	pool := []string{"a-node", "b-node", "m-node", "z-node"}
 	blockRange := uint64(100)
-	atBoundary := ComputeCoordinatorPriorityList(ctx, pool, 1000, blockRange)
-	atEnd := ComputeCoordinatorPriorityList(ctx, pool, 1099, blockRange)
+	// Both raw heights fall within the same epoch; callers pre-compute effective height.
+	atBoundary := ComputeCoordinatorPriorityList(ctx, pool, ComputeEffectiveBlockHeight(1000, blockRange))
+	atEnd := ComputeCoordinatorPriorityList(ctx, pool, ComputeEffectiveBlockHeight(1099, blockRange))
 	assert.Equal(t, atBoundary[0], atEnd[0])
 }
 
 func Test_ComputeCoordinatorPriorityList_IsStableForFixedInputs(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"a", "b", "c", "d", "e"}
-	blockRange := uint64(50)
-	first := ComputeCoordinatorPriorityList(ctx, pool, 75, blockRange)
-	second := ComputeCoordinatorPriorityList(ctx, pool, 75, blockRange)
+	effectiveHeight := ComputeEffectiveBlockHeight(75, 50) // → 50
+	first := ComputeCoordinatorPriorityList(ctx, pool, effectiveHeight)
+	second := ComputeCoordinatorPriorityList(ctx, pool, effectiveHeight)
 	assert.Equal(t, first, second)
 	assert.Contains(t, pool, first[0])
 }
 
 func Test_ComputeCoordinatorPriorityList_WrapAroundOrder(t *testing.T) {
-	// Fix a pool and block height so the hash deterministically picks index 2 ("node3").
+	// Fix a pool and effective block height so the hash deterministically picks index 2 ("node3").
 	// With wrap-around the expected order is [node3, node4, node1, node2].
 	ctx := context.Background()
 	pool := []string{"node1", "node2", "node3", "node4"}
 
-	list := ComputeCoordinatorPriorityList(ctx, pool, 1000, 100)
+	list := ComputeCoordinatorPriorityList(ctx, pool, 1000)
 	require.Len(t, list, len(pool))
 
 	// Locate where the top node sits in the original pool.
@@ -128,17 +130,16 @@ func Test_ComputeCoordinatorPriorityList_WrapAroundOrder(t *testing.T) {
 	}
 }
 
-
 func Test_ComputeCoordinatorPriorityList_EmptyPool_ReturnsNil(t *testing.T) {
 	ctx := context.Background()
-	list := ComputeCoordinatorPriorityList(ctx, nil, 1000, 100)
+	list := ComputeCoordinatorPriorityList(ctx, nil, 1000)
 	assert.Nil(t, list)
 }
 
 func Test_ComputeCoordinatorPriorityList_ListContainsAllPoolNodes(t *testing.T) {
 	ctx := context.Background()
 	pool := []string{"node1", "node2", "node3"}
-	list := ComputeCoordinatorPriorityList(ctx, pool, 1000, 100)
+	list := ComputeCoordinatorPriorityList(ctx, pool, 1000)
 	require.Len(t, list, len(pool))
 	for _, node := range pool {
 		assert.Contains(t, list, node, "all pool nodes must appear in the priority list")
@@ -157,25 +158,19 @@ func Test_PriorityIndexOf_ReturnsLenForUnknownNode(t *testing.T) {
 	assert.Equal(t, len(list), PriorityIndexOf(list, "unknown"))
 }
 
-func Test_DecodeNewBlockHeight_NewEpoch(t *testing.T) {
-	event := &NewBlockEvent{BlockHeight: 100}
-	newHeight, newEpoch := DecodeNewBlockHeight(0, 100, event)
-	require.Equal(t, uint64(100), newHeight)
-	assert.True(t, newEpoch)
+func Test_ComputeEffectiveBlockHeight_AtEpochBoundary(t *testing.T) {
+	// height=100 exactly on a boundary with blockRange=100 → effective=100
+	assert.Equal(t, uint64(100), ComputeEffectiveBlockHeight(100, 100))
 }
 
-func Test_DecodeNewBlockHeight_SameEpoch(t *testing.T) {
-	event := &NewBlockEvent{BlockHeight: 50}
-	newHeight, newEpoch := DecodeNewBlockHeight(0, 100, event)
-	require.Equal(t, uint64(50), newHeight)
-	assert.False(t, newEpoch)
+func Test_ComputeEffectiveBlockHeight_MidEpoch(t *testing.T) {
+	// height=50 within the first epoch of 100 → effective=0
+	assert.Equal(t, uint64(0), ComputeEffectiveBlockHeight(50, 100))
 }
 
-func Test_DecodeNewBlockHeight_SameEpochMidRange(t *testing.T) {
-	event := &NewBlockEvent{BlockHeight: 1099}
-	newHeight, newEpoch := DecodeNewBlockHeight(1000, 100, event)
-	require.Equal(t, uint64(1099), newHeight)
-	assert.False(t, newEpoch)
+func Test_ComputeEffectiveBlockHeight_MidSecondEpoch(t *testing.T) {
+	// height=1099 within the 11th epoch of 100 → effective=1000
+	assert.Equal(t, uint64(1000), ComputeEffectiveBlockHeight(1099, 100))
 }
 
 func TestResolveCoordinatorSelectionConfig_Static_ValidLocator(t *testing.T) {

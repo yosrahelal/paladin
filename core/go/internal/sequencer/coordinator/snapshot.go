@@ -137,7 +137,7 @@ func (c *coordinator) getSnapshot(ctx context.Context) *common.CoordinatorSnapsh
 		PooledTransactions:     pooledTransactions,
 		ConfirmedTransactions:  confirmedTransactions,
 		CoordinatorState:       coordinatorState,
-		BlockHeight:            c.currentBlockHeight,
+		BlockHeight:            uint64(c.currentBlockHeight),
 		EndorserCandidates:     c.endorserCandidates,
 	}
 }

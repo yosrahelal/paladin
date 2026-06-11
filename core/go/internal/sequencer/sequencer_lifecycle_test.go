@@ -229,7 +229,8 @@ func TestSequencerManager_LoadSequencer_NewSequencer(t *testing.T) {
 	mocks.setupDefaultExpectations(ctx, contractAddr)
 	mockDomainSmartContract := componentsmocks.NewDomainSmartContract(t)
 	mockDomain := componentsmocks.NewDomain(t)
-	mockDomainSmartContract.EXPECT().Domain().Return(mockDomain).Once()
+	mockDomain.EXPECT().GetBlockHeight().Return(int64(0))
+	mockDomainSmartContract.EXPECT().Domain().Return(mockDomain)
 	mockDomainSmartContract.EXPECT().ContractConfig().Return(&prototk.ContractConfig{StaticCoordinator: proto.String("test-identity@test-coordinator")}).Maybe()
 	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(mockDomainSmartContract, nil)
 	mocks.stateManager.EXPECT().NewDomainContext(ctx, mockDomain, *contractAddr).Return(componentsmocks.NewDomainContext(t)).Once()
@@ -894,9 +895,8 @@ func TestSequencerManager_StopAllSequencers_MultipleSequencers(t *testing.T) {
 // Tests for PreInit, PostInit, Start, Stop, and NewDistributedSequencerManager
 
 func TestSequencerManager_PreInit_Success(t *testing.T) {
-	ctx := context.Background()
 	config := &pldconf.SequencerConfig{}
-	sMgr := NewDistributedSequencerManager(ctx, config).(*sequencerManager)
+	sMgr := NewDistributedSequencerManager(t.Context(), config).(*sequencerManager)
 
 	// Create mocks
 	preInitComponents := componentsmocks.NewPreInitComponents(t)
@@ -913,43 +913,8 @@ func TestSequencerManager_PreInit_Success(t *testing.T) {
 	// Verify results
 	require.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.NotNil(t, result.PreCommitHandler)
+	assert.Nil(t, result.PreCommitHandler)
 	assert.NotNil(t, sMgr.metrics)
-
-	// Verify PreCommitHandler can be called
-	testBlocks := []*pldapi.IndexedBlock{
-		{Number: 100},
-		{Number: 101},
-	}
-	testTransactions := []*blockindexer.IndexedTransactionNotify{}
-	mockDBTX := persistencemocks.NewDBTX(t)
-	mockDBTX.EXPECT().AddPostCommit(mock.Anything).Once()
-
-	err = result.PreCommitHandler(ctx, mockDBTX, testBlocks, testTransactions)
-	require.NoError(t, err)
-}
-
-func TestSequencerManager_PreInit_PreCommitHandler_EmptyBlocks(t *testing.T) {
-	ctx := context.Background()
-	config := &pldconf.SequencerConfig{}
-	sMgr := NewDistributedSequencerManager(ctx, config).(*sequencerManager)
-
-	// Create mocks
-	preInitComponents := componentsmocks.NewPreInitComponents(t)
-	metricsManager := metricsmocks.NewMetrics(t)
-	registry := prometheus.NewRegistry()
-
-	// Setup expectations
-	preInitComponents.EXPECT().MetricsManager().Return(metricsManager).Once()
-	metricsManager.EXPECT().Registry().Return(registry).Once()
-
-	// Call PreInit
-	result, err := sMgr.PreInit(preInitComponents)
-	require.NoError(t, err)
-
-	// Test PreCommitHandler exists
-	// In practice, blocks should never be empty, but we test that the handler exists
-	assert.NotNil(t, result.PreCommitHandler)
 }
 
 func TestSequencerManager_PostInit_Success(t *testing.T) {
@@ -1151,7 +1116,6 @@ func TestNewDistributedSequencerManager_Success(t *testing.T) {
 	assert.NotNil(t, sMgr.sequencers)
 	assert.Equal(t, 0, len(sMgr.sequencers))
 	assert.Equal(t, 20, sMgr.targetActiveSequencersLimit)
-	assert.Equal(t, int64(0), sMgr.blockHeight)
 }
 
 func TestNewDistributedSequencerManager_DefaultLimits(t *testing.T) {
@@ -1178,75 +1142,6 @@ func TestNewDistributedSequencerManager_MinimumLimits(t *testing.T) {
 
 	// Verify minimum limits are applied
 	assert.GreaterOrEqual(t, sMgr.targetActiveSequencersLimit, pldconf.SequencerMinimum.TargetActiveSequencers)
-}
-
-func TestSequencerManager_OnNewBlockHeight(t *testing.T) {
-	ctx := context.Background()
-	mocks := newSequencerLifecycleTestMocks(t)
-	sMgr := newSequencerManagerForTesting(t, mocks)
-
-	// Test initial block height is 0
-	assert.Equal(t, int64(0), sMgr.GetBlockHeight())
-
-	// Test setting block height
-	testHeight := int64(100)
-	sMgr.OnNewBlockHeight(ctx, testHeight)
-	assert.Equal(t, testHeight, sMgr.GetBlockHeight())
-
-	// Test updating block height
-	newHeight := int64(200)
-	sMgr.OnNewBlockHeight(ctx, newHeight)
-	assert.Equal(t, newHeight, sMgr.GetBlockHeight())
-
-	// Test concurrent updates to ensure thread safety
-	var wg sync.WaitGroup
-	numGoroutines := 10
-	expectedHeight := int64(1000)
-
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func(height int64) {
-			defer wg.Done()
-			sMgr.OnNewBlockHeight(ctx, height)
-		}(expectedHeight + int64(i))
-	}
-
-	wg.Wait()
-	// After concurrent updates, the height should be one of the values we set
-	// (the exact value depends on which goroutine finished last)
-	finalHeight := sMgr.GetBlockHeight()
-	assert.GreaterOrEqual(t, finalHeight, expectedHeight)
-	assert.Less(t, finalHeight, expectedHeight+int64(numGoroutines))
-}
-
-func TestSequencerManager_GetBlockHeight(t *testing.T) {
-	ctx := context.Background()
-	mocks := newSequencerLifecycleTestMocks(t)
-	sMgr := newSequencerManagerForTesting(t, mocks)
-
-	// Test initial block height
-	assert.Equal(t, int64(0), sMgr.GetBlockHeight())
-
-	// Test after setting block height
-	testHeight := int64(42)
-	sMgr.OnNewBlockHeight(ctx, testHeight)
-	assert.Equal(t, testHeight, sMgr.GetBlockHeight())
-
-	// Test concurrent reads to ensure thread safety
-	var wg sync.WaitGroup
-	numReaders := 20
-	sMgr.OnNewBlockHeight(ctx, int64(500))
-
-	for i := 0; i < numReaders; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			height := sMgr.GetBlockHeight()
-			assert.Equal(t, int64(500), height)
-		}()
-	}
-
-	wg.Wait()
 }
 
 func TestSequencerManager_GetNodeName(t *testing.T) {
@@ -1714,161 +1609,4 @@ func TestHeartbeatLoop_StopsWhenContextCancelled(t *testing.T) {
 
 	cancel()
 	<-done
-}
-
-func TestOnNewBlockHeight_StoresHeight(t *testing.T) {
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
-
-	sm.OnNewBlockHeight(context.Background(), 42)
-
-	assert.Equal(t, int64(42), sm.GetBlockHeight())
-}
-
-func TestOnNewBlockHeight_NoSequencers_NoEvents(t *testing.T) {
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
-
-	// No sequencers registered — QueueEvent must not be called on any mock.
-	// Any unexpected call would cause testify to fail the test immediately.
-	sm.OnNewBlockHeight(context.Background(), 100)
-
-	// Give the goroutine time to run and confirm it exits without calling any mock.
-	time.Sleep(20 * time.Millisecond)
-	assert.Equal(t, int64(100), sm.GetBlockHeight())
-}
-
-func TestOnNewBlockHeight_DispatchesNewBlockToAllSequencers(t *testing.T) {
-	ctx := context.Background()
-
-	addr1 := pldtypes.RandAddress()
-	addr2 := pldtypes.RandAddress()
-
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
-
-	// Create separate mock coordinator and originator for the second sequencer.
-	coord2 := coordinatormocks.NewCoordinator(t)
-	orig2 := originatormocks.NewOriginator(t)
-
-	const expectedHeight = int64(999)
-
-	coordReceived := make(chan struct{}, 2)
-	origReceived := make(chan struct{}, 2)
-
-	mocks.coordinator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == uint64(expectedHeight)
-	})).Run(func(_ context.Context, _ common.Event) {
-		coordReceived <- struct{}{}
-	}).Return().Once()
-
-	mocks.originator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == uint64(expectedHeight)
-	})).Run(func(_ context.Context, _ common.Event) {
-		origReceived <- struct{}{}
-	}).Return().Once()
-
-	coord2.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == uint64(expectedHeight)
-	})).Run(func(_ context.Context, _ common.Event) {
-		coordReceived <- struct{}{}
-	}).Return().Once()
-
-	orig2.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == uint64(expectedHeight)
-	})).Run(func(_ context.Context, _ common.Event) {
-		origReceived <- struct{}{}
-	}).Return().Once()
-
-	sm.sequencers[addr1.String()] = &sequencer{
-		contractAddress: addr1.String(),
-		coordinator:     mocks.coordinator,
-		originator:      mocks.originator,
-		cancelCtx:       func() {},
-	}
-	sm.sequencers[addr2.String()] = &sequencer{
-		contractAddress: addr2.String(),
-		coordinator:     coord2,
-		originator:      orig2,
-		cancelCtx:       func() {},
-	}
-
-	sm.OnNewBlockHeight(ctx, expectedHeight)
-
-	// Wait for all four QueueEvent calls to arrive.
-	for i := 0; i < 2; i++ {
-		select {
-		case <-coordReceived:
-		case <-time.After(5 * time.Second):
-			t.Fatal("timed out waiting for coordinator NewBlockEvent dispatch")
-		}
-	}
-	for i := 0; i < 2; i++ {
-		select {
-		case <-origReceived:
-		case <-time.After(5 * time.Second):
-			t.Fatal("timed out waiting for originator NewBlockEvent dispatch")
-		}
-	}
-
-	assert.Equal(t, expectedHeight, sm.GetBlockHeight())
-}
-
-func TestNotifySequencersNewBlock_NewBlockCancelsPrevious(t *testing.T) {
-	ctx := context.Background()
-	mocks := newSequencerLifecycleTestMocks(t)
-	sm := newSequencerManagerForTesting(t, mocks)
-	addr := pldtypes.RandAddress()
-
-	block1CoordCalled := make(chan struct{})
-	block2CoordDone := make(chan struct{})
-	block2OrigDone := make(chan struct{})
-
-	// Block 1 coordinator: block inside Run until context is cancelled, simulating a full event channel.
-	mocks.coordinator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == 1
-	})).Run(func(ctx context.Context, _ common.Event) {
-		close(block1CoordCalled)
-		<-ctx.Done()
-	}).Return().Once()
-
-	// Block 1 originator: may be called with an already-cancelled context after coordinator unblocks.
-	mocks.originator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == 1
-	})).Return().Maybe()
-
-	// Block 2: both coordinator and originator must receive the event.
-	mocks.coordinator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == 2
-	})).Run(func(_ context.Context, _ common.Event) {
-		close(block2CoordDone)
-	}).Return().Once()
-
-	mocks.originator.EXPECT().QueueEvent(mock.Anything, mock.MatchedBy(func(e interface{}) bool {
-		ev, ok := e.(*common.NewBlockEvent)
-		return ok && ev.BlockHeight == 2
-	})).Run(func(_ context.Context, _ common.Event) {
-		close(block2OrigDone)
-	}).Return().Once()
-
-	sm.sequencers[addr.String()] = newSequencerForTesting(addr, mocks)
-
-	sm.OnNewBlockHeight(ctx, 1)
-
-	// Wait until block 1's goroutine is blocking inside coordinator.QueueEvent.
-	<-block1CoordCalled
-
-	// Arrival of block 2 must cancel block 1's context and then deliver itself.
-	sm.OnNewBlockHeight(ctx, 2)
-
-	<-block2CoordDone
-	<-block2OrigDone
-	assert.Equal(t, int64(2), sm.GetBlockHeight())
 }

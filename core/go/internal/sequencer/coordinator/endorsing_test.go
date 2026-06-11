@@ -23,6 +23,7 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -33,7 +34,6 @@ import (
 
 // partyKeyVerifier is the resolved verifier string used for party key resolution in tests.
 const partyKeyVerifier = "party-verifier"
-
 
 // buildEndorsementEvent creates a minimal EndorsementRequestReceivedEvent for tests.
 func buildEndorsementEvent(fromNode string) *EndorsementRequestReceivedEvent {
@@ -81,6 +81,78 @@ func setupEndorsementMocks(t *testing.T, mocks *CoordinatorDependencyMocks) (*co
 	mocks.AllComponents.On("KeyManager").Return(mockKeyManager).Maybe()
 
 	return mockDomainContext, mockKeyManager
+}
+
+// --- validator_IsPrivateStateDataPendingForEndorsement tests ---
+
+func Test_validator_IsPrivateStateDataPendingForEndorsement_Complete_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(true, nil) // lowWatermark = 100 - 10
+
+	event := &EndorsementRequestReceivedEvent{
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
+		AttestationRequest:     &prototk.AttestationRequest{},
+	}
+	result, err := validator_IsPrivateStateDataPendingForEndorsement(ctx, c, event)
+	require.NoError(t, err)
+	assert.False(t, result)
+}
+
+func Test_validator_IsPrivateStateDataPendingForEndorsement_Incomplete_ReturnsTrue(t *testing.T) {
+	ctx := context.Background()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil) // lowWatermark = 100 - 10
+
+	event := &EndorsementRequestReceivedEvent{
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
+		AttestationRequest:     &prototk.AttestationRequest{},
+	}
+	result, err := validator_IsPrivateStateDataPendingForEndorsement(ctx, c, event)
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
+func Test_validator_IsPrivateStateDataPendingForEndorsement_Error_Propagates(t *testing.T) {
+	ctx := context.Background()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
+	dbErr := fmt.Errorf("db error")
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, dbErr)
+
+	event := &EndorsementRequestReceivedEvent{
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
+		AttestationRequest:     &prototk.AttestationRequest{},
+	}
+	_, err := validator_IsPrivateStateDataPendingForEndorsement(ctx, c, event)
+	assert.ErrorIs(t, err, dbErr)
+}
+
+func Test_action_RejectEndorsementPrivateStateDataPending_SendsRejection(t *testing.T) {
+	ctx := context.Background()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
+		WithMockTransportWriter().
+		Build()
+
+	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
+		int64(100), int64(0), int64(10),
+	).Return(nil)
+
+	event := &EndorsementRequestReceivedEvent{
+		TransactionId:          "tx-1",
+		IdempotencyKey:         "ik-1",
+		FromNode:               "node2",
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
+		AttestationRequest:     &prototk.AttestationRequest{Name: "att1"},
+		Party:                  "party1@node2",
+	}
+	err := action_RejectEndorsementPrivateStateDataPending(ctx, c, event)
+	require.NoError(t, err)
 }
 
 // --- validator tests ---
@@ -148,6 +220,24 @@ func Test_validator_IsEndorsementRequestFromSelf_DifferentNode_ReturnsFalse(t *t
 	result, err := validator_IsEndorsementRequestFromSelf(ctx, c, event)
 	require.NoError(t, err)
 	assert.False(t, result, "request from a different node should not match")
+}
+
+
+func Test_handleEndorsementRequest_SendEndorsementErrorFails_LogsAndContinues(t *testing.T) {
+	ctx := t.Context()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
+		WithMockTransportWriter().
+		Build()
+
+	// Trigger sendErr via a party identity error (empty identity), and have SendEndorsementError itself fail.
+	mocks.TransportWriter.EXPECT().
+		SendEndorsementError(mock.Anything, "tx-1", "ik-1", mock.Anything, mock.Anything, mock.Anything, mock.Anything, "node2").
+		Return(fmt.Errorf("transport failure"))
+
+	event := buildEndorsementEvent("node2")
+	event.Party = "@node2" // empty identity — triggers sendErr immediately
+	c.handleEndorsementRequest(ctx, event)
+	// Should not panic; the SendEndorsementError error is only logged.
 }
 
 // --- action_UpdateActiveCoordinatorFromEndorsementRequest tests ---

@@ -57,6 +57,7 @@ function App() {
   const [txPage, txSetPage] = useState(0);
   const [txRowsPerPage, setTxRowsPerPage] = useState(10);
   const [txFromBlock, setTxFromBlock] = useState<number>();
+  const [txShowTxsWithReceipt, txSetShowTxsWithReceipt] = useState(false);
   const [submissionsSection, setSubmissionsSection] = useState<'pending' | 'failed'>('pending');
   const [domainSortAscending, setDomainSortAscending] = useState(false);
   const [domainsPage, txSetDomainsPage] = useState(0);
@@ -164,6 +165,8 @@ function App() {
                       setRowsPerPage={setTxRowsPerPage}
                       fromBlock={txFromBlock}
                       setFromBlock={setTxFromBlock}
+                      showTxsWithReceipt={txShowTxsWithReceipt}
+                      setShowTxsWithReceipt={txSetShowTxsWithReceipt}
                     />} />
                     <Route path={AppRoutes.Submissions} element={<Submissions
                       section={submissionsSection}

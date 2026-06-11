@@ -33,7 +33,6 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 
-	"github.com/LFDT-Paladin/paladin/core/pkg/blockindexer"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
@@ -55,12 +54,8 @@ type sequencerManager struct {
 	syncPoints                  syncpoints.SyncPoints
 	metrics                     metrics.DistributedSequencerMetrics
 	sequencers                  map[string]*sequencer
-	blockHeight                 int64
-	blockHeightMutex            sync.RWMutex
 	heartbeatInterval           time.Duration
 	targetActiveSequencersLimit int // Max number of sequencers this node aims to retain in memory concurrently. Hitting this limit will cause an attempt to remove the lowest priority sequencer from memory, and hence require it to be recreated from persisted state if it is needed in the future
-	blockNotifyMu               sync.Mutex
-	blockNotifyCancel           context.CancelFunc
 }
 
 // Init implements Engine.
@@ -68,15 +63,7 @@ func (sMgr *sequencerManager) PreInit(c components.PreInitComponents) (*componen
 	log.L(sMgr.ctx).Infof("PreInit distributed sequencer manager")
 	sMgr.metrics = metrics.InitMetrics(sMgr.ctx, c.MetricsManager().Registry())
 
-	return &components.ManagerInitResult{
-		PreCommitHandler: func(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) error {
-			latestBlockNumber := blocks[len(blocks)-1].Number
-			dbTX.AddPostCommit(func(ctx context.Context) {
-				sMgr.OnNewBlockHeight(ctx, latestBlockNumber)
-			})
-			return nil
-		},
-	}, nil
+	return &components.ManagerInitResult{}, nil
 }
 
 func (sMgr *sequencerManager) PostInit(c components.AllComponents) error {
@@ -528,52 +515,6 @@ func (sMgr *sequencerManager) handleTx(ctx context.Context, dbTX persistence.DBT
 	}
 
 	return nil
-}
-
-func (sMgr *sequencerManager) OnNewBlockHeight(ctx context.Context, blockHeight int64) {
-	log.L(ctx).Tracef("new block height %d", blockHeight)
-	sMgr.blockHeightMutex.Lock()
-	sMgr.blockHeight = blockHeight
-	sMgr.blockHeightMutex.Unlock()
-
-	go sMgr.notifySequencersNewBlock(ctx, blockHeight)
-}
-
-func (sMgr *sequencerManager) notifySequencersNewBlock(ctx context.Context, blockHeight int64) {
-	// Cancel any in-progress delivery of an older block, then take ownership.
-	sMgr.blockNotifyMu.Lock()
-	if sMgr.blockNotifyCancel != nil {
-		sMgr.blockNotifyCancel()
-	}
-	notifyCtx, cancel := context.WithCancel(ctx)
-	sMgr.blockNotifyCancel = cancel
-	sMgr.blockNotifyMu.Unlock()
-
-	// Hold the lock only long enough to snapshot the sequencer list — no blocking
-	// calls may be made while the lock is held.
-	sMgr.sequencersLock.RLock()
-	seqs := make([]*sequencer, 0, len(sMgr.sequencers))
-	for _, seq := range sMgr.sequencers {
-		seqs = append(seqs, seq)
-	}
-	sMgr.sequencersLock.RUnlock()
-
-	event := &common.NewBlockEvent{
-		BaseEvent: common.BaseEvent{
-			EventTime: time.Now(),
-		},
-		BlockHeight: uint64(blockHeight),
-	}
-	for _, seq := range seqs {
-		seq.coordinator.QueueEvent(notifyCtx, event)
-		seq.originator.QueueEvent(notifyCtx, event)
-	}
-}
-
-func (sMgr *sequencerManager) GetBlockHeight() int64 {
-	sMgr.blockHeightMutex.RLock()
-	defer sMgr.blockHeightMutex.RUnlock()
-	return sMgr.blockHeight
 }
 
 func (sMgr *sequencerManager) GetNodeName() string {

@@ -24,13 +24,45 @@ import (
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 )
 
+// validator_IsPrivateStateDataPendingForEndorsement returns true when private state data is
+// pending arrival at this node up to the coordinator's low watermark (coordinatorBlockHeight - tolerance).
+func validator_IsPrivateStateDataPendingForEndorsement(ctx context.Context, c *coordinator, event common.Event) (bool, error) {
+	e := event.(*EndorsementRequestReceivedEvent)
+	lowWatermark := e.CoordinatorBlockHeight - e.BlockHeightTolerance
+	complete, err := c.engineIntegration.CheckPendingPrivateStateData(ctx, lowWatermark)
+	return !complete, err
+}
+
+// action_RejectEndorsementPrivateStateDataPending sends an EndorsementRejection with reason
+// PrivateStateDataPending to the requester. The endorser stays in its current state; the
+// coordinator will retry once the pending private state data has arrived.
+func action_RejectEndorsementPrivateStateDataPending(ctx context.Context, c *coordinator, event common.Event) error {
+	e := event.(*EndorsementRequestReceivedEvent)
+	log.L(ctx).Warnf("rejecting endorsement request from %s due to pending private state data (coordinator=%d, endorser=%d, tolerance=%d)",
+		e.FromNode, e.CoordinatorBlockHeight, c.currentBlockHeight, e.BlockHeightTolerance)
+	return c.transportWriter.SendEndorsementRejection(
+		ctx,
+		e.TransactionId,
+		e.IdempotencyKey,
+		c.contractAddress.String(),
+		e.AttestationRequest.Name,
+		e.Party,
+		e.FromNode,
+		engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
+		e.CoordinatorBlockHeight,
+		int64(c.currentBlockHeight),
+		e.BlockHeightTolerance,
+	)
+}
+
 // validator_IsEndorsementBlockHeightToleranceExceeded returns true when the absolute difference
-// between this coordinator's current block height and the requesting coordinator's block height
-// exceeds the configured block height tolerance.
+// between this coordinator's stored block height (refreshed by action_RefreshBlockHeight)
+// and the requesting coordinator's block height exceeds the configured block height tolerance.
 func validator_IsEndorsementBlockHeightToleranceExceeded(_ context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*EndorsementRequestReceivedEvent)
-	coordinatorBlockHeight := uint64(e.CoordinatorBlockHeight)
-	diff := max(c.currentBlockHeight, coordinatorBlockHeight) - min(c.currentBlockHeight, coordinatorBlockHeight)
+	localHeight := uint64(c.currentBlockHeight)
+	remoteHeight := uint64(e.CoordinatorBlockHeight)
+	diff := max(localHeight, remoteHeight) - min(localHeight, remoteHeight)
 	return diff > c.blockHeightTolerance, nil
 }
 
@@ -50,7 +82,7 @@ func action_RejectEndorsementBlockHeight(ctx context.Context, c *coordinator, ev
 		e.FromNode,
 		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
 		e.CoordinatorBlockHeight,
-		int64(c.currentBlockHeight),
+		c.currentBlockHeight,
 		int64(c.blockHeightTolerance),
 	)
 }

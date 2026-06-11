@@ -206,7 +206,6 @@ func (t *coordinatorTransaction) resetEndorsementRequests(ctx context.Context) {
 }
 
 func (t *coordinatorTransaction) requestEndorsement(ctx context.Context, idempotencyKey uuid.UUID, party string, attRequest *prototk.AttestationRequest) error {
-	blockHeight := t.getCurrentBlockHeight()
 	err := t.transportWriter.SendEndorsementRequest(
 		ctx,
 		t.pt.ID,
@@ -221,7 +220,7 @@ func (t *coordinatorTransaction) requestEndorsement(ctx context.Context, idempot
 		toEndorsableList(t.pt.PostAssembly.OutputStates),
 		toEndorsableList(t.pt.PostAssembly.InfoStates),
 		t.clock.Now().Add(t.stateTimeout),
-		blockHeight,
+		t.getBlockHeight(),
 		int64(t.blockHeightTolerance),
 	)
 	if err != nil {
@@ -245,6 +244,11 @@ func toEndorsableList(states []*components.FullState) []*prototk.EndorsableState
 func action_Endorsed(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
 	e := event.(*EndorsedEvent)
 	return t.applyEndorsement(ctx, e.Endorsement, e.RequestID)
+}
+
+func action_RefreshBlockHeight(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
+	txn.refreshBlockHeight(ctx)
+	return nil
 }
 
 func action_SendEndorsementRequests(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {

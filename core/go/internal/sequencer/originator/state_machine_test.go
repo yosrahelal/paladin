@@ -21,9 +21,9 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
-	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
 	"github.com/LFDT-Paladin/paladin/core/mocks/originatortransactionmocks"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -84,22 +84,29 @@ func TestStateMachine_Idle_OnTransitionTo_NoEndorserMode_NoChange(t *testing.T) 
 	assert.Equal(t, 3, o.failoverIndex, "failoverIndex must not change when priority list is empty")
 }
 
-// NewBlock on an epoch boundary while already Idle resets to top-priority coordinator, giving a
-// fresh start for any subsequent Sending entry.
-func TestStateMachine_Idle_NewBlock_EpochBoundary_EndorserMode_ResetsToTopPriority(t *testing.T) {
+// TransactionCreated in Idle with an epoch boundary resets to top-priority coordinator before
+// delegating, giving a fresh start for any subsequent Sending entry.
+func TestStateMachine_Idle_TransactionCreated_EpochBoundary_EndorserMode_ResetsToTopPriority(t *testing.T) {
 	ctx := context.Background()
-	// blockRange=10, currentHeight=5 → epoch 0; newHeight=10 → epoch 1 ⇒ boundary.
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).
+	// blockRange=10, currentEffective=0 (epoch 0); newHeight=10 → epoch 1 ⇒ boundary.
+	builder := NewOriginatorBuilderForTesting(t, State_Idle).
 		CurrentActiveCoordinator("C").
 		CoordinatorPriorityList("A", "B", "C").
-		CurrentBlockHeight(5).
 		BlockRange(10).
-		Build()
+		CurrentBlockHeight(0).
+		WithMockTransportWriter(t)
+	o, mocks := builder.Build()
 
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 10}))
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(10))
+	mocks.TransportWriter.EXPECT().
+		SendDelegationRequest(mock.Anything, "A", mock.Anything, mock.Anything).
+		Return(nil).Once()
 
-	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.Equal(t, "A", o.currentActiveCoordinator, "must reset to top priority on epoch boundary while idle")
+	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator("sender@node1").Build()
+	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &TransactionCreatedEvent{Transaction: txn}))
+
+	assert.Equal(t, State_Sending, o.GetCurrentState())
+	assert.Equal(t, "A", o.currentActiveCoordinator, "must reset to top priority on epoch boundary before sending")
 	assert.Equal(t, 1, o.failoverIndex, "failoverIndex must be 1 after reset to top priority")
 }
 
@@ -110,9 +117,9 @@ func TestStateMachine_Idle_HeartbeatReceived_ActiveState_TransitionsToObserving(
 	builder := NewOriginatorBuilderForTesting(t, State_Idle).
 		CurrentActiveCoordinator("old-coordinator").
 		CoordinatorPriorityList("node2", "node1").
-		NodeName("node1")
+		NodeName("node1").
+		HeartbeatIntervalsSinceLastReceive(5)
 	o, _ := builder.Build()
-	o.heartbeatIntervalsSinceLastReceive = 5
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
@@ -200,6 +207,7 @@ func TestStateMachine_Idle_TransactionCreated_TransitionsToSending_SendsDelegati
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Times(2)
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -227,17 +235,6 @@ func TestStateMachine_Idle_TransactionCreated_DuplicateID_StaysIdle(t *testing.T
 
 	assert.Equal(t, State_Idle, o.GetCurrentState())
 	assert.Len(t, o.transactionsByID, 1, "duplicate transaction must not be double-tracked")
-}
-
-// NewBlock event in Idle updates currentBlockHeight; stays Idle.
-func TestStateMachine_Idle_NewBlock_UpdatesBlockHeight_StaysIdle(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Idle).CurrentBlockHeight(100).Build()
-
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 200}))
-
-	assert.Equal(t, State_Idle, o.GetCurrentState())
-	assert.Equal(t, uint64(200), o.currentBlockHeight)
 }
 
 // EndorserNodesDiscovered in Idle updates endorserCandidates, recomputes the priority list, and
@@ -320,6 +317,7 @@ func TestStateMachine_Observing_TransactionCreated_TransitionsToSending_SendsDel
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Once()
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -338,9 +336,9 @@ func TestStateMachine_Observing_HeartbeatReceived_ActiveState_UpdatesCoordinator
 	builder := NewOriginatorBuilderForTesting(t, State_Observing).
 		CurrentActiveCoordinator("old-coordinator").
 		CoordinatorPriorityList("other-node", "new-coordinator").
-		FailoverIndex(1)
+		FailoverIndex(1).
+		HeartbeatIntervalsSinceLastReceive(3)
 	o, _ := builder.Build()
-	o.heartbeatIntervalsSinceLastReceive = 3
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
@@ -363,9 +361,9 @@ func TestStateMachine_Observing_HeartbeatReceived_ActiveState_UpdatesCoordinator
 func TestStateMachine_Observing_HeartbeatReceived_ActiveFlushState_ResetsTimerAndUpdatesCoordinator(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(t, State_Observing).
-		CurrentActiveCoordinator("existing-coordinator")
+		CurrentActiveCoordinator("existing-coordinator").
+		HeartbeatIntervalsSinceLastReceive(3)
 	o, _ := builder.Build()
-	o.heartbeatIntervalsSinceLastReceive = 3
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
@@ -385,9 +383,9 @@ func TestStateMachine_Observing_HeartbeatReceived_ActiveFlushState_ResetsTimerAn
 func TestStateMachine_Observing_HeartbeatReceived_ClosingState_NoTimerResetAndNoCoordinatorUpdate(t *testing.T) {
 	ctx := context.Background()
 	builder := NewOriginatorBuilderForTesting(t, State_Observing).
-		CurrentActiveCoordinator("existing-coordinator")
+		CurrentActiveCoordinator("existing-coordinator").
+		HeartbeatIntervalsSinceLastReceive(3)
 	o, _ := builder.Build()
-	o.heartbeatIntervalsSinceLastReceive = 3
 	ca := builder.GetContractAddress()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
@@ -484,15 +482,6 @@ func TestStateMachine_Observing_TransactionCreated_DuplicateID_StaysObserving(t 
 	assert.Len(t, o.transactionsByID, 1, "duplicate must not be tracked twice")
 }
 
-// NewBlock event in Observing updates currentBlockHeight; stays Observing.
-func TestStateMachine_Observing_NewBlock_UpdatesBlockHeight_StaysObserving(t *testing.T) {
-	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).CurrentBlockHeight(10).Build()
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 20}))
-	assert.Equal(t, State_Observing, o.GetCurrentState())
-	assert.Equal(t, uint64(20), o.currentBlockHeight)
-}
-
 // TransactionStateTransition to Final in Observing removes the transaction from memory.
 func TestStateMachine_Observing_TransactionStateTransition_ToFinal_CleansUpTransaction(t *testing.T) {
 	ctx := context.Background()
@@ -553,6 +542,7 @@ func TestStateMachine_Sending_TransactionCreated_CreatesTxnAndDelegates(t *testi
 		WithMockTransportWriter(t)
 	o, mocks := builder.Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Once()
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -598,6 +588,7 @@ func TestStateMachine_Sending_HeartbeatReceived_DroppedTransaction_Redelegates(t
 	o, mocks := builder.Build()
 	ca := builder.GetContractAddress()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Once()
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -661,6 +652,7 @@ func TestStateMachine_Sending_HeartbeatReceived_HigherPriorityActiveNode_Redirec
 	o, mocks := builder.Build()
 	ca := builder.GetContractAddress()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Once()
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -710,6 +702,7 @@ func TestStateMachine_Sending_HeartbeatInterval_GraceExceeded_NoEndorserMode_Red
 		Transactions(mockTxn)
 	o, mocks := builder.Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Once()
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "coordinator@node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -740,6 +733,7 @@ func TestStateMachine_Sending_HeartbeatInterval_GraceExceeded_EndorserMode_Failo
 		Transactions(mockTxn)
 	o, mocks := builder.Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Once()
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "B", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -771,6 +765,7 @@ func TestStateMachine_Sending_HeartbeatInterval_GraceExceeded_EndorserMode_WrapA
 		Transactions(mockTxn)
 	o, mocks := builder.Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Once()
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "C", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -800,6 +795,7 @@ func TestStateMachine_Sending_DelegationRejected_HigherPriority_RedirectsAndRede
 		Transactions(mockTxn)
 	o, mocks := builder.Build()
 
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Once()
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "node1", mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -815,13 +811,14 @@ func TestStateMachine_Sending_DelegationRejected_HigherPriority_RedirectsAndRede
 	assert.Equal(t, 1, o.failoverIndex, "failoverIndex must be recalibrated to 1 when active is top priority")
 }
 
-// DelegationRejected in Sending with lower-priority named coordinator → no redirect; no redelegate.
+// DelegationRejected in Sending with lower-priority named coordinator → no redirect; redelegates to same coordinator.
 func TestStateMachine_Sending_DelegationRejected_LowerPriority_NoChange(t *testing.T) {
 	ctx := context.Background()
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
+	o, mocks := NewOriginatorBuilderForTesting(t, State_Sending).
 		CurrentActiveCoordinator("node1").
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRequestRejectedEvent{
 		RejectionReason:   engineProto.RejectionReason_NOT_CURRENT_DELEGATE,
@@ -841,8 +838,8 @@ func TestStateMachine_Sending_DelegationRejected_BlockHeightTolerance_StaysSendi
 		Build()
 
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &DelegationRequestRejectedEvent{
-		RejectionReason:       engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
-		OriginatorBlockHeight: 50,
+		RejectionReason:        engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+		OriginatorBlockHeight:  50,
 		CoordinatorBlockHeight: 100,
 		BlockHeightTolerance:   10,
 	}))
@@ -911,23 +908,6 @@ func TestStateMachine_Sending_EndorserNodesDiscovered_UpdatesCandidatesAndRecomp
 	assert.Equal(t, "old-coordinator", o.currentActiveCoordinator, "action_UpdateEndorserCandidates must not change currentActiveCoordinator")
 	assert.Equal(t, []string{"new-node1", "new-node2"}, o.endorserCandidates)
 	assert.ElementsMatch(t, []string{"new-node1", "new-node2"}, o.coordinatorPriorityList)
-}
-
-// NewBlock event in Sending updates currentBlockHeight; stays Sending.
-func TestStateMachine_Sending_NewBlock_UpdatesBlockHeight_StaysSending(t *testing.T) {
-	ctx := context.Background()
-	txID := uuid.New()
-	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
-	mockTxn.On("GetID").Return(txID)
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		CurrentBlockHeight(50).
-		Transactions(mockTxn).
-		Build()
-
-	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, &common.NewBlockEvent{BlockHeight: 100}))
-
-	assert.Equal(t, State_Sending, o.GetCurrentState())
-	assert.Equal(t, uint64(100), o.currentBlockHeight)
 }
 
 // HeartbeatReceived in Sending from a new node → endorser pool grows and priority list is recomputed.
@@ -1001,6 +981,7 @@ func TestStateMachine_Sending_HeartbeatReceived_Step3_GraceExceeded_SwitchesCoor
 	// Step 3 fires: switches to "node3" (live, not current, grace exceeded).
 	// Step 4 then fires because currentActiveCoordinator is now "node3".
 	// Step 5 fires because empty snapshot means txID is dropped → redelegate.
+	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0)).Once()
 	mocks.TransportWriter.EXPECT().
 		SendDelegationRequest(mock.Anything, "node3", mock.Anything, mock.Anything).
 		Return(nil).Once()

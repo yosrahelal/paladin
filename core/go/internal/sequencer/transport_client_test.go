@@ -176,11 +176,11 @@ func TestHandleAssembleRequest_Success(t *testing.T) {
 	preAssemblyJSON, _ := json.Marshal(preAssembly)
 
 	assembleRequest := &engineProto.AssembleRequest{
-		TransactionId:     txID.String(),
-		AssembleRequestId: requestID.String(),
-		ContractAddress:   contractAddr.String(),
-		PreAssembly:       preAssemblyJSON,
-		StateLocks:        []byte("{}"),
+		TransactionId:          txID.String(),
+		AssembleRequestId:      requestID.String(),
+		ContractAddress:        contractAddr.String(),
+		PreAssembly:            preAssemblyJSON,
+		StateLocks:             []byte("{}"),
 		CoordinatorBlockHeight: 100,
 	}
 	payload, _ := proto.Marshal(assembleRequest)
@@ -234,11 +234,11 @@ func TestHandleAssembleRequest_InvalidContractAddress(t *testing.T) {
 	preAssemblyJSON, _ := json.Marshal(preAssembly)
 
 	assembleRequest := &engineProto.AssembleRequest{
-		TransactionId:     txID.String(),
-		AssembleRequestId: requestID.String(),
-		ContractAddress:   "invalid-address",
-		PreAssembly:       preAssemblyJSON,
-		StateLocks:        []byte("{}"),
+		TransactionId:          txID.String(),
+		AssembleRequestId:      requestID.String(),
+		ContractAddress:        "invalid-address",
+		PreAssembly:            preAssemblyJSON,
+		StateLocks:             []byte("{}"),
 		CoordinatorBlockHeight: 100,
 	}
 	payload, _ := proto.Marshal(assembleRequest)
@@ -266,11 +266,11 @@ func TestHandleAssembleRequest_SequencerNotLoaded(t *testing.T) {
 	preAssemblyJSON, _ := json.Marshal(preAssembly)
 
 	assembleRequest := &engineProto.AssembleRequest{
-		TransactionId:     txID.String(),
-		AssembleRequestId: requestID.String(),
-		ContractAddress:   contractAddr.String(),
-		PreAssembly:       preAssemblyJSON,
-		StateLocks:        []byte("{}"),
+		TransactionId:          txID.String(),
+		AssembleRequestId:      requestID.String(),
+		ContractAddress:        contractAddr.String(),
+		PreAssembly:            preAssemblyJSON,
+		StateLocks:             []byte("{}"),
 		CoordinatorBlockHeight: 100,
 	}
 	payload, _ := proto.Marshal(assembleRequest)
@@ -413,15 +413,28 @@ func TestHandleAssembleError_Success(t *testing.T) {
 	mocks.coordinator.AssertExpectations(t)
 }
 
-func TestHandleDelegationRequest_Success(t *testing.T) {
-	ctx := context.Background()
-	mocks := newTransportClientTestMocks(t)
-	sm := newSequencerManagerForTransportClientTesting(t, mocks)
-	contractAddr := pldtypes.RandAddress()
+func newDelegationRequestMessage(fromNode string, contractAddr *pldtypes.EthAddress, blockHeight int64, txs ...*components.PrivateTransaction) *components.ReceivedMessage {
+	allTxBytes := make([][]byte, 0, len(txs))
+	for _, tx := range txs {
+		b, _ := json.Marshal(tx)
+		allTxBytes = append(allTxBytes, b)
+	}
+	delegationRequest := &engineProto.DelegationRequest{
+		PrivateTransactions:   allTxBytes,
+		OriginatorBlockHeight: blockHeight,
+	}
+	payload, _ := proto.Marshal(delegationRequest)
+	return &components.ReceivedMessage{
+		FromNode:    fromNode,
+		MessageID:   uuid.New(),
+		MessageType: transport.MessageType_DelegationRequest,
+		Payload:     payload,
+	}
+}
 
-	txID := uuid.New()
-	privateTx := &components.PrivateTransaction{
-		ID: txID,
+func newTestPrivateTx(contractAddr *pldtypes.EthAddress) *components.PrivateTransaction {
+	return &components.PrivateTransaction{
+		ID: uuid.New(),
 		PreAssembly: &components.TransactionPreAssembly{
 			TransactionSpecification: &prototk.TransactionSpecification{
 				ContractInfo: &prototk.ContractInfo{
@@ -431,22 +444,17 @@ func TestHandleDelegationRequest_Success(t *testing.T) {
 			},
 		},
 	}
-	privateTxJSON, _ := json.Marshal(privateTx)
+}
 
-	delegationRequest := &engineProto.DelegationRequest{
-		PrivateTransaction: privateTxJSON,
-		OriginatorBlockHeight:   100,
-	}
-	payload, _ := proto.Marshal(delegationRequest)
+func TestHandleDelegationRequest_Success(t *testing.T) {
+	ctx := context.Background()
+	mocks := newTransportClientTestMocks(t)
+	sm := newSequencerManagerForTransportClientTesting(t, mocks)
+	contractAddr := pldtypes.RandAddress()
 
-	message := &components.ReceivedMessage{
-		FromNode:    "test-node",
-		MessageID:   uuid.New(),
-		MessageType: transport.MessageType_DelegationRequest,
-		Payload:     payload,
-	}
+	privateTx := newTestPrivateTx(contractAddr)
+	message := newDelegationRequestMessage("test-node", contractAddr, 100, privateTx)
 
-	// Setup mocks - LoadSequencer will be called
 	setupDefaultMocks(ctx, mocks, contractAddr)
 	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
 	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
@@ -457,12 +465,68 @@ func TestHandleDelegationRequest_Success(t *testing.T) {
 
 	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
 		event, ok := e.(*coordinator.TransactionsDelegatedEvent)
-		return ok && len(event.Transactions) == 1 && event.Transactions[0].ID == txID
+		return ok &&
+			len(event.Transactions) == 1 &&
+			event.Transactions[0].ID == privateTx.ID &&
+			event.FromNode == "test-node" &&
+			event.Originator == "originator@node1" &&
+			event.OriginatorsBlockHeight == 100
 	})).Once()
 
 	sm.handleDelegationRequest(ctx, message)
 
 	mocks.coordinator.AssertExpectations(t)
+}
+
+func TestHandleDelegationRequest_MultipleTxBatch(t *testing.T) {
+	ctx := context.Background()
+	mocks := newTransportClientTestMocks(t)
+	sm := newSequencerManagerForTransportClientTesting(t, mocks)
+	contractAddr := pldtypes.RandAddress()
+
+	tx1 := newTestPrivateTx(contractAddr)
+	tx2 := newTestPrivateTx(contractAddr)
+	tx3 := newTestPrivateTx(contractAddr)
+	message := newDelegationRequestMessage("originator-node", contractAddr, 42, tx1, tx2, tx3)
+
+	setupDefaultMocks(ctx, mocks, contractAddr)
+	mocks.components.EXPECT().Persistence().Return(mocks.persistence).Maybe()
+	mocks.persistence.EXPECT().NOTX().Return(nil).Maybe()
+	mocks.domainManager.EXPECT().GetSmartContractByAddress(ctx, mock.Anything, *contractAddr).Return(nil, nil).Maybe()
+
+	seq := newSequencerForTransportClientTesting(contractAddr, mocks)
+	sm.sequencers[contractAddr.String()] = seq
+
+	mocks.coordinator.EXPECT().QueueEvent(ctx, mock.MatchedBy(func(e interface{}) bool {
+		event, ok := e.(*coordinator.TransactionsDelegatedEvent)
+		if !ok || len(event.Transactions) != 3 {
+			return false
+		}
+		return event.Transactions[0].ID == tx1.ID &&
+			event.Transactions[1].ID == tx2.ID &&
+			event.Transactions[2].ID == tx3.ID &&
+			event.FromNode == "originator-node" &&
+			event.OriginatorsBlockHeight == 42
+	})).Once()
+
+	sm.handleDelegationRequest(ctx, message)
+
+	mocks.coordinator.AssertExpectations(t)
+}
+
+func TestHandleDelegationRequest_EmptyTransactions(t *testing.T) {
+	ctx := context.Background()
+	mocks := newTransportClientTestMocks(t)
+	sm := newSequencerManagerForTransportClientTesting(t, mocks)
+	contractAddr := pldtypes.RandAddress()
+
+	// A delegation request with no transactions — coordinator must not be called
+	message := newDelegationRequestMessage("originator-node", contractAddr, 100)
+
+	sm.handleDelegationRequest(ctx, message)
+
+	// No QueueEvent call expected — mocks.coordinator has no registered expectations,
+	// and NewCoordinator(t) will fail the test if QueueEvent is called unexpectedly.
 }
 
 func TestHandleNonceAssigned_Success(t *testing.T) {
@@ -1019,7 +1083,7 @@ func TestHandleEndorsementRequest_Success_Sign(t *testing.T) {
 		TransactionId: txID, IdempotencyKey: idempotencyKey,
 		ContractAddress: contractAddr.String(), Party: party,
 		TransactionSpecification: txSpec,
-		Verifiers: []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
+		Verifiers:                []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
 		InputStates: []*prototk.EndorsableState{state}, ReadStates: []*prototk.EndorsableState{state},
 		OutputStates: []*prototk.EndorsableState{state}, InfoStates: []*prototk.EndorsableState{state},
 		AttestationRequest: attestationRequest,
@@ -1071,7 +1135,7 @@ func TestHandleEndorsementRequest_Success_Revert(t *testing.T) {
 		TransactionId: txID, IdempotencyKey: idempotencyKey,
 		ContractAddress: contractAddr.String(), Party: party,
 		TransactionSpecification: txSpec,
-		Verifiers: []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
+		Verifiers:                []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
 		InputStates: []*prototk.EndorsableState{state}, ReadStates: []*prototk.EndorsableState{state},
 		OutputStates: []*prototk.EndorsableState{state}, InfoStates: []*prototk.EndorsableState{state},
 		AttestationRequest: attestationRequest,
@@ -1123,7 +1187,7 @@ func TestHandleEndorsementRequest_Success_EndorserSubmit(t *testing.T) {
 		TransactionId: txID, IdempotencyKey: idempotencyKey,
 		ContractAddress: contractAddr.String(), Party: party,
 		TransactionSpecification: txSpec,
-		Verifiers: []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
+		Verifiers:                []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
 		InputStates: []*prototk.EndorsableState{state}, ReadStates: []*prototk.EndorsableState{state},
 		OutputStates: []*prototk.EndorsableState{state}, InfoStates: []*prototk.EndorsableState{state},
 		AttestationRequest: attestationRequest,
@@ -1218,7 +1282,7 @@ func TestHandleEndorsementRequest_QueuesEventWithDecodedFields(t *testing.T) {
 		TransactionId: txID, IdempotencyKey: idempotencyKey,
 		ContractAddress: contractAddr.String(), Party: party,
 		TransactionSpecification: txSpec,
-		Verifiers: []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
+		Verifiers:                []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
 		InputStates: []*prototk.EndorsableState{state}, ReadStates: []*prototk.EndorsableState{state},
 		OutputStates: []*prototk.EndorsableState{state}, InfoStates: []*prototk.EndorsableState{state},
 		AttestationRequest: attestationRequest,
@@ -1278,7 +1342,7 @@ func TestHandleEndorsementRequest_LoadSequencerError(t *testing.T) {
 	endorsementRequest := &engineProto.EndorsementRequest{
 		TransactionId: txID, ContractAddress: contractAddr.String(), Party: party,
 		TransactionSpecification: txSpec,
-		Verifiers: []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
+		Verifiers:                []*prototk.ResolvedVerifier{verifier}, Signatures: []*prototk.AttestationResult{signature},
 		InputStates: []*prototk.EndorsableState{state}, ReadStates: []*prototk.EndorsableState{state},
 		OutputStates: []*prototk.EndorsableState{state}, InfoStates: []*prototk.EndorsableState{state},
 		AttestationRequest: attestationRequest,

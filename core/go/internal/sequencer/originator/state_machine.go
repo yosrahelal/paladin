@@ -30,11 +30,13 @@ import (
 type State = common.OriginatorState
 type EventType = common.EventType
 
+// Note: inline comments on State_* constants are used in auto-generated documentation.
+// Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
-	State_Initial   = common.OriginatorState_Initial   // Waiting for OriginatorCreatedEvent to fire initial coordinator selection
+	State_Initial   = common.OriginatorState_Initial   // Waiting for initial coordinator selection
 	State_Idle      = common.OriginatorState_Idle      // Not acting as an originator and not aware of any active coordinators
-	State_Observing = common.OriginatorState_Observing // Not acting as an originator but aware of a node acting as a coordinator
-	State_Sending   = common.OriginatorState_Sending   // Has some transactions that have been sent to a coordinator but not yet confirmed
+	State_Observing = common.OriginatorState_Observing // Not acting as an originator but aware of a node (which may be the same node) acting as a coordinator
+	State_Sending   = common.OriginatorState_Sending   // Has some transactions that have been delegated to a coordinator but not yet confirmed
 )
 
 const (
@@ -92,21 +94,16 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
 					Validator: validator_TransactionDoesNotExist,
-					Actions:   []ActionRule{{Action: action_TransactionCreated}},
+					Actions: []ActionRule{
+						{Action: action_TransactionCreated},
+						// If we are idle we have not been receiving heartbeats from a coordinator so we
+						// need to make sure our delegation goes to the current top priority coordinator
+						{Action: action_RefreshBlockHeight},
+						{Action: action_ResetToTopPriorityCoordinator},
+					},
 					Transitions: []Transition{{
 						To: State_Sending,
 					}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
-						// Re-align to the new epoch's top-priority coordinator while still idle.
-						{If: guard_IsOnEpochBoundary, Action: action_ResetToTopPriorityCoordinator},
-					},
 				}},
 			},
 			common.Event_EndorserNodesDiscovered: {
@@ -165,15 +162,6 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}},
 			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
-					},
-				}},
-			},
 			common.Event_EndorserNodesDiscovered: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -203,6 +191,7 @@ var stateDefinitionsMap = StateDefinitions{
 			// Delegate immediately to the current active coordinator on entering Sending.
 			// If the coordinator is still in Elect or Prepared it will accept the delegation
 			// and manage the handover itself.
+			{Action: action_RefreshBlockHeight},
 			{Action: action_SendDelegationRequest},
 		},
 		Events: map[EventType]EventHandlers{
@@ -212,6 +201,7 @@ var stateDefinitionsMap = StateDefinitions{
 					Validator: validator_TransactionDoesNotExist,
 					Actions: []ActionRule{
 						{Action: action_TransactionCreated},
+						{Action: action_RefreshBlockHeight},
 						{Action: action_SendDelegationRequest},
 					},
 				}},
@@ -251,20 +241,27 @@ var stateDefinitionsMap = StateDefinitions{
 						validator_IsFromCurrentCoordinator,
 						validator_HasDroppedTransactions,
 					),
-					Actions: []ActionRule{{Action: action_SendDelegationRequest}},
+					Actions: []ActionRule{
+						{Action: action_RefreshBlockHeight},
+						{Action: action_SendDelegationRequest},
+					},
 				}},
 			},
 			common.Event_HeartbeatInterval: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
 					Actions: []ActionRule{
-						{Action: action_IncrementHeartbeatIntervalCounts},
-						// When the active coordinator has been silent too long, failover to the next
-						// highest-priority candidate if one is available. Otherwise redelegate to the same node.
-						{
-							If:     guard_InactiveGracePeriodExceeded,
-							Action: action_FailoverToNextCoordinator,
-						},
+					{Action: action_IncrementHeartbeatIntervalCounts},
+					// When the active coordinator has been silent too long, failover to the next
+					// highest-priority candidate if one is available. Otherwise redelegate to the same node.
+					{
+						If:     guard_InactiveGracePeriodExceeded,
+						Action: action_RefreshBlockHeight,
+					},
+					{
+						If:     guard_InactiveGracePeriodExceeded,
+						Action: action_FailoverToNextCoordinator,
+					},
 					},
 				}},
 			},
@@ -280,6 +277,7 @@ var stateDefinitionsMap = StateDefinitions{
 					Actions: []ActionRule{
 						{Action: action_HandleDelegationRejected},
 						// We always redelegate immediately, regardless of whether the current active coordinator has changed
+						{Action: action_RefreshBlockHeight},
 						{Action: action_SendDelegationRequest},
 					},
 				}},
@@ -298,15 +296,6 @@ var stateDefinitionsMap = StateDefinitions{
 						validator_OriginatorTransactionStateTransitionToReverted,
 					),
 					Actions: []ActionRule{{Action: action_FinalizeTransaction}},
-				}},
-			},
-			common.Event_NewBlock: {
-				Match: statemachine.MatchFirst,
-				Handlers: []EventHandler{{
-					Actions: []ActionRule{
-						{Action: action_UpdateBlockHeight},
-						{If: guard_IsOnEpochBoundary, Action: action_CalculateCoordinatorPriorities},
-					},
 				}},
 			},
 			common.Event_EndorserNodesDiscovered: {

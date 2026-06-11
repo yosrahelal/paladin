@@ -290,12 +290,12 @@ func Test_action_AssembleRequestReceived_SetsDelegateAndLatestRequest(t *testing
 	coordinator := "coord@node1"
 	preAssembly := []byte("pre")
 	event := &AssembleRequestReceivedEvent{
-		BaseEvent:               BaseEvent{TransactionID: txn.pt.ID},
-		RequestID:               requestID,
-		Coordinator:             coordinator,
-		CoordinatorsBlockHeight: 100,
-		StateLocksJSON:          []byte("{}"),
-		PreAssembly:             preAssembly,
+		BaseEvent:              BaseEvent{TransactionID: txn.pt.ID},
+		RequestID:              requestID,
+		Coordinator:            coordinator,
+		CoordinatorBlockHeight: 100,
+		StateLocksJSON:         []byte("{}"),
+		PreAssembly:            preAssembly,
 	}
 	err := action_AssembleRequestReceived(ctx, txn, event)
 	require.NoError(t, err)
@@ -479,4 +479,69 @@ func Test_action_AssembleAndSign_UsesDeadlineContext_WhenExpirySet(t *testing.T)
 	case <-time.After(200 * time.Millisecond):
 		// Expected: goroutine completed silently
 	}
+}
+
+func Test_validator_IsPrivateStateDataPendingForAssembly_Complete_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Delegated).BuildWithMocks() // default: checkStateComplete=true
+
+	event := &AssembleRequestReceivedEvent{
+		BaseEvent:              BaseEvent{TransactionID: txn.pt.ID},
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
+	}
+	result, err := validator_IsPrivateStateDataPendingForAssembly(ctx, txn, event)
+	require.NoError(t, err)
+	assert.False(t, result)
+}
+
+func Test_validator_IsPrivateStateDataPendingForAssembly_Incomplete_ReturnsTrue(t *testing.T) {
+	ctx := context.Background()
+	txn, _ := NewTransactionBuilderForTesting(t, State_Delegated).
+		WithCheckPendingPrivateStateData(false).
+		BuildWithMocks()
+
+	event := &AssembleRequestReceivedEvent{
+		BaseEvent:              BaseEvent{TransactionID: txn.pt.ID},
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
+	}
+	result, err := validator_IsPrivateStateDataPendingForAssembly(ctx, txn, event)
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
+func Test_validator_IsPrivateStateDataPendingForAssembly_Error_Propagates(t *testing.T) {
+	ctx := context.Background()
+	dbErr := errors.New("db error")
+	txn, _ := NewTransactionBuilderForTesting(t, State_Delegated).
+		WithCheckPendingPrivateStateDataError(dbErr).
+		BuildWithMocks()
+
+	event := &AssembleRequestReceivedEvent{
+		BaseEvent:              BaseEvent{TransactionID: txn.pt.ID},
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
+	}
+	_, err := validator_IsPrivateStateDataPendingForAssembly(ctx, txn, event)
+	assert.ErrorIs(t, err, dbErr)
+}
+
+func Test_action_RejectAssemblyPrivateStateDataPending_SendsRejection(t *testing.T) {
+	ctx := context.Background()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Delegated).BuildWithMocks()
+
+	coordinator := txn.currentDelegate
+	requestID := uuid.New()
+	event := &AssembleRequestReceivedEvent{
+		BaseEvent:              BaseEvent{TransactionID: txn.pt.ID},
+		RequestID:              requestID,
+		Coordinator:            coordinator,
+		CoordinatorBlockHeight: 100,
+		BlockHeightTolerance:   10,
+	}
+
+	err := action_RejectAssemblyPrivateStateDataPending(ctx, txn, event)
+	require.NoError(t, err)
+	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "expected assemble rejection to be sent")
 }

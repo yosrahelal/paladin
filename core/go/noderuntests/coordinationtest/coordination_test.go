@@ -1864,7 +1864,7 @@ func TestCoordinatorFailover(t *testing.T) {
 	endorserPool := seqcommon.DedupeSortedCoordinatorEndorserNodes(
 		[]string{alice.GetName(), bob.GetName()},
 	)
-	priorityList := seqcommon.ComputeCoordinatorPriorityList(ctx, endorserPool, 0, math.MaxUint64)
+	priorityList := seqcommon.ComputeCoordinatorPriorityList(ctx, endorserPool, 0)
 	// Bob should always be the preferred coordinator for this block range - it's permissable for this to change if we
 	// move to a different priority selection algorithm, but in that case the test needs to be updated.
 	require.Equal(t, bob.GetName(), priorityList[0])

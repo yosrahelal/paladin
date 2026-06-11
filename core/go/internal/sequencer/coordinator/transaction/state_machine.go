@@ -23,24 +23,28 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 )
 
 type State = common.CoordinatorTransactionState
 
+// Note: inline comments on State_* constants are used in auto-generated documentation.
+// Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
-	State_Initial                 = common.CoordinatorTransactionState_Initial                 // Initial state before anything is calculated
-	State_Pooled                  = common.CoordinatorTransactionState_Pooled                  // Waiting in the pool to be assembled
-	State_PreAssembly_Blocked     = common.CoordinatorTransactionState_PreAssembly_Blocked     // Cannot be assembled; a dependency was Parked or Reverted
-	State_Assembling              = common.CoordinatorTransactionState_Assembling              // Assemble request sent to the originator; waiting for response
-	State_Reverted                = common.CoordinatorTransactionState_Reverted                // Reverted by the assembler/originator or on the base ledger
-	State_Endorsement_Gathering   = common.CoordinatorTransactionState_Endorsement_Gathering   // Assembled and waiting for endorsement
-	State_Blocked                 = common.CoordinatorTransactionState_Blocked                 // Fully endorsed but dependencies not ready for dispatch
-	State_Confirming_Dispatchable = common.CoordinatorTransactionState_Confirming_Dispatchable // Endorsed; waiting for originator dispatch confirmation; originator can still decline
-	State_Ready_For_Dispatch      = common.CoordinatorTransactionState_Ready_For_Dispatch      // Dispatch confirmation received; point of no return; waiting to be collected by the dispatcher
-	State_Dispatched              = common.CoordinatorTransactionState_Dispatched              // Collected by the dispatcher/public TX manager; in-flight on the base ledger
-	State_Confirmed               = common.CoordinatorTransactionState_Confirmed               // Recently confirmed on the base ledger; not held in memory indefinitely
-	State_Final                   = common.CoordinatorTransactionState_Final                   // Final state; transactions are removed from memory on entry
-	State_Evicted                 = common.CoordinatorTransactionState_Evicted                 // Evicted for memory/in-flight slot management; distinct from Final
+
+	State_Initial                 = common.CoordinatorTransactionState_Initial                 // Transaction state machine has been created
+	State_Pooled                  = common.CoordinatorTransactionState_Pooled                  // The transaction is waiting in the pool to be selected and sent for assembly to the its originator
+	State_PreAssembly_Blocked     = common.CoordinatorTransactionState_PreAssembly_Blocked     // The transaction cannot yet be put in the pool to be selected for assembly because a dependency must be assembled first
+	State_Assembling              = common.CoordinatorTransactionState_Assembling              // An assemble request has been sent to the originator and we are waiting for the response
+	State_Reverted                = common.CoordinatorTransactionState_Reverted                // The transaction has been reverted, either at assembly time by the originator or on the base ledger
+	State_Endorsement_Gathering   = common.CoordinatorTransactionState_Endorsement_Gathering   // The transaction has been successfully assembled and endorsement requests have been sent
+	State_Blocked                 = common.CoordinatorTransactionState_Blocked                 // All endorsements have been received but the transaction cannot proceed due to dependencies not being ready for dispatch
+	State_Confirming_Dispatchable = common.CoordinatorTransactionState_Confirming_Dispatchable // The transaction has been endorsed. Confirmation from the originator is required before the transaction can be dispatched. The originator may still request not to proceed at this point.
+	State_Ready_For_Dispatch      = common.CoordinatorTransactionState_Ready_For_Dispatch      // Dispatch confirmation has been received from the originator and the transaction is waiting to be collected by the dispatch goroutine
+	State_Dispatched              = common.CoordinatorTransactionState_Dispatched              // Collected by the dispatcher thread and submitted by the public TX manager to the base ledger
+	State_Confirmed               = common.CoordinatorTransactionState_Confirmed               // The transaction has been confirmed on the base ledger. It will remain in this state for a number heartbeat intervals before moving to State_Final to removed from memory.
+	State_Final                   = common.CoordinatorTransactionState_Final                   // The transaction will be removed from memory upon entry to this state
+	State_Evicted                 = common.CoordinatorTransactionState_Evicted                 // A problematic transaction is being evicted. Transactions are removed from memory upon entry to this this state. Distinct from State_Final because it might just be used for memory or in-flight slot management
 )
 
 type EventType = common.EventType
@@ -253,6 +257,7 @@ var stateDefinitionsMap = StateDefinitions{
 	State_Assembling: {
 		OnTransitionTo: []ActionRule{
 			{Action: action_ScheduleStateTimeout},
+			{Action: action_RefreshBlockHeight},
 			{Action: action_SendAssembleRequest},
 		},
 		Events: map[EventType]EventHandlers{
@@ -344,23 +349,30 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_AssembleRequestRejected: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Validator: validator_IsAssembleBlockHeightRejection,
-					Actions:   []ActionRule{{Action: action_HandleAssembleBlockHeightRejection}},
+					// nil Validator — always fires first; logs the reason before any transition
+					Actions: []ActionRule{{Action: action_LogAssembleRejection}},
+				}, {
+					// BLOCK_HEIGHT_TOLERANCE and PRIVATE_STATE_DATA_PENDING are both transient;
+					// reset to Pooled so the system retries once the pending state data has arrived
+					Validator: validator_IsAssembleRejection(
+						engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+						engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
+					),
 					Transitions: []Transition{{
 						To:      State_Pooled,
 						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
 					}},
 				}, {
 					// Originator does not recognise this node as the active coordinator; evict.
-					Validator: validator_IsAssembleNotCurrentDelegateRejection,
+					Validator: validator_IsAssembleRejection(engineProto.RejectionReason_NOT_CURRENT_DELEGATE),
 					Transitions: []Transition{{
 						To: State_Evicted,
 					}},
 				}, {
 					// Originator no longer holds this transaction in memory; finalize.
-					Validator: validator_IsAssembleTransactionUnknownRejection,
+					Validator: validator_IsAssembleRejection(engineProto.RejectionReason_TRANSACTION_UNKNOWN),
 					Transitions: []Transition{{
 						To:      State_Final,
 						Actions: []ActionRule{{Action: action_FinalizeAsUnknownByOriginator}},
@@ -415,6 +427,7 @@ var stateDefinitionsMap = StateDefinitions{
 		OnTransitionTo: []ActionRule{
 			{Action: action_ScheduleStateTimeout},
 			{Action: action_ComputeEndorseTolerances},
+			{Action: action_RefreshBlockHeight},
 			{Action: action_SendEndorsementRequests},
 		},
 		Events: map[EventType]EventHandlers{
