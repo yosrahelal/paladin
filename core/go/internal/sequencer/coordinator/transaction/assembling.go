@@ -16,7 +16,6 @@ package transaction
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
@@ -24,7 +23,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
-	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -57,7 +56,7 @@ func (t *coordinatorTransaction) applyPostAssembly(ctx context.Context, postAsse
 	t.clearTimeoutSchedules()
 
 	if t.pt.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_REVERT {
-		t.revertTransactionFailedAssembly(ctx, *postAssembly.RevertReason)
+		t.revertTransactionFailedAssembly(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgSequencerAssembleRevert), *postAssembly.RevertReason))
 		return nil
 	}
 	if t.pt.PostAssembly.AssemblyResult == prototk.AssembleTransactionResponse_PARK {
@@ -65,28 +64,46 @@ func (t *coordinatorTransaction) applyPostAssembly(ctx context.Context, postAsse
 		return nil
 	}
 
-	err := t.writeLockStates(ctx)
+	// This should create state IDs when mapping from output potential states to output states. However, the IDs are lost below.
+	err := t.writeStates(ctx)
+
 	if err != nil {
 		// Internal error. Only option is to revert the transaction
-		seqRevertEvent := &AssembleRevertResponseEvent{}
+		revertReason := i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgSequencerInternalError), err)
+		seqRevertEvent := &AssembleRevertEvent{
+			PostAssembly: &components.TransactionPostAssembly{
+				AssemblyResult: prototk.AssembleTransactionResponse_REVERT,
+				RevertReason:   &revertReason,
+			},
+		}
 		seqRevertEvent.RequestID = requestID // Must match what the state machine thinks the current assemble request ID is
 		seqRevertEvent.TransactionID = t.pt.ID
 		t.queueEventForCoordinator(ctx, seqRevertEvent)
-		t.revertTransactionFailedAssembly(ctx, i18n.ExpandWithCode(ctx, i18n.MessageKey(msgs.MsgSequencerInternalError), err))
+		t.revertTransactionFailedAssembly(ctx, revertReason)
 		// Return the original error
 		return err
 	}
 
-	// Once we've written the lock states we have output states which must be added to the grapher
-	for _, state := range postAssembly.OutputStates {
-		err := t.grapher.AddMinter(ctx, state.ID, t)
-		if err != nil {
-			errMsg := i18n.NewError(ctx, msgs.MsgSequencerAddMinterError, t.pt.ID.String(), state.ID.String(), err)
-			log.L(ctx).Error(errMsg)
-			return errMsg
-		}
+	// Add output states to the grapher for other transactions to use
+	err = t.grapher.AddMinter(ctx, postAssembly.OutputStates, t.pt.ID)
+	if err != nil {
+		return err
 	}
-	return t.calculatePostAssembleDependencies(ctx)
+
+	// Record private state visibility after AddMinter succeeds
+	t.stateVisibilityTracker.RecordAssemblyOutput(ctx, postAssembly.OutputStates, postAssembly.OutputStatesPotential)
+
+	// Add a lock for every output we create.
+	createLocks, err := t.engineIntegration.MapPotentialStates(ctx, postAssembly.OutputStatesPotential, t.pt)
+	if err != nil {
+		return err
+	}
+	t.grapher.LockMintsOnCreate(ctx, createLocks, postAssembly.OutputStates, t.pt.ID)
+
+	// Add a lock for every read state and spent state to prevent other transactions using them.
+	t.grapher.LockMintsOnReadAndSpend(ctx, postAssembly.ReadStates, postAssembly.InputStates, t.pt.ID)
+
+	return nil
 }
 
 func (t *coordinatorTransaction) sendAssembleRequest(ctx context.Context) error {
@@ -99,18 +116,13 @@ func (t *coordinatorTransaction) sendAssembleRequest(ctx context.Context) error 
 	// and nudge the request every requestTimeout event to implement the short retry.
 	// The state machine will deal with the longer state timeout via timeout guards.
 	t.pendingAssembleRequest = common.NewIdempotentRequest(ctx, t.clock, t.requestTimeout, func(ctx context.Context, idempotencyKey uuid.UUID) error {
-		stateLocks, err := t.engineIntegration.GetStateLocks(ctx)
+		grapherStatesAndLocks, err := t.grapher.ExportStatesAndLocks(ctx, t.originatorNode)
 		if err != nil {
-			log.L(ctx).Errorf("failed to get engine state locks: %s", err)
-			return err
-		}
-		blockHeight, err := t.engineIntegration.GetBlockHeight(ctx)
-		if err != nil {
-			log.L(ctx).Errorf("failed to get engine block height: %s", err)
+			log.L(ctx).Errorf("failed to export grapher state locks: %s", err)
 			return err
 		}
 
-		return t.transportWriter.SendAssembleRequest(ctx, t.originatorNode, t.pt.ID, idempotencyKey, t.pt.PreAssembly, stateLocks, blockHeight)
+		return t.transportWriter.SendAssembleRequest(ctx, t.originatorNode, t.pt.ID, idempotencyKey, t.pt.PreAssembly, grapherStatesAndLocks, t.getBlockHeight(), t.clock.Now().Add(t.stateTimeout), int64(t.blockHeightTolerance))
 	})
 
 	t.scheduleRequestTimeout(ctx)
@@ -124,77 +136,52 @@ func (t *coordinatorTransaction) nudgeAssembleRequest(ctx context.Context) error
 	return t.pendingAssembleRequest.Nudge(ctx)
 }
 
-func action_NotifyPreAssembleDependentOfSelection(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
-	return txn.notifyPreAssembleDependentOfSelection(ctx)
+// We notify a transactions dependents at the point it is selected for assembly. If this is the last unassembled prereq,
+// the dependency can move to State_Pooled upon receviing this notification, since the outcome of assembly is irrelevant
+// to ensuring that as a minimum the first assembly attempt is performed in order.
+//
+// For dependency types where the transactions must be assembled in the correct order, regardless of how many resets have
+// occured, a dependency reset event will move the dependent transaction back to State_PreAssembly_Blocked if assembly of
+// this transaction fails.
+func action_NotifyDependentsOfSelection(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
+	return txn.notifyDependentsOfSelection(ctx)
 }
 
-func (t *coordinatorTransaction) notifyPreAssembleDependentOfSelection(ctx context.Context) error {
-	if t.preAssemblePrereqOf == nil {
-		return nil
-	}
-	dependent := t.grapher.TransactionByID(ctx, *t.preAssemblePrereqOf)
-	if dependent == nil {
-		return i18n.NewError(ctx, msgs.MsgSequencerGrapherDependencyNotFound, *t.preAssemblePrereqOf)
-	}
-	return dependent.HandleEvent(ctx, &DependencySelectedForAssemblyEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{
-			TransactionID: t.pt.ID,
-		},
-	})
-}
+func (t *coordinatorTransaction) notifyDependentsOfSelection(ctx context.Context) error {
+	// Get transactions this is a pre-req of, including chained dependencies
+	dependentIDs := t.dependencyTracker.GetChainedDeps().GetDependents(ctx, t.pt.ID)
 
-func (t *coordinatorTransaction) calculatePostAssembleDependencies(ctx context.Context) error {
-	// Dependencies can arise because  we have been assembled to spend states that were produced by other transactions
-	// or because there are other transactions from the same originator that have not been dispatched yet or because the user has declared explicit dependencies
-	// this function calculates the dependencies relating to states and sets up the reverse association
-	// it is assumed that the other dependencies have already been set up when the transaction was first received by the coordinator TODO correct this comment line with more accurate description of when we expect the static dependencies to have been calculated.  Or make it more vague.
-	if t.pt.PostAssembly == nil {
-		msg := fmt.Sprintf("cannot calculate dependencies for transaction %s without a PostAssembly", t.pt.ID)
-		log.L(ctx).Error(msg)
-		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, msg)
+	preAssembleDependent, hasPreAssembleDependent := t.dependencyTracker.GetPreassemblyDeps().GetDependent(ctx, t.pt.ID)
+
+	if hasPreAssembleDependent {
+		dependentIDs = append(dependentIDs, preAssembleDependent)
 	}
 
-	found := make(map[uuid.UUID]bool)
-	t.dependencies = &pldapi.TransactionDependencies{
-		DependsOn: make([]uuid.UUID, 0, len(t.pt.PostAssembly.InputStates)+len(t.pt.PostAssembly.ReadStates)),
-		PrereqOf:  make([]uuid.UUID, 0, len(t.pt.PostAssembly.InputStates)+len(t.pt.PostAssembly.ReadStates)),
-	}
-	for _, state := range append(t.pt.PostAssembly.InputStates, t.pt.PostAssembly.ReadStates...) {
-		dependency, err := t.grapher.LookupMinter(ctx, state.ID)
+	for _, dependentID := range dependentIDs {
+		err := t.coordinatorTransactionHandleEvent(ctx, dependentID, &DependencySelectedForAssemblyEvent{
+			BaseCoordinatorEvent: BaseCoordinatorEvent{
+				TransactionID: dependentID,
+			},
+			SourceTransactionID: t.pt.ID,
+		})
 		if err != nil {
-			errMsg := fmt.Sprintf("error looking up dependency for state %s: %s", state.ID, err)
-			log.L(ctx).Error(errMsg)
-			return i18n.NewError(ctx, msgs.MsgSequencerInternalError, errMsg)
+			return err
 		}
-		if dependency == nil {
-			log.L(ctx).Infof("no minter found for state %s", state.ID)
-			//assume the state was produced by a confirmed transaction
-			//TODO should we validate this by checking the domain context? If not, explain why this is safe in the architecture doc
-			continue
-		}
-		if found[dependency.pt.ID] {
-			continue
-		}
-		found[dependency.pt.ID] = true
-
-		t.dependencies.DependsOn = append(t.dependencies.DependsOn, dependency.pt.ID)
-		//also set up the reverse association
-		dependency.dependencies.PrereqOf = append(dependency.dependencies.PrereqOf, t.pt.ID)
 	}
 	return nil
 }
 
-func (t *coordinatorTransaction) writeLockStates(ctx context.Context) error {
-	return t.engineIntegration.WriteLockStatesForTransaction(ctx, t.pt)
+func (t *coordinatorTransaction) writeStates(ctx context.Context) error {
+	return t.engineIntegration.WriteStatesForTransaction(ctx, t.pt)
 }
 
 func validator_MatchesPendingAssembleRequest(ctx context.Context, txn *coordinatorTransaction, event common.Event) (bool, error) {
 	switch event := event.(type) {
 	case *AssembleSuccessEvent:
 		return txn.pendingAssembleRequest != nil && txn.pendingAssembleRequest.IdempotencyKey() == event.RequestID, nil
-	case *AssembleRevertResponseEvent:
+	case *AssembleRevertEvent:
 		return txn.pendingAssembleRequest != nil && txn.pendingAssembleRequest.IdempotencyKey() == event.RequestID, nil
-	case *AssembleErrorResponseEvent:
+	case *AssembleErrorEvent:
 		return txn.pendingAssembleRequest != nil && txn.pendingAssembleRequest.IdempotencyKey() == event.RequestID, nil
 	}
 	return false, nil
@@ -202,16 +189,11 @@ func validator_MatchesPendingAssembleRequest(ctx context.Context, txn *coordinat
 
 func action_AssembleSuccess(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
 	e := event.(*AssembleSuccessEvent)
-	err := t.applyPostAssembly(ctx, e.PostAssembly, e.RequestID)
-	if err == nil {
-		// Assembling resolves the required verifiers which will need passing on for the endorse step
-		t.pt.PreAssembly.Verifiers = e.PreAssembly.Verifiers
-	}
-	return err
+	return t.applyPostAssembly(ctx, e.PostAssembly, e.RequestID)
 }
 
 func action_AssembleRevertResponse(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
-	e := event.(*AssembleRevertResponseEvent)
+	e := event.(*AssembleRevertEvent)
 	return t.applyPostAssembly(ctx, e.PostAssembly, e.RequestID)
 }
 
@@ -231,4 +213,22 @@ func action_SendAssembleRequest(ctx context.Context, txn *coordinatorTransaction
 func action_NudgeAssembleRequest(ctx context.Context, txn *coordinatorTransaction, _ common.Event) error {
 	log.L(ctx).Debugf("Nudging assemble request for transaction %s", txn.pt.ID.String())
 	return txn.nudgeAssembleRequest(ctx)
+}
+
+func action_HandleAssembleBlockHeightRejection(ctx context.Context, txn *coordinatorTransaction, event common.Event) error {
+	e := event.(*AssembleRequestRejectedEvent)
+	log.L(ctx).Warnf("assemble request rejected due to block height tolerance: coordinator block height=%d, assembler block height=%d, tolerance=%d", e.CoordinatorBlockHeight, e.AssemblerBlockHeight, txn.blockHeightTolerance)
+	return nil
+}
+
+func validator_IsAssembleBlockHeightRejection(_ context.Context, _ *coordinatorTransaction, event common.Event) (bool, error) {
+	return event.(*AssembleRequestRejectedEvent).RejectionReason == engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, nil
+}
+
+func validator_IsAssembleNotCurrentDelegateRejection(_ context.Context, _ *coordinatorTransaction, event common.Event) (bool, error) {
+	return event.(*AssembleRequestRejectedEvent).RejectionReason == engineProto.RejectionReason_NOT_CURRENT_DELEGATE, nil
+}
+
+func validator_IsAssembleTransactionUnknownRejection(_ context.Context, _ *coordinatorTransaction, event common.Event) (bool, error) {
+	return event.(*AssembleRequestRejectedEvent).RejectionReason == engineProto.RejectionReason_TRANSACTION_UNKNOWN, nil
 }

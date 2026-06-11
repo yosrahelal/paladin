@@ -82,9 +82,10 @@ type DomainSmartContract interface {
 	ContractConfig() *prototk.ContractConfig
 
 	InitTransaction(ctx context.Context, ptx *PrivateTransaction, localTx *ResolvedTransaction) error
-	AssembleTransaction(dCtx DomainContext, readTX persistence.DBTX, ptx *PrivateTransaction, localTx *ResolvedTransaction) error
+	AssembleTransaction(dCtx DomainContext, readTX persistence.DBTX, ptx *PrivateTransaction, localTx *ResolvedTransaction, resolvedVerifiers []*prototk.ResolvedVerifier) error
 	WritePotentialStates(dCtx DomainContext, readTX persistence.DBTX, tx *PrivateTransaction) error
 	LockStates(dCtx DomainContext, readTX persistence.DBTX, tx *PrivateTransaction) error
+	MapPotentialStates(dCtx DomainContext, potentialStates []*prototk.NewState, isOutput bool, createdByTX *PrivateTransaction) (stateUpserts []*StateUpsert, err error)
 	EndorseTransaction(dCtx DomainContext, readTX persistence.DBTX, req *PrivateTransactionEndorseRequest) (*EndorsementResult, error)
 	PrepareTransaction(dCtx DomainContext, readTX persistence.DBTX, tx *PrivateTransaction) error
 
@@ -92,6 +93,7 @@ type DomainSmartContract interface {
 	ExecCall(dCtx DomainContext, readTX persistence.DBTX, tx *ResolvedTransaction, verifiers []*prototk.ResolvedVerifier) (*abi.ComponentValue, error)
 
 	WrapPrivacyGroupEVMTX(context.Context, *pldapi.PrivacyGroup, *pldapi.PrivacyGroupEVMTX) (*pldapi.TransactionInput, error)
+	InvokeRPC(ctx context.Context, dCtx DomainContext, dbTX persistence.DBTX, rpcCall pldapi.DomainInvokeRPC) (pldtypes.RawJSON, error)
 
 	IsBaseLedgerRevertRetryable(ctx context.Context, revertData []byte) (retryable bool, decodedReason string, err error)
 }

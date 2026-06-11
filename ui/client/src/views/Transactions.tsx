@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Alert, Box, Button, Fade, Grid2, TablePagination, Typography } from "@mui/material";
+import { Alert, Box, Button, Fade, Grid2, TablePagination, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { fetchIndexedTransactions } from "../queries/transactions";
 import { EnrichedTransaction } from "../components/EnrichedTransaction";
@@ -26,6 +26,7 @@ import { TransactionLookupDialog } from "../dialogs/TransactionLookup";
 import { ApplicationContext } from "../contexts/ApplicationContext";
 import ViewArrayOutlinedIcon from '@mui/icons-material/ViewArrayOutlined';
 import { FromBlockDialog } from "../dialogs/FromBlock";
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 type Props = {
   refEntries: ITransactionPagingReference[]
@@ -36,6 +37,8 @@ type Props = {
   setFromBlock: Dispatch<SetStateAction<number | undefined>>
   rowsPerPage: number
   setRowsPerPage: Dispatch<SetStateAction<number>>
+  showTxsWithReceipt: boolean
+  setShowTxsWithReceipt: Dispatch<SetStateAction<boolean>>
 };
 
 export const Transactions: React.FC<Props> = ({
@@ -46,7 +49,9 @@ export const Transactions: React.FC<Props> = ({
   rowsPerPage,
   setRowsPerPage,
   fromBlock,
-  setFromBlock
+  setFromBlock,
+  showTxsWithReceipt,
+  setShowTxsWithReceipt
 }) => {
 
   const { lastBlockWithTransactions } = useContext(ApplicationContext);
@@ -56,8 +61,8 @@ export const Transactions: React.FC<Props> = ({
   const { t } = useTranslation();
 
   const { data: enrichedTransactions, error } = useQuery({
-    queryKey: ['transactions', refEntries, rowsPerPage, page, lastBlockWithTransactions, fromBlock],
-    queryFn: () => fetchIndexedTransactions(rowsPerPage, fromBlock, refEntries[refEntries.length - 1])
+    queryKey: ['transactions', refEntries, rowsPerPage, showTxsWithReceipt, page, lastBlockWithTransactions, fromBlock],
+    queryFn: () => fetchIndexedTransactions(rowsPerPage, showTxsWithReceipt, fromBlock, refEntries[refEntries.length - 1])
   });
 
   useEffect(() => {
@@ -107,7 +112,7 @@ export const Transactions: React.FC<Props> = ({
         <Box
           sx={{
             padding: "20px",
-            maxWidth: "1300px",
+            maxWidth: "1500px",
             marginLeft: "auto",
             marginRight: "auto",
           }}
@@ -134,18 +139,24 @@ export const Transactions: React.FC<Props> = ({
                 </Grid2>
                 <Grid2>
                   <Button
-                    color={fromBlock === undefined? 'secondary' : 'warning'}
+                    color={fromBlock === undefined ? 'secondary' : 'warning'}
                     size="large"
                     variant="outlined"
                     startIcon={<ViewArrayOutlinedIcon />}
                     sx={{ borderRadius: '20px', minWidth: '180px' }}
                     onClick={() => setFromBlockDialogOpen(true)}
                   >
-                    {t(fromBlock === undefined ? 'Latest block' : 'fromBlockN', { n: fromBlock?.toLocaleString()})}
+                    {t(fromBlock === undefined ? 'Latest block' : 'fromBlockN', { n: fromBlock?.toLocaleString() })}
                   </Button>
                 </Grid2>
               </Grid2>
             </Grid2>
+          </Box>
+          <Box sx={{ marginTop: '15px', marginBottom: '15px', textAlign: 'center' }}>
+            <ToggleButtonGroup exclusive onChange={(_event, value) => setShowTxsWithReceipt(value === 'withReceipt')} value={showTxsWithReceipt ? 'withReceipt' : 'all'}>
+              <ToggleButton color="primary" value="all" sx={{ width: '130px', height: '45px' }}>{t('all')}</ToggleButton>
+              <ToggleButton color="primary" value="withReceipt" sx={{ width: '130px', height: '45px' }}>{t('withReceipt')}</ToggleButton>
+            </ToggleButtonGroup>
           </Box>
           <Box sx={{
             display: 'flex',
@@ -158,29 +169,36 @@ export const Transactions: React.FC<Props> = ({
               />
             )}
           </Box>
-          <TablePagination
-            slotProps={{
-              actions: {
-                lastButton: {
-                  disabled: true
+          {enrichedTransactions !== undefined && enrichedTransactions.length > 0 &&
+            <TablePagination
+              slotProps={{
+                actions: {
+                  lastButton: {
+                    disabled: true
+                  }
                 }
-              }
-            }}
-
-            component="div"
-            showFirstButton
-            showLastButton
-            count={count}
-            page={page}
-            onPageChange={handleChangePage}
-            rowsPerPage={rowsPerPage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-          />
+              }}
+              component="div"
+              showFirstButton
+              showLastButton
+              count={count}
+              page={page}
+              onPageChange={handleChangePage}
+              rowsPerPage={rowsPerPage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+            />}
+          {enrichedTransactions !== undefined && enrichedTransactions.length === 0 &&
+            <Box sx={{ marginTop: '60px', textAlign: 'center', color: theme => theme.palette.text.secondary }}>
+              <InfoOutlinedIcon sx={{ fontSize: '50px' }} />
+              <Typography>{t('transactionsEmptyState')}</Typography>
+            </Box>
+          }
         </Box>
       </Fade>
       <TransactionLookupDialog
         dialogOpen={lookupTransactionDialogOpen}
         setDialogOpen={setLookupTransactionDialogOpen}
+        label={t('blockchainTransactionHashOrPaladinTransactionId')}
       />
       <FromBlockDialog
         dialogOpen={fromBlockDialogOpen}
