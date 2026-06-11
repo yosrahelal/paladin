@@ -17,12 +17,14 @@ package txmgr
 
 import (
 	"context"
+	"strings"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/query"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcserver"
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -88,40 +90,50 @@ func (tm *txManager) buildRPCModule() {
 func (tm *txManager) rpcSendTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		tx pldapi.TransactionInput,
-	) (*uuid.UUID, error) {
+	) (*uuid.UUID, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("sendTransaction")
-		return tm.sendTransactionNewDBTX(ctx, &tx)
+		txID, err := tm.sendTransactionNewDBTX(ctx, &tx)
+		if err != nil && strings.Contains(err.Error(), "PD012220") {
+			return txID, rpcclient.RPCCodeConflict, err
+		}
+		return txID, 0, err
 	})
 }
 
 func (tm *txManager) rpcSendTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		txs []*pldapi.TransactionInput,
-	) ([]uuid.UUID, error) {
+	) ([]uuid.UUID, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("sendTransactions")
-		return tm.sendTransactionsNewDBTX(ctx, txs)
+		txIDs, err := tm.sendTransactionsNewDBTX(ctx, txs)
+		if err != nil && strings.Contains(err.Error(), "PD012220") {
+			return txIDs, rpcclient.RPCCodeConflict, err
+		}
+		return txIDs, 0, err
 	})
 }
 
 func (tm *txManager) rpcPrepareTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		tx pldapi.TransactionInput,
-	) (*uuid.UUID, error) {
+	) (*uuid.UUID, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("prepareTransaction")
-		return tm.prepareTransactionNewDBTX(ctx, &tx)
+		txID, err := tm.prepareTransactionNewDBTX(ctx, &tx)
+		return txID, 0, err
 	})
 }
 
 func (tm *txManager) rpcPrepareTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		txs []*pldapi.TransactionInput,
-	) ([]uuid.UUID, error) {
+	) ([]uuid.UUID, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("prepareTransactions")
-		return tm.prepareTransactionsNewDBTX(ctx, txs)
+		txIDs, err := tm.prepareTransactionsNewDBTX(ctx, txs)
+		return txIDs, 0, err
 	})
 }
 
@@ -129,71 +141,77 @@ func (tm *txManager) rpcUpdateTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		id uuid.UUID,
 		tx *pldapi.TransactionInput,
-	) (uuid.UUID, error) {
+	) (uuid.UUID, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("updateTransaction")
-		return tm.UpdateTransaction(ctx, id, tx)
+		txID, err := tm.UpdateTransaction(ctx, id, tx)
+		return txID, 0, err
 	})
 }
 
 func (tm *txManager) rpcCall() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		tx *pldapi.TransactionCall,
-	) (result pldtypes.RawJSON, err error) {
+	) (result pldtypes.RawJSON, code rpcclient.RPCCode, err error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("call")
 		err = tm.CallTransaction(ctx, tm.p.NOTX(), &result, tx)
-		return
+		return result, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-	) (*pldapi.Transaction, error) {
+	) (*pldapi.Transaction, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getTransaction")
-		return tm.GetTransactionByID(ctx, id)
+		tx, err := tm.GetTransactionByID(ctx, id)
+		return tx, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetTransactionFull() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-	) (*pldapi.TransactionFull, error) {
+	) (*pldapi.TransactionFull, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getTransactionFull")
-		return tm.GetTransactionByIDFull(ctx, id)
+		tx, err := tm.GetTransactionByIDFull(ctx, id)
+		return tx, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetTransactionByIdempotencyKey() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		idempotencyKey string,
-	) (*pldapi.Transaction, error) {
+	) (*pldapi.Transaction, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getTransactionByIdempotencyKey")
-		return tm.GetTransactionByIdempotencyKey(ctx, idempotencyKey)
+		tx, err := tm.GetTransactionByIdempotencyKey(ctx, idempotencyKey)
+		return tx, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.Transaction, error) {
+	) ([]*pldapi.Transaction, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryTransactions")
-		return tm.QueryTransactions(ctx, &query, tm.p.NOTX(), false)
+		txs, err := tm.QueryTransactions(ctx, &query, tm.p.NOTX(), false)
+		return txs, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryTransactionsFull() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.TransactionFull, error) {
+	) ([]*pldapi.TransactionFull, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryTransactionsFull")
-		return tm.QueryTransactionsFull(ctx, &query, tm.p.NOTX(), false)
+		txs, err := tm.QueryTransactionsFull(ctx, &query, tm.p.NOTX(), false)
+		return txs, 0, err
 	})
 }
 
@@ -201,43 +219,48 @@ func (tm *txManager) rpcQueryPendingTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		query query.QueryJSON,
 		full bool,
-	) (any, error) {
+	) (any, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		if full {
 			tm.metrics.IncRpc("queryPendingTransactionsFull")
-			return tm.QueryTransactionsFull(ctx, &query, tm.p.NOTX(), true)
+			txs, err := tm.QueryTransactionsFull(ctx, &query, tm.p.NOTX(), true)
+			return txs, 0, err
 		}
 		tm.metrics.IncRpc("queryPendingTransactions")
-		return tm.QueryTransactions(ctx, &query, tm.p.NOTX(), true)
+		txs, err := tm.QueryTransactions(ctx, &query, tm.p.NOTX(), true)
+		return txs, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetTransactionReceipt() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-	) (*pldapi.TransactionReceipt, error) {
+	) (*pldapi.TransactionReceipt, rpcclient.RPCCode, error) {
 		tm.metrics.IncRpc("getTransactionReceipt")
-		return tm.GetTransactionReceiptByID(ctx, id)
+		receipt, err := tm.GetTransactionReceiptByID(ctx, id)
+		return receipt, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetTransactionReceiptFull() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-	) (*pldapi.TransactionReceiptFull, error) {
+	) (*pldapi.TransactionReceiptFull, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getTransactionReceiptFull")
-		return tm.GetTransactionReceiptByIDFull(ctx, id)
+		receipt, err := tm.GetTransactionReceiptByIDFull(ctx, id)
+		return receipt, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetPreparedTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-	) (*pldapi.PreparedTransaction, error) {
+	) (*pldapi.PreparedTransaction, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getPreparedTransaction")
-		return tm.GetPreparedTransactionByID(ctx, tm.p.NOTX(), id)
+		receipt, err := tm.GetPreparedTransactionByID(ctx, tm.p.NOTX(), id)
+		return receipt, 0, err
 	})
 }
 
@@ -245,70 +268,77 @@ func (tm *txManager) rpcGetDomainReceipt() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		domain string,
 		id uuid.UUID,
-	) (pldtypes.RawJSON, error) {
+	) (pldtypes.RawJSON, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getDomainReceipt")
-		return tm.GetDomainReceiptByID(ctx, domain, id)
+		receipt, err := tm.GetDomainReceiptByID(ctx, domain, id)
+		return receipt, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetStateReceipt() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-	) (*pldapi.TransactionStates, error) {
+	) (*pldapi.TransactionStates, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getStateReceipt")
-		return tm.GetStateReceiptByID(ctx, id)
+		states, err := tm.GetStateReceiptByID(ctx, id)
+		return states, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetTransactionDependencies() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uuid.UUID,
-	) (*pldapi.TransactionDependencies, error) {
+	) (*pldapi.TransactionDependencies, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getTransactionDependencies")
-		return tm.GetTransactionDependencies(ctx, id)
+		dependencies, err := tm.GetTransactionDependencies(ctx, id)
+		return dependencies, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryTransactionReceipts() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.TransactionReceipt, error) {
+	) ([]*pldapi.TransactionReceipt, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryTransactionReceipts")
-		return tm.QueryTransactionReceipts(ctx, &query)
+		receipts, err := tm.QueryTransactionReceipts(ctx, &query)
+		return receipts, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryPreparedTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.PreparedTransaction, error) {
+	) ([]*pldapi.PreparedTransaction, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryPreparedTransactions")
-		return tm.QueryPreparedTransactions(ctx, tm.p.NOTX(), &query)
+		preparedTransactions, err := tm.QueryPreparedTransactions(ctx, tm.p.NOTX(), &query)
+		return preparedTransactions, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryPublicTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.PublicTxWithBinding, error) {
+	) ([]*pldapi.PublicTxWithBinding, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryPublicTransactions")
-		return tm.queryPublicTransactions(ctx, &query)
+		publicTransactions, err := tm.queryPublicTransactions(ctx, &query)
+		return publicTransactions, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryPendingPublicTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.PublicTxWithBinding, error) {
+	) ([]*pldapi.PublicTxWithBinding, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryPendingPublicTransactions")
-		return tm.queryPublicTransactions(ctx, query.ToBuilder().Null("transactionHash").Query())
+		publicTransactions, err := tm.queryPublicTransactions(ctx, query.ToBuilder().Null("transactionHash").Query())
+		return publicTransactions, 0, err
 	})
 }
 
@@ -316,60 +346,66 @@ func (tm *txManager) rpcGetPublicTransactionByNonce() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		from pldtypes.EthAddress,
 		nonce pldtypes.HexUint64,
-	) (*pldapi.PublicTxWithBinding, error) {
+	) (*pldapi.PublicTxWithBinding, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getPublicTransactionByNonce")
-		return tm.GetPublicTransactionByNonce(ctx, from, nonce)
+		publicTransaction, err := tm.GetPublicTransactionByNonce(ctx, from, nonce)
+		return publicTransaction, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetPublicTransaction() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id uint64,
-	) (*pldapi.PublicTxWithBinding, error) {
+	) (*pldapi.PublicTxWithBinding, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getPublicTransaction")
-		return tm.GetPublicTransactionByID(ctx, id)
+		publicTransaction, err := tm.GetPublicTransactionByID(ctx, id)
+		return publicTransaction, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetPublicTransactionByHash() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash pldtypes.Bytes32,
-	) (*pldapi.PublicTxWithBinding, error) {
+	) (*pldapi.PublicTxWithBinding, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getPublicTransactionByHash")
-		return tm.GetPublicTransactionByHash(ctx, hash)
+		publicTransaction, err := tm.GetPublicTransactionByHash(ctx, hash)
+		return publicTransaction, 0, err
 	})
 }
 
 func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		a abi.ABI,
-	) (hash *pldtypes.Bytes32, err error) {
+	) (hash *pldtypes.Bytes32, code rpcclient.RPCCode, err error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("storeABI")
-		return tm.storeABINewDBTX(ctx, a)
+		hash, err = tm.storeABINewDBTX(ctx, a)
+		return hash, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetStoredABI() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash pldtypes.Bytes32,
-	) (*pldapi.StoredABI, error) {
+	) (*pldapi.StoredABI, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getStoredABI")
-		return tm.getABIByHash(ctx, tm.p.NOTX(), hash)
+		abi, err := tm.getABIByHash(ctx, tm.p.NOTX(), hash)
+		return abi, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryStoredABIs() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.StoredABI, error) {
+	) ([]*pldapi.StoredABI, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryStoredABIs")
-		return tm.queryABIs(ctx, &query)
+		abis, err := tm.queryABIs(ctx, &query)
+		return abis, 0, err
 	})
 }
 
@@ -378,10 +414,11 @@ func (tm *txManager) rpcResolveVerifier() rpcserver.RPCHandler {
 		lookup string,
 		algorithm string,
 		verifierType string,
-	) (string, error) {
+	) (string, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("resolveVerifier")
-		return tm.identityResolver.ResolveVerifier(ctx, lookup, algorithm, verifierType)
+		verifier, err := tm.identityResolver.ResolveVerifier(ctx, lookup, algorithm, verifierType)
+		return verifier, 0, err
 	})
 }
 
@@ -389,10 +426,11 @@ func (tm *txManager) rpcDebugTransactionStatus() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		contractAddress string,
 		id uuid.UUID,
-	) (components.PrivateTxStatus, error) {
+	) (components.PrivateTxStatus, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("debugTransactionStatus")
-		return tm.sequencerMgr.GetTxStatus(ctx, contractAddress, id)
+		status, err := tm.sequencerMgr.GetTxStatus(ctx, contractAddress, id)
+		return status, 0, err
 	})
 }
 
@@ -400,10 +438,11 @@ func (tm *txManager) rpcDecodeError() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		revertError pldtypes.HexBytes,
 		dataFormat pldtypes.JSONFormatOptions,
-	) (*pldapi.ABIDecodedData, error) {
+	) (*pldapi.ABIDecodedData, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("decodeError")
-		return tm.DecodeRevertError(ctx, tm.p.NOTX(), revertError, dataFormat)
+		decodedData, err := tm.DecodeRevertError(ctx, tm.p.NOTX(), revertError, dataFormat)
+		return decodedData, 0, err
 	})
 }
 
@@ -411,10 +450,11 @@ func (tm *txManager) rpcDecodeCall() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		callData pldtypes.HexBytes,
 		dataFormat pldtypes.JSONFormatOptions,
-	) (*pldapi.ABIDecodedData, error) {
+	) (*pldapi.ABIDecodedData, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("decodeCall")
-		return tm.DecodeCall(ctx, tm.p.NOTX(), callData, dataFormat)
+		decodedData, err := tm.DecodeCall(ctx, tm.p.NOTX(), callData, dataFormat)
+		return decodedData, 0, err
 	})
 }
 
@@ -423,181 +463,195 @@ func (tm *txManager) rpcDecodeEvent() rpcserver.RPCHandler {
 		topics []pldtypes.Bytes32,
 		data pldtypes.HexBytes,
 		dataFormat pldtypes.JSONFormatOptions,
-	) (*pldapi.ABIDecodedData, error) {
+	) (*pldapi.ABIDecodedData, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("decodeEvent")
-		return tm.DecodeEvent(ctx, tm.p.NOTX(), topics, data, dataFormat)
+		decodedData, err := tm.DecodeEvent(ctx, tm.p.NOTX(), topics, data, dataFormat)
+		return decodedData, 0, err
 	})
 }
 
 func (tm *txManager) rpcCreateReceiptListener() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		listener *pldapi.TransactionReceiptListener,
-	) (bool, error) {
+	) (bool, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("createReceiptListener")
 		err := tm.CreateReceiptListener(ctx, listener)
-		return err == nil, err
+		return err == nil, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryReceiptListeners() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.TransactionReceiptListener, error) {
+	) ([]*pldapi.TransactionReceiptListener, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryReceiptListeners")
-		return tm.QueryReceiptListeners(ctx, tm.p.NOTX(), &query)
+		listeners, err := tm.QueryReceiptListeners(ctx, tm.p.NOTX(), &query)
+		return listeners, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetReceiptListener() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		name string,
-	) (*pldapi.TransactionReceiptListener, error) {
+	) (*pldapi.TransactionReceiptListener, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getReceiptListener")
-		return tm.GetReceiptListener(ctx, name), nil
+		return tm.GetReceiptListener(ctx, name), 0, nil
 	})
 }
 
 func (tm *txManager) rpcStartReceiptListener() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		name string,
-	) (bool, error) {
+	) (bool, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("startReceiptListener")
-		return true, tm.StartReceiptListener(ctx, name)
+		err := tm.StartReceiptListener(ctx, name)
+		return err == nil, 0, err
 	})
 }
 
 func (tm *txManager) rpcStopReceiptListener() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		name string,
-	) (bool, error) {
+	) (bool, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("stopReceiptListener")
-		return true, tm.StopReceiptListener(ctx, name)
+		err := tm.StopReceiptListener(ctx, name)
+		return err == nil, 0, err
 	})
 }
 
 func (tm *txManager) rpcDeleteReceiptListener() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		name string,
-	) (bool, error) {
+	) (bool, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("deleteReceiptListener")
-		return true, tm.DeleteReceiptListener(ctx, name)
+		err := tm.DeleteReceiptListener(ctx, name)
+		return err == nil, 0, err
 	})
 }
 
 func (tm *txManager) rpcCreateBlockchainEventListener() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		listener *pldapi.BlockchainEventListener,
-	) (bool, error) {
+	) (bool, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("createBlockchainEventListener")
 		err := tm.CreateBlockchainEventListener(ctx, listener)
-		return err == nil, err
+		return err == nil, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryBlockchainEventListeners() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.BlockchainEventListener, error) {
+	) ([]*pldapi.BlockchainEventListener, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryBlockchainEventListeners")
-		return tm.QueryBlockchainEventListeners(ctx, tm.p.NOTX(), &query)
+		listeners, err := tm.QueryBlockchainEventListeners(ctx, tm.p.NOTX(), &query)
+		return listeners, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetBlockchainEventListener() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		name string,
-	) (*pldapi.BlockchainEventListener, error) {
+	) (*pldapi.BlockchainEventListener, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getBlockchainEventListener")
-		return tm.GetBlockchainEventListener(ctx, name), nil
+		return tm.GetBlockchainEventListener(ctx, name), 0, nil
 	})
 }
 
 func (tm *txManager) rpcStartBlockchainEventListener() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		name string,
-	) (bool, error) {
+	) (bool, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("startBlockchainEventListener")
-		return true, tm.StartBlockchainEventListener(ctx, name)
+		err := tm.StartBlockchainEventListener(ctx, name)
+		return err == nil, 0, err
 	})
 }
 
 func (tm *txManager) rpcStopBlockchainEventListener() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		name string,
-	) (bool, error) {
+	) (bool, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("stopBlockchainEventListener")
-		return true, tm.StopBlockchainEventListener(ctx, name)
+		err := tm.StopBlockchainEventListener(ctx, name)
+		return err == nil, 0, err
 	})
 }
 
 func (tm *txManager) rpcDeleteBlockchainEventListener() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		name string,
-	) (bool, error) {
+	) (bool, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("deleteBlockchainEventListener")
-		return true, tm.DeleteBlockchainEventListener(ctx, name)
+		err := tm.DeleteBlockchainEventListener(ctx, name)
+		return err == nil, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetBlockchainEventListenerStatus() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		name string,
-	) (*pldapi.BlockchainEventListenerStatus, error) {
+	) (*pldapi.BlockchainEventListenerStatus, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getBlockchainEventListenerStatus")
-		return tm.GetBlockchainEventListenerStatus(ctx, name)
+		status, err := tm.GetBlockchainEventListenerStatus(ctx, name)
+		return status, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryDispatches() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.Dispatch, error) {
+	) ([]*pldapi.Dispatch, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryDispatches")
-		return tm.QueryDispatches(ctx, &query)
+		dispatches, err := tm.QueryDispatches(ctx, &query)
+		return dispatches, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetDispatch() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id string,
-	) (*pldapi.Dispatch, error) {
+	) (*pldapi.Dispatch, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getDispatch")
-		return tm.GetDispatchByID(ctx, id)
+		dispatch, err := tm.GetDispatchByID(ctx, id)
+		return dispatch, 0, err
 	})
 }
 
 func (tm *txManager) rpcQueryChainedDispatches() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		query query.QueryJSON,
-	) ([]*pldapi.ChainedDispatch, error) {
+	) ([]*pldapi.ChainedDispatch, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryChainedDispatches")
-		return tm.QueryChainedDispatches(ctx, &query)
+		chainedDispatches, err := tm.QueryChainedDispatches(ctx, &query)
+		return chainedDispatches, 0, err
 	})
 }
 
 func (tm *txManager) rpcGetChainedDispatch() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		id string,
-	) (*pldapi.ChainedDispatch, error) {
+	) (*pldapi.ChainedDispatch, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getChainedDispatch")
-		return tm.GetChainedDispatchByID(ctx, id)
+		chainedDispatch, err := tm.GetChainedDispatchByID(ctx, id)
+		return chainedDispatch, 0, err
 	})
 }

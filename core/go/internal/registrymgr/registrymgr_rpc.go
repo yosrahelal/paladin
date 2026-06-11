@@ -23,6 +23,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/query"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcserver"
 )
 
@@ -40,8 +41,8 @@ func (rm *registryManager) initRPC() {
 
 func (rm *registryManager) rpcListRegistries() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod0(func(ctx context.Context,
-	) ([]string, error) {
-		return rm.getRegistryNames(), nil
+	) ([]string, rpcclient.RPCCode, error) {
+		return rm.getRegistryNames(), 0, nil
 	})
 }
 
@@ -58,12 +59,12 @@ func (rm *registryManager) rpcQueryEntries() rpcserver.RPCHandler {
 		registryName string,
 		jq query.QueryJSON,
 		activeFilter pldtypes.Enum[pldapi.ActiveFilter],
-	) ([]*pldapi.RegistryEntry, error) {
-		return withRegistry(ctx, rm, registryName,
+	) ([]*pldapi.RegistryEntry, rpcclient.RPCCode, error) {
+		entries, err := withRegistry(ctx, rm, registryName,
 			func(r components.Registry) ([]*pldapi.RegistryEntry, error) {
 				return r.QueryEntries(ctx, rm.p.NOTX(), activeFilter.V(), &jq)
-			},
-		)
+			})
+		return entries, 0, err
 	})
 }
 
@@ -72,12 +73,12 @@ func (rm *registryManager) rpcQueryEntriesWithProps() rpcserver.RPCHandler {
 		registryName string,
 		jq query.QueryJSON,
 		activeFilter pldtypes.Enum[pldapi.ActiveFilter],
-	) ([]*pldapi.RegistryEntryWithProperties, error) {
-		return withRegistry(ctx, rm, registryName,
+	) ([]*pldapi.RegistryEntryWithProperties, rpcclient.RPCCode, error) {
+		entriesWithProps, err := withRegistry(ctx, rm, registryName,
 			func(r components.Registry) ([]*pldapi.RegistryEntryWithProperties, error) {
 				return r.QueryEntriesWithProps(ctx, rm.p.NOTX(), activeFilter.V(), &jq)
-			},
-		)
+			})
+		return entriesWithProps, 0, err
 	})
 }
 
@@ -86,11 +87,11 @@ func (rm *registryManager) rpcGetEntryProperties() rpcserver.RPCHandler {
 		registryName string,
 		entryID pldtypes.HexBytes,
 		activeFilter pldtypes.Enum[pldapi.ActiveFilter],
-	) ([]*pldapi.RegistryProperty, error) {
-		return withRegistry(ctx, rm, registryName,
+	) ([]*pldapi.RegistryProperty, rpcclient.RPCCode, error) {
+		properties, err := withRegistry(ctx, rm, registryName,
 			func(r components.Registry) ([]*pldapi.RegistryProperty, error) {
 				return r.GetEntryProperties(ctx, rm.p.NOTX(), activeFilter.V(), entryID)
-			},
-		)
+			})
+		return properties, 0, err
 	})
 }

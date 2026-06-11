@@ -30,20 +30,9 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldresty"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
+	toolkitrpcclient "github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcclient"
 	"github.com/go-resty/resty/v2"
 	"github.com/sirupsen/logrus"
-)
-
-type RPCCode int64
-
-const (
-	RPCCodeParseError     RPCCode = -32700
-	RPCCodeInvalidRequest RPCCode = -32600
-	RPCCodeInternalError  RPCCode = -32603
-	// JSON-RPC 2.0 specification reserves -32000 to -32099 for "implementation-defined server-errors"
-	// Paladin uses this range for custom application errors like authentication failures
-	RPCCodeUnauthorized RPCCode = -32000 // Unauthorized request - authentication failed
-	RPCCodeConflict     RPCCode = -32001 // Idempotency key clash - request already submitted with this key
 )
 
 // ClosableClient is a Client that can be closed to release underlying connections (HTTP or WebSocket).
@@ -84,7 +73,7 @@ type Byteable interface {
 	Bytes() []byte
 }
 
-func NewRPCErrorResponse(err error, id Byteable, code RPCCode) *RPCResponse {
+func NewRPCErrorResponse(err error, id Byteable, code toolkitrpcclient.RPCCode) *RPCResponse {
 	var byteID []byte
 	if id != nil {
 		byteID = id.Bytes()
@@ -196,12 +185,12 @@ func (rc *rpcClient) CallRPC(ctx context.Context, result interface{}, method str
 		if res != nil && res.Error != nil && res.Error.RPCError().Code != 0 {
 			return res.Error
 		}
-		return &RPCError{Code: int64(RPCCodeInternalError), Message: err.Error()}
+		return &RPCError{Code: int64(toolkitrpcclient.RPCCodeInternalError), Message: err.Error()}
 	}
 	err = json.Unmarshal(res.Result.Bytes(), &result)
 	if err != nil {
 		err = i18n.NewError(ctx, pldmsgs.MsgRPCClientResultParseFailed, result, err)
-		return &RPCError{Code: int64(RPCCodeParseError), Message: err.Error()}
+		return &RPCError{Code: int64(toolkitrpcclient.RPCCodeParseError), Message: err.Error()}
 	}
 	return nil
 }
@@ -243,7 +232,7 @@ func (rc *rpcClient) SyncRequest(ctx context.Context, rpcReq *RPCRequest) (rpcRe
 	if err != nil {
 		err := i18n.NewError(ctx, pldmsgs.MsgRPCClientRequestFailed, err)
 		log.L(ctx).Errorf("RPC[%s] <-- ERROR: %s", rpcTraceID, err)
-		rpcRes = RPCErrorResponse(err, rpcReq.ID, RPCCodeInternalError)
+		rpcRes = RPCErrorResponse(err, rpcReq.ID, toolkitrpcclient.RPCCodeInternalError)
 		return rpcRes, err
 	}
 	if logrus.IsLevelEnabled(logrus.TraceLevel) {
@@ -268,7 +257,7 @@ func (rc *rpcClient) SyncRequest(ctx context.Context, rpcReq *RPCRequest) (rpcRe
 	return rpcRes, nil
 }
 
-func RPCErrorResponse(err error, id pldtypes.RawJSON, code RPCCode) *RPCResponse {
+func RPCErrorResponse(err error, id pldtypes.RawJSON, code toolkitrpcclient.RPCCode) *RPCResponse {
 	return &RPCResponse{
 		JSONRpc: "2.0",
 		ID:      id,
@@ -288,17 +277,17 @@ func buildRequest(ctx context.Context, method string, params []interface{}) (*RP
 	for i, param := range params {
 		b, err := json.Marshal(param)
 		if err != nil {
-			return nil, NewRPCError(ctx, RPCCodeInvalidRequest, pldmsgs.MsgRPCClientInvalidParam, i, method, err)
+			return nil, NewRPCError(ctx, toolkitrpcclient.RPCCodeInvalidRequest, pldmsgs.MsgRPCClientInvalidParam, i, method, err)
 		}
 		req.Params[i] = pldtypes.RawJSON(b)
 	}
 	return req, nil
 }
 
-func NewRPCError(ctx context.Context, code RPCCode, msg i18n.ErrorMessageKey, inserts ...interface{}) *RPCError {
+func NewRPCError(ctx context.Context, code toolkitrpcclient.RPCCode, msg i18n.ErrorMessageKey, inserts ...interface{}) *RPCError {
 	return &RPCError{Code: int64(code), Message: i18n.NewError(ctx, msg, inserts...).Error()}
 }
 
-func WrapRPCError(code RPCCode, err error) *RPCError {
+func WrapRPCError(code toolkitrpcclient.RPCCode, err error) *RPCError {
 	return &RPCError{Code: int64(code), Message: err.Error()}
 }

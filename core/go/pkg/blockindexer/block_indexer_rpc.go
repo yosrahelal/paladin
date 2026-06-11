@@ -23,6 +23,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/query"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcclient"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/rpcserver"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 )
@@ -48,18 +49,20 @@ func (bi *blockIndexer) initRPC() {
 func (bi *blockIndexer) rpcGetBlockByNumber() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		number pldtypes.HexUint64,
-	) (*pldapi.IndexedBlock, error) {
+	) (*pldapi.IndexedBlock, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.GetIndexedBlockByNumber(ctx, number.Uint64())
+		block, err := bi.GetIndexedBlockByNumber(ctx, number.Uint64())
+		return block, 0, err
 	})
 }
 
 func (bi *blockIndexer) rpcGetTransactionByHash() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash pldtypes.Bytes32,
-	) (*pldapi.IndexedTransaction, error) {
+	) (*pldapi.IndexedTransaction, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.GetIndexedTransactionByHash(ctx, hash)
+		transaction, err := bi.GetIndexedTransactionByHash(ctx, hash)
+		return transaction, 0, err
 	})
 }
 
@@ -67,61 +70,68 @@ func (bi *blockIndexer) rpcGetTransactionByNonce() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod2(func(ctx context.Context,
 		from pldtypes.EthAddress,
 		nonce pldtypes.HexUint64,
-	) (*pldapi.IndexedTransaction, error) {
-		return bi.GetIndexedTransactionByNonce(ctx, from, nonce.Uint64())
+	) (*pldapi.IndexedTransaction, rpcclient.RPCCode, error) {
+		transaction, err := bi.GetIndexedTransactionByNonce(ctx, from, nonce.Uint64())
+		return transaction, 0, err
 	})
 }
 
 func (bi *blockIndexer) rpcGetBlockTransactionsByNumber() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		blockNumber pldtypes.HexUint64,
-	) ([]*pldapi.IndexedTransaction, error) {
+	) ([]*pldapi.IndexedTransaction, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.GetBlockTransactionsByNumber(ctx, int64(blockNumber.Uint64()))
+		transactions, err := bi.GetBlockTransactionsByNumber(ctx, int64(blockNumber.Uint64()))
+		return transactions, 0, err
 	})
 }
 
 func (bi *blockIndexer) rpcGetTransactionEventsByHash() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		hash pldtypes.Bytes32,
-	) ([]*pldapi.IndexedEvent, error) {
+	) ([]*pldapi.IndexedEvent, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.GetTransactionEventsByHash(ctx, hash)
+		events, err := bi.GetTransactionEventsByHash(ctx, hash)
+		return events, 0, err
 	})
 }
 
 func (bi *blockIndexer) rpcGetConfirmedBlockHeight() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod0(func(ctx context.Context,
-	) (pldtypes.HexUint64, error) {
+	) (pldtypes.HexUint64, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.GetConfirmedBlockHeight(ctx)
+		blockHeight, err := bi.GetConfirmedBlockHeight(ctx)
+		return blockHeight, 0, err
 	})
 }
 
 func (bi *blockIndexer) rpcQueryIndexedBlocks() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		jq query.QueryJSON,
-	) ([]*pldapi.IndexedBlock, error) {
+	) ([]*pldapi.IndexedBlock, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.QueryIndexedBlocks(ctx, &jq)
+		blocks, err := bi.QueryIndexedBlocks(ctx, &jq)
+		return blocks, 0, err
 	})
 }
 
 func (bi *blockIndexer) rpcQueryIndexedTransactions() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		jq query.QueryJSON,
-	) ([]*pldapi.IndexedTransaction, error) {
+	) ([]*pldapi.IndexedTransaction, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.QueryIndexedTransactions(ctx, &jq)
+		transactions, err := bi.QueryIndexedTransactions(ctx, &jq)
+		return transactions, 0, err
 	})
 }
 
 func (bi *blockIndexer) rpcQueryIndexedEvents() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context,
 		jq query.QueryJSON,
-	) ([]*pldapi.IndexedEvent, error) {
+	) ([]*pldapi.IndexedEvent, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.QueryIndexedEvents(ctx, &jq)
+		events, err := bi.QueryIndexedEvents(ctx, &jq)
+		return events, 0, err
 	})
 }
 
@@ -130,8 +140,9 @@ func (bi *blockIndexer) rpcDecodeTransactionEvents() rpcserver.RPCHandler {
 		hash pldtypes.Bytes32,
 		abi abi.ABI,
 		resultFormat pldtypes.JSONFormatOptions,
-	) ([]*pldapi.EventWithData, error) {
+	) ([]*pldapi.EventWithData, rpcclient.RPCCode, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		return bi.DecodeTransactionEvents(ctx, hash, abi, resultFormat)
+		events, err := bi.DecodeTransactionEvents(ctx, hash, abi, resultFormat)
+		return events, 0, err
 	})
 }
