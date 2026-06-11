@@ -382,23 +382,23 @@ func (d *domain) handleEventBatchForContract(ctx context.Context, dbTX persisten
 		}
 	}
 
-	// Update the global private state completion index for domains that opt in.
+	// Update the global pending private state data index for domains that opt in.
 	if len(confirmedStateIDsByTX) > 0 {
-		var batchEntries []components.StateCompletionEntry
+		var batchEntries []components.PendingPrivateStateDataEntry
 		for _, txCompletionEvent := range res.TransactionsComplete {
 			txUUID, err := d.recoverTransactionID(ctx, txCompletionEvent.TransactionId)
 			if err != nil {
 				return nil, err
 			}
 			for _, id := range confirmedStateIDsByTX[*txUUID] {
-				batchEntries = append(batchEntries, components.StateCompletionEntry{
+				batchEntries = append(batchEntries, components.PendingPrivateStateDataEntry{
 					StateID:     id,
 					Contract:    addr,
 					BlockNumber: txCompletionEvent.Location.BlockNumber,
 				})
 			}
 		}
-		if err := d.dm.stateStore.WriteStateCompletionsForBatch(ctx, dbTX, d.name, batchEntries); err != nil {
+		if err := d.dm.stateStore.WritePendingPrivateStateDataBatch(ctx, dbTX, d.name, batchEntries); err != nil {
 			return nil, err
 		}
 	}

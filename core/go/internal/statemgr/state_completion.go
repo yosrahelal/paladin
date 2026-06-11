@@ -24,24 +24,24 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// privateStateCompletion tracks confirmed states for opted-in domains that are still
-// waiting for private data. One row exists per missing state ID; rows are deleted when
+// pendingPrivateStateData tracks confirmed states for opted-in domains that are still
+// waiting for private data. One row exists per state ID; rows are deleted when
 // the corresponding state data arrives.
-type privateStateCompletion struct {
-	MissingStateID string `gorm:"column:missing_state_id;primaryKey"`
-	Contract       string `gorm:"column:contract"`
-	BlockNumber    int64  `gorm:"column:block_number"`
+type pendingPrivateStateData struct {
+	StateID     string `gorm:"column:state_id;primaryKey"`
+	Contract    string `gorm:"column:contract"`
+	BlockNumber int64  `gorm:"column:block_number"`
 }
 
-func (privateStateCompletion) TableName() string {
-	return "private_state_completion"
+func (pendingPrivateStateData) TableName() string {
+	return "pending_private_state_data"
 }
 
-// WriteStateCompletionsForBatch is called from the event indexer within the event-stream DB
+// WritePendingPrivateStateDataBatch is called from the event indexer within the event-stream DB
 // transaction after the entire event batch has been processed for a domain that supports the
 // completion index. It makes a single getStateIDsMissingPrivateData query for all state IDs
-// in the batch, then writes one completion row per missing state.
-func (ss *stateManager) WriteStateCompletionsForBatch(ctx context.Context, dbTX persistence.DBTX, domainName string, states []components.StateCompletionEntry) error {
+// in the batch, then writes one row per missing state.
+func (ss *stateManager) WritePendingPrivateStateDataBatch(ctx context.Context, dbTX persistence.DBTX, domainName string, states []components.PendingPrivateStateDataEntry) error {
 	if len(states) == 0 {
 		return nil
 	}
@@ -59,21 +59,21 @@ func (ss *stateManager) WriteStateCompletionsForBatch(ctx context.Context, dbTX 
 		return nil
 	}
 
-	stateIndex := make(map[string]*components.StateCompletionEntry, len(states))
+	stateIndex := make(map[string]*components.PendingPrivateStateDataEntry, len(states))
 	for i := range states {
 		stateIndex[states[i].StateID.String()] = &states[i]
 	}
 
-	rows := make([]*privateStateCompletion, 0, len(missingIDs))
+	rows := make([]*pendingPrivateStateData, 0, len(missingIDs))
 	for _, id := range missingIDs {
 		entry := stateIndex[id.String()]
 		if entry == nil {
 			continue
 		}
-		rows = append(rows, &privateStateCompletion{
-			MissingStateID: id.String(),
-			Contract:       entry.Contract.String(),
-			BlockNumber:    entry.BlockNumber,
+		rows = append(rows, &pendingPrivateStateData{
+			StateID:     id.String(),
+			Contract:    entry.Contract.String(),
+			BlockNumber: entry.BlockNumber,
 		})
 	}
 
@@ -86,9 +86,9 @@ func (ss *stateManager) WriteStateCompletionsForBatch(ctx context.Context, dbTX 
 		Error
 }
 
-// updateStateCompletion is called internally from writeStates after new states are written.
-// It deletes completion rows whose missing_state_id matches one of the arrived states.
-func (ss *stateManager) updateStateCompletion(ctx context.Context, dbTX persistence.DBTX, arrivedStateIDs []pldtypes.HexBytes) error {
+// updatePendingPrivateStateData is called internally from writeStates after new states are written.
+// It deletes rows whose state_id matches one of the arrived states.
+func (ss *stateManager) updatePendingPrivateStateData(ctx context.Context, dbTX persistence.DBTX, arrivedStateIDs []pldtypes.HexBytes) error {
 	if len(arrivedStateIDs) == 0 {
 		return nil
 	}
@@ -100,18 +100,18 @@ func (ss *stateManager) updateStateCompletion(ctx context.Context, dbTX persiste
 
 	return dbTX.DB().
 		WithContext(ctx).
-		Where("missing_state_id IN ?", arrivedStrs).
-		Delete(&privateStateCompletion{}).
+		Where("state_id IN ?", arrivedStrs).
+		Delete(&pendingPrivateStateData{}).
 		Error
 }
 
-// CheckStateCompletionForContract returns true if there are no outstanding completion rows for
+// CheckPendingPrivateStateDataForContract returns true if there are no outstanding rows for
 // the given contract at or below the given block number.
-func (ss *stateManager) CheckStateCompletionForContract(ctx context.Context, dbTX persistence.DBTX, contract string, block int64) (bool, error) {
+func (ss *stateManager) CheckPendingPrivateStateDataForContract(ctx context.Context, dbTX persistence.DBTX, contract string, block int64) (bool, error) {
 	var count int64
 	err := dbTX.DB().
 		WithContext(ctx).
-		Model(&privateStateCompletion{}).
+		Model(&pendingPrivateStateData{}).
 		Where("contract = ? AND block_number <= ?", contract, block).
 		Count(&count).
 		Error

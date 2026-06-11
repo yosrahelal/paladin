@@ -198,7 +198,7 @@ func (ss *stateManager) writeStates(ctx context.Context, dbTX persistence.DBTX, 
 		for i, s := range states {
 			arrivedIDs[i] = s.ID
 		}
-		err = ss.updateStateCompletion(ctx, dbTX, arrivedIDs)
+		err = ss.updatePendingPrivateStateData(ctx, dbTX, arrivedIDs)
 	}
 	return err
 }

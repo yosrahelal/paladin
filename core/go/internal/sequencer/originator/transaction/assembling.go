@@ -175,7 +175,7 @@ func action_RefreshBlockHeight(ctx context.Context, t *originatorTransaction, _ 
 // data it is entitled to up to the coordinator's low watermark (coordinatorsBlockHeight - blockHeightTolerance).
 func validator_IsPrivateStateIncompleteForAssembly(ctx context.Context, t *originatorTransaction, event common.Event) (bool, error) {
 	e := event.(*AssembleRequestReceivedEvent)
-	complete, err := t.engineIntegration.CheckStateCompletion(ctx, e.CoordinatorBlockHeight-e.BlockHeightTolerance)
+	complete, err := t.engineIntegration.CheckPendingPrivateStateData(ctx, e.CoordinatorBlockHeight-e.BlockHeightTolerance)
 	return !complete, err
 }
 

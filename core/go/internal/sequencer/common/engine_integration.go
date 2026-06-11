@@ -34,9 +34,9 @@ type EngineIntegration interface {
 	GetBlockHeight(ctx context.Context) int64
 	// Domain returns the domain associated with the contract being sequenced.
 	Domain() components.Domain
-	// CheckStateCompletion returns true when the node has all private state data for
+	// CheckPendingPrivateStateData returns true when the node has all private state data for
 	// opted-in domain contracts up to and including the provided block number.
-	CheckStateCompletion(ctx context.Context, block int64) (bool, error)
+	CheckPendingPrivateStateData(ctx context.Context, block int64) (bool, error)
 	//Assemble and sign is a single, synchronous operation that assembles a transaction using the domain smart contract
 	// and then fulfills any signature requests in the attestation plan
 	// there would be a benefit in separating this out to `assemble` and `sign` steps and to make then asynchronous
@@ -96,11 +96,11 @@ func (e *engineIntegration) Domain() components.Domain {
 	return e.domainSmartContract.Domain()
 }
 
-func (e *engineIntegration) CheckStateCompletion(ctx context.Context, block int64) (bool, error) {
+func (e *engineIntegration) CheckPendingPrivateStateData(ctx context.Context, block int64) (bool, error) {
 	if !e.domainSmartContract.Domain().FullStateAvailablityRequired() {
 		return true, nil
 	}
-	return e.components.StateManager().CheckStateCompletionForContract(
+	return e.components.StateManager().CheckPendingPrivateStateDataForContract(
 		ctx, e.components.Persistence().NOTX(),
 		e.domainSmartContract.Address().String(), block,
 	)

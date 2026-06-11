@@ -309,7 +309,7 @@ func TestOriginatorTransaction_Delegated_StaysInState_OnAssembleRequestReceived_
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Delegated).
 		CurrentBlockHeight(90). // within tolerance of coordinator's block height (diff ≤ tolerance, not >)
-		WithCheckStateCompletion(false).
+		WithCheckPendingPrivateStateData(false).
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
@@ -480,7 +480,7 @@ func TestOriginatorTransaction_Assembling_StaysInState_OnAssembleRequestReceived
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
 		CurrentBlockHeight(90). // within tolerance of coordinator's block height (diff ≤ tolerance, not >)
-		WithCheckStateCompletion(false).
+		WithCheckPendingPrivateStateData(false).
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
@@ -684,7 +684,7 @@ func TestOriginatorTransaction_Reverted_StaysInState_OnAssembleRequestReceived_P
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Reverted).
 		CurrentBlockHeight(90). // within tolerance of coordinator's block height (diff ≤ tolerance, not >)
-		WithCheckStateCompletion(false).
+		WithCheckPendingPrivateStateData(false).
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
@@ -791,7 +791,7 @@ func TestOriginatorTransaction_Parked_StaysInState_OnAssembleRequestReceived_Pri
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Parked).
 		CurrentBlockHeight(90). // within tolerance of coordinator's block height (diff ≤ tolerance, not >)
-		WithCheckStateCompletion(false).
+		WithCheckPendingPrivateStateData(false).
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
@@ -873,7 +873,7 @@ func TestOriginatorTransaction_Endorsement_Gathering_StaysInState_OnAssembleRequ
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
 		CurrentBlockHeight(90). // within tolerance of coordinator's block height (diff ≤ tolerance, not >)
-		WithCheckStateCompletion(false).
+		WithCheckPendingPrivateStateData(false).
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
@@ -1046,7 +1046,7 @@ func TestOriginatorTransaction_Prepared_StaysInState_OnAssembleRequestReceived_P
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Prepared).
 		CurrentBlockHeight(90). // within tolerance of coordinator's block height (diff ≤ tolerance, not >)
-		WithCheckStateCompletion(false).
+		WithCheckPendingPrivateStateData(false).
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
@@ -1220,7 +1220,7 @@ func TestOriginatorTransaction_Dispatched_StaysInState_OnAssembleRequestReceived
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
 		CurrentBlockHeight(90). // within tolerance of coordinator's block height (diff ≤ tolerance, not >)
-		WithCheckStateCompletion(false).
+		WithCheckPendingPrivateStateData(false).
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
@@ -1378,7 +1378,7 @@ func TestOriginatorTransaction_Sequenced_StaysInState_OnAssembleRequestReceived_
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Sequenced).
 		CurrentBlockHeight(90). // within tolerance of coordinator's block height (diff ≤ tolerance, not >)
-		WithCheckStateCompletion(false).
+		WithCheckPendingPrivateStateData(false).
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
@@ -1563,7 +1563,7 @@ func TestOriginatorTransaction_Submitted_StaysInState_OnAssembleRequestReceived_
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Submitted).
 		CurrentBlockHeight(90). // within tolerance of coordinator's block height (diff ≤ tolerance, not >)
-		WithCheckStateCompletion(false).
+		WithCheckPendingPrivateStateData(false).
 		BuildWithMocks()
 
 	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{

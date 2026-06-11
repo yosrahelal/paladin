@@ -68,16 +68,16 @@ type StateManager interface {
 	// Get all states created, read or spent by a confirmed transaction
 	GetTransactionStates(ctx context.Context, dbTX persistence.DBTX, txID uuid.UUID) (*pldapi.TransactionStates, error)
 
-	// WriteStateCompletionsForBatch writes the completion rows for a batch of states whose private data has not yet arrived.
-	WriteStateCompletionsForBatch(ctx context.Context, dbTX persistence.DBTX, domainName string, states []StateCompletionEntry) error
+	// WritePendingPrivateStateDataBatch writes rows for a batch of states whose private data has not yet arrived.
+	WritePendingPrivateStateDataBatch(ctx context.Context, dbTX persistence.DBTX, domainName string, states []PendingPrivateStateDataEntry) error
 
-	// CheckStateCompletionForContract returns true if there are no outstanding completion rows for the given contract at or below the given block number.
-	CheckStateCompletionForContract(ctx context.Context, dbTX persistence.DBTX, contract string, block int64) (complete bool, err error)
+	// CheckPendingPrivateStateDataForContract returns true if there are no outstanding rows for the given contract at or below the given block number.
+	CheckPendingPrivateStateDataForContract(ctx context.Context, dbTX persistence.DBTX, contract string, block int64) (complete bool, err error)
 }
 
-// StateCompletionEntry represents a single private state referenced by a confirmed transaction.
-// It carries the minimum context needed to write a private_state_completion row.
-type StateCompletionEntry struct {
+// PendingPrivateStateDataEntry represents a single private state referenced by a confirmed transaction.
+// It carries the minimum context needed to write a pending_private_state_data row.
+type PendingPrivateStateDataEntry struct {
 	StateID     pldtypes.HexBytes
 	Contract    pldtypes.EthAddress
 	BlockNumber int64

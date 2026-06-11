@@ -151,12 +151,12 @@ func (b *OriginatorBuilderForTesting) Transactions(txns ...transaction.Originato
 	return b
 }
 
-func (b *OriginatorBuilderForTesting) WithCheckStateCompletion(complete bool) *OriginatorBuilderForTesting {
+func (b *OriginatorBuilderForTesting) WithCheckPendingPrivateStateData(complete bool) *OriginatorBuilderForTesting {
 	b.checkStateComplete = complete
 	return b
 }
 
-func (b *OriginatorBuilderForTesting) WithCheckStateCompletionError(err error) *OriginatorBuilderForTesting {
+func (b *OriginatorBuilderForTesting) WithCheckPendingPrivateStateDataError(err error) *OriginatorBuilderForTesting {
 	b.checkStateComplete = false
 	b.checkStateErr = err
 	return b

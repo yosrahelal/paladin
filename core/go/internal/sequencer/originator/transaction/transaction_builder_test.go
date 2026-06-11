@@ -134,12 +134,12 @@ func (b *TransactionBuilderForTesting) CurrentBlockHeight(blockHeight int64) *Tr
 	return b
 }
 
-func (b *TransactionBuilderForTesting) WithCheckStateCompletion(complete bool) *TransactionBuilderForTesting {
+func (b *TransactionBuilderForTesting) WithCheckPendingPrivateStateData(complete bool) *TransactionBuilderForTesting {
 	b.checkStateComplete = complete
 	return b
 }
 
-func (b *TransactionBuilderForTesting) WithCheckStateCompletionError(err error) *TransactionBuilderForTesting {
+func (b *TransactionBuilderForTesting) WithCheckPendingPrivateStateDataError(err error) *TransactionBuilderForTesting {
 	b.checkStateComplete = false
 	b.checkStateErr = err
 	return b
@@ -154,7 +154,7 @@ type TransactionDependencyFakes struct {
 }
 
 func (b *TransactionBuilderForTesting) BuildWithMocks() (*originatorTransaction, *TransactionDependencyFakes) {
-	b.fakeEngineIntegration.On("CheckStateCompletion", mock.Anything, mock.Anything).
+	b.fakeEngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, mock.Anything).
 		Return(b.checkStateComplete, b.checkStateErr).Maybe()
 
 	mocks := &TransactionDependencyFakes{

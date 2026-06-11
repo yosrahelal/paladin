@@ -45,7 +45,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	builder := NewOriginatorBuilderForTesting(t, State_Idle).CurrentActiveCoordinator(coordinatorNode)
 	o, mocks := builder.Build()
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, mock.Anything).Return(true, nil)
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, mock.Anything).Return(true, nil)
 	require.NoError(t, o.Start(ctx))
 	defer func() {
 		cancel()

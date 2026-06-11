@@ -388,17 +388,17 @@ func TestWritePreVerifiedStates_ClearsCompletionRows(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, states, 2)
 
-	// Seed completion rows for both state IDs.
+	// Seed pending rows for both state IDs.
 	for _, s := range states {
-		err = ss.p.DB().Create(&privateStateCompletion{
-			MissingStateID: s.ID.String(),
-			Contract:       contractAddr.String(),
-			BlockNumber:    1,
+		err = ss.p.DB().Create(&pendingPrivateStateData{
+			StateID:     s.ID.String(),
+			Contract:    contractAddr.String(),
+			BlockNumber: 1,
 		}).Error
 		require.NoError(t, err)
 	}
 
-	// Now write the states again (idempotent upsert) — this must clear the completion rows.
+	// Now write the states again (idempotent upsert) — this must clear the pending rows.
 	err = ss.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
 		_, err = ss.WritePreVerifiedStates(ctx, dbTX, "domain1", []*components.StateUpsertOutsideContext{
 			{ID: states[0].ID, SchemaID: schema.ID(), Data: states[0].Data, ContractAddress: contractAddr},
@@ -408,7 +408,7 @@ func TestWritePreVerifiedStates_ClearsCompletionRows(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var remaining []privateStateCompletion
+	var remaining []pendingPrivateStateData
 	err = ss.p.DB().Find(&remaining).Error
 	require.NoError(t, err)
 	assert.Empty(t, remaining)

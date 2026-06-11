@@ -88,7 +88,7 @@ func setupEndorsementMocks(t *testing.T, mocks *CoordinatorDependencyMocks) (*co
 func Test_validator_IsPrivateStateIncompleteForEndorsement_Complete_ReturnsFalse(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(true, nil) // lowWatermark = 100 - 10
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(true, nil) // lowWatermark = 100 - 10
 
 	event := &EndorsementRequestReceivedEvent{
 		CoordinatorBlockHeight: 100,
@@ -103,7 +103,7 @@ func Test_validator_IsPrivateStateIncompleteForEndorsement_Complete_ReturnsFalse
 func Test_validator_IsPrivateStateIncompleteForEndorsement_Incomplete_ReturnsTrue(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil) // lowWatermark = 100 - 10
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil) // lowWatermark = 100 - 10
 
 	event := &EndorsementRequestReceivedEvent{
 		CoordinatorBlockHeight: 100,
@@ -119,7 +119,7 @@ func Test_validator_IsPrivateStateIncompleteForEndorsement_Error_Propagates(t *t
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 	dbErr := fmt.Errorf("db error")
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, dbErr)
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, dbErr)
 
 	event := &EndorsementRequestReceivedEvent{
 		CoordinatorBlockHeight: 100,

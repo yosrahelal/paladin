@@ -179,21 +179,21 @@ func TestEngineIntegration_Domain(t *testing.T) {
 	assert.Equal(t, m.domain, result)
 }
 
-// ─── CheckStateCompletion ─────────────────────────────────────────────
+// ─── CheckPendingPrivateStateData ─────────────────────────────────────────────
 
-func TestEngineIntegration_CheckStateCompletion_DomainNotOptedIn(t *testing.T) {
+func TestEngineIntegration_CheckPendingPrivateStateData_DomainNotOptedIn(t *testing.T) {
 	ctx := context.Background()
 	ei, m := newTestEngineIntegration(t)
 
 	m.domainSmartContract.On("Domain").Return(m.domain).Once()
 	m.domain.On("FullStateAvailablityRequired").Return(false).Once()
 
-	complete, err := ei.CheckStateCompletion(ctx, 100)
+	complete, err := ei.CheckPendingPrivateStateData(ctx, 100)
 	require.NoError(t, err)
 	assert.True(t, complete)
 }
 
-func TestEngineIntegration_CheckStateCompletion_DomainOptedIn(t *testing.T) {
+func TestEngineIntegration_CheckPendingPrivateStateData_DomainOptedIn(t *testing.T) {
 	ctx := context.Background()
 	ei, m := newTestEngineIntegration(t)
 
@@ -206,10 +206,10 @@ func TestEngineIntegration_CheckStateCompletion_DomainOptedIn(t *testing.T) {
 	m.domainSmartContract.On("Domain").Return(m.domain).Once()
 	m.domain.On("FullStateAvailablityRequired").Return(true).Once()
 	m.domainSmartContract.On("Address").Return(contractAddr).Once()
-	m.stateManager.On("CheckStateCompletionForContract", ctx, mock.Anything, contractAddr.String(), int64(100)).
+	m.stateManager.On("CheckPendingPrivateStateDataForContract", ctx, mock.Anything, contractAddr.String(), int64(100)).
 		Return(true, nil).Once()
 
-	complete, err := ei.CheckStateCompletion(ctx, 100)
+	complete, err := ei.CheckPendingPrivateStateData(ctx, 100)
 	require.NoError(t, err)
 	assert.True(t, complete)
 }

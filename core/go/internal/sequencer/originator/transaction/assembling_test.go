@@ -498,7 +498,7 @@ func Test_validator_IsPrivateStateIncompleteForAssembly_Complete_ReturnsFalse(t 
 func Test_validator_IsPrivateStateIncompleteForAssembly_Incomplete_ReturnsTrue(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Delegated).
-		WithCheckStateCompletion(false).
+		WithCheckPendingPrivateStateData(false).
 		BuildWithMocks()
 
 	event := &AssembleRequestReceivedEvent{
@@ -515,7 +515,7 @@ func Test_validator_IsPrivateStateIncompleteForAssembly_Error_Propagates(t *test
 	ctx := context.Background()
 	dbErr := errors.New("db error")
 	txn, _ := NewTransactionBuilderForTesting(t, State_Delegated).
-		WithCheckStateCompletionError(dbErr).
+		WithCheckPendingPrivateStateDataError(dbErr).
 		BuildWithMocks()
 
 	event := &AssembleRequestReceivedEvent{

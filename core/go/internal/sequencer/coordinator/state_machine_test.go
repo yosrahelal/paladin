@@ -270,7 +270,7 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_PrivateStateIncomplete_
 		Build()
 
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
@@ -450,7 +450,7 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_PrivateStateIncomp
 		Build()
 
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
@@ -965,7 +965,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_PrivateStateIncomplete
 		Build()
 
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
@@ -1465,7 +1465,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_PrivateStateIncompl
 		Build()
 
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
@@ -1986,7 +1986,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_PrivateStateIncomplet
 		Build()
 
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
@@ -2322,7 +2322,7 @@ func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_PrivateStateInco
 		Build()
 
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
@@ -2613,7 +2613,7 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_PrivateStateInc
 		Build()
 
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
@@ -2938,7 +2938,7 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_PrivateStateIncomple
 		Build()
 
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, int64(90)).Return(false, nil)
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
@@ -2991,7 +2991,7 @@ func TestCoordinator_PreProcessEvent_OwnHeartbeat_IsFilteredOut(t *testing.T) {
 // fails the higher-priority check, triggering action_RejectEndorsementEndorserIsActiveCoordinator.
 func newLowerPriorityEndorsementEvent(t *testing.T, fromNode string, mocks *CoordinatorDependencyMocks, stateComplete bool) *EndorsementRequestReceivedEvent {
 	t.Helper()
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, mock.Anything).Return(stateComplete, nil).Maybe()
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, mock.Anything).Return(stateComplete, nil).Maybe()
 	return &EndorsementRequestReceivedEvent{
 		FromNode:                  fromNode,
 		TransactionId:             "tx-lp-test",
@@ -3007,10 +3007,10 @@ func newLowerPriorityEndorsementEvent(t *testing.T, fromNode string, mocks *Coor
 // with CoordinatorBlockHeight=0 (far from the coordinator's currentBlockHeight of 100).
 // The block-height difference (100) exceeds the configured tolerance (10), triggering
 // action_RejectEndorsementBlockHeight. Because the state machine uses MatchAll, the
-// private-state validator is also evaluated; CheckStateCompletion is mocked to return true
+// private-state validator is also evaluated; CheckPendingPrivateStateData is mocked to return true
 // so that handler does not fire a second rejection.
 func newBlockHeightExceedingEndorsementEvent(fromNode string, mocks *CoordinatorDependencyMocks) *EndorsementRequestReceivedEvent {
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, mock.Anything).Return(true, nil).Maybe()
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, mock.Anything).Return(true, nil).Maybe()
 	return &EndorsementRequestReceivedEvent{
 		FromNode:                  fromNode,
 		TransactionId:             "tx-bh-test",
@@ -3039,11 +3039,11 @@ func newDelegationBlockHeightExceedingEvent(fromNode string) *TransactionsDelega
 // wires the coordinator's mocks so the background endorsement goroutine exits immediately
 // (at party key resolution) without touching SendEndorsementResponse.  All mock expectations
 // use .Maybe() so they tolerate asynchronous execution after the test's synchronous assertions.
-// stateComplete controls whether CheckStateCompletion returns true (state ready) or false (incomplete).
+// stateComplete controls whether CheckPendingPrivateStateData returns true (state ready) or false (incomplete).
 func newEndorsementEventForStateMachineTest(t *testing.T, fromNode string, mocks *CoordinatorDependencyMocks, stateComplete bool) *EndorsementRequestReceivedEvent {
 	t.Helper()
 
-	mocks.EngineIntegration.On("CheckStateCompletion", mock.Anything, mock.Anything).Return(stateComplete, nil).Maybe()
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, mock.Anything).Return(stateComplete, nil).Maybe()
 
 	// Fail at party key resolution so the goroutine exits as early as possible.
 	mockKeyManager := componentsmocks.NewKeyManager(t)

@@ -29,7 +29,7 @@ import (
 func validator_IsPrivateStateIncompleteForEndorsement(ctx context.Context, c *coordinator, event common.Event) (bool, error) {
 	e := event.(*EndorsementRequestReceivedEvent)
 	lowWatermark := e.CoordinatorBlockHeight - e.BlockHeightTolerance
-	complete, err := c.engineIntegration.CheckStateCompletion(ctx, lowWatermark)
+	complete, err := c.engineIntegration.CheckPendingPrivateStateData(ctx, lowWatermark)
 	return !complete, err
 }
 
