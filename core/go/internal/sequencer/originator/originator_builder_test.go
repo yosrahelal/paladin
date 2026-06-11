@@ -56,6 +56,8 @@ type OriginatorBuilderForTesting struct {
 	failoverIndex                      *int
 	transactions                       []transaction.OriginatorTransaction
 	useMockTransportWriter             bool
+	checkStateComplete                 bool
+	checkStateErr                      error
 }
 
 type OriginatorDependencyMocks struct {
@@ -66,10 +68,11 @@ type OriginatorDependencyMocks struct {
 
 func NewOriginatorBuilderForTesting(t *testing.T, state State) *OriginatorBuilderForTesting {
 	return &OriginatorBuilderForTesting{
-		t:               t,
-		state:           state,
-		metrics:         metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
-		sequencerConfig: &pldconf.SequencerDefaults,
+		t:                  t,
+		state:              state,
+		metrics:            metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
+		sequencerConfig:    &pldconf.SequencerDefaults,
+		checkStateComplete: true, // default: state is complete
 	}
 }
 
@@ -145,6 +148,17 @@ func (b *OriginatorBuilderForTesting) FailoverIndex(n int) *OriginatorBuilderFor
 }
 func (b *OriginatorBuilderForTesting) Transactions(txns ...transaction.OriginatorTransaction) *OriginatorBuilderForTesting {
 	b.transactions = txns
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) WithCheckPendingPrivateStateData(complete bool) *OriginatorBuilderForTesting {
+	b.checkStateComplete = complete
+	return b
+}
+
+func (b *OriginatorBuilderForTesting) WithCheckPendingPrivateStateDataError(err error) *OriginatorBuilderForTesting {
+	b.checkStateComplete = false
+	b.checkStateErr = err
 	return b
 }
 

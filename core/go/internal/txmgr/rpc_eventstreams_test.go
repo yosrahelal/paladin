@@ -25,6 +25,7 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
+	"github.com/LFDT-Paladin/paladin/core/mocks/blockindexermocks"
 	"github.com/LFDT-Paladin/paladin/core/pkg/blockindexer"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
@@ -279,9 +280,11 @@ func TestRPCReceiptListenerE2ENack(t *testing.T) {
 func TestRPCEventListenerE2E(t *testing.T) {
 	ctx, url, txm, done := newTestTransactionManagerWithWebSocketRPC(t,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything, mock.Anything).Return(&blockindexer.EventStream{
-				ID: uuid.New(),
-			}, nil)
+			esID := uuid.New()
+			mockESHandle := blockindexermocks.NewEventStream(t)
+			mockESHandle.On("Definition").Return(&blockindexer.EventStreamDefinition{ID: esID}).Maybe()
+			mockESHandle.On("ID").Return(esID).Maybe()
+			mc.blockIndexer.On("AddEventStream", mock.Anything, mock.Anything, mock.Anything).Return(mockESHandle, nil)
 			mc.blockIndexer.On("StopEventStream", mock.Anything, mock.Anything).Return(nil)
 		})
 	defer done()

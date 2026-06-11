@@ -157,16 +157,16 @@ func TestAssembleRequestReceivedEvent_Fields(t *testing.T) {
 		BaseEvent: BaseEvent{
 			TransactionID: txID,
 		},
-		RequestID:               requestID,
-		Coordinator:             coordinator,
-		CoordinatorsBlockHeight: blockHeight,
-		StateLocksJSON:          stateLocksJSON,
-		PreAssembly:             preAssembly,
+		RequestID:              requestID,
+		Coordinator:            coordinator,
+		CoordinatorBlockHeight: blockHeight,
+		StateLocksJSON:         stateLocksJSON,
+		PreAssembly:            preAssembly,
 	}
 	assert.Equal(t, txID, event.GetTransactionID())
 	assert.Equal(t, requestID, event.RequestID)
 	assert.Equal(t, coordinator, event.Coordinator)
-	assert.Equal(t, blockHeight, event.CoordinatorsBlockHeight)
+	assert.Equal(t, blockHeight, event.CoordinatorBlockHeight)
 	assert.Equal(t, stateLocksJSON, event.StateLocksJSON)
 	assert.Equal(t, preAssembly, event.PreAssembly)
 }

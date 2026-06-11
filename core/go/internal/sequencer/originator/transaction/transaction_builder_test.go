@@ -58,9 +58,11 @@ type TransactionBuilderForTesting struct {
 	signerAddress        *pldtypes.EthAddress
 	nonce                *uint64
 
-	metrics              metrics.DistributedSequencerMetrics
-	blockHeightTolerance uint64
-	currentBlockHeight   int64
+	metrics            metrics.DistributedSequencerMetrics
+	currentBlockHeight int64
+
+	checkStateComplete bool
+	checkStateErr      error
 }
 
 // Function NewTransactionBuilderForTesting creates a TransactionBuilderForTesting with random values for all fields.
@@ -74,6 +76,7 @@ func NewTransactionBuilderForTesting(t *testing.T, state State) *TransactionBuil
 		fakeEngineIntegration:     sequencercommonmocks.NewEngineIntegration(t),
 		sentMessageRecorder:       testutil.NewSentMessageRecorder(),
 		metrics:                   metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
+		checkStateComplete:        true, // default: state is complete
 	}
 
 	switch state {
@@ -126,13 +129,19 @@ func (b *TransactionBuilderForTesting) WithMockTransportWriter() *TransactionBui
 	return b
 }
 
-func (b *TransactionBuilderForTesting) BlockHeightTolerance(tolerance uint64) *TransactionBuilderForTesting {
-	b.blockHeightTolerance = tolerance
+func (b *TransactionBuilderForTesting) CurrentBlockHeight(blockHeight int64) *TransactionBuilderForTesting {
+	b.currentBlockHeight = blockHeight
 	return b
 }
 
-func (b *TransactionBuilderForTesting) CurrentBlockHeight(blockHeight int64) *TransactionBuilderForTesting {
-	b.currentBlockHeight = blockHeight
+func (b *TransactionBuilderForTesting) WithCheckPendingPrivateStateData(complete bool) *TransactionBuilderForTesting {
+	b.checkStateComplete = complete
+	return b
+}
+
+func (b *TransactionBuilderForTesting) WithCheckPendingPrivateStateDataError(err error) *TransactionBuilderForTesting {
+	b.checkStateComplete = false
+	b.checkStateErr = err
 	return b
 }
 
@@ -145,6 +154,9 @@ type TransactionDependencyFakes struct {
 }
 
 func (b *TransactionBuilderForTesting) BuildWithMocks() (*originatorTransaction, *TransactionDependencyFakes) {
+	b.fakeEngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, mock.Anything).
+		Return(b.checkStateComplete, b.checkStateErr).Maybe()
+
 	mocks := &TransactionDependencyFakes{
 		SentMessageRecorder: b.sentMessageRecorder,
 		EngineIntegration:   b.fakeEngineIntegration,
