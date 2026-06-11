@@ -202,9 +202,9 @@ def simplify_guard(expr: str) -> str:
 
 
 def parse_states(content: str) -> Dict[str, str]:
-    """Return {State_Xxx: description} from the `const (... State = iota ...)` block."""
+    """Return {State_Xxx: description} from the const block containing State_ aliases."""
     states: Dict[str, str] = {}
-    block = find_const_block(content, "State = iota")
+    block = find_const_block(content, "State_")
     if not block:
         return states
     for line in block.splitlines():
@@ -341,7 +341,7 @@ def parse_state_machine(file_path: Path, name: str) -> StateMachineData:
                     state_block = extract_block(map_block, pos)
                     # Find Events: map[EventType]EventHandler{
                     evm = re.search(
-                        r"\bEvents:\s*map\[EventType\]EventHandler\{", state_block
+                        r"\bEvents:\s*map\[EventType\]EventHandlers?\{", state_block
                     )
                     if evm:
                         eb_start = evm.start() + len(evm.group()) - 1
