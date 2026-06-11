@@ -27,20 +27,22 @@ import (
 
 type State = common.OriginatorTransactionState
 
+// Note: inline comments on State_* constants are used in auto-generated documentation.
+// Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
-	State_Initial               = common.OriginatorTransactionState_Initial               // Initial state before anything is calculated
-	State_Pending               = common.OriginatorTransactionState_Pending               // Intent created in the database but not currently known to be processed by a coordinator
-	State_Delegated             = common.OriginatorTransactionState_Delegated             // Sent to the current active coordinator; delegate loop will retry periodically
-	State_Assembling            = common.OriginatorTransactionState_Assembling            // Coordinator has sent an assemble request that we have not yet replied to
-	State_Endorsement_Gathering = common.OriginatorTransactionState_Endorsement_Gathering // Responded to assemble request; waiting for coordinator to gather endorsements and send a dispatch confirmation request
-	State_Prepared              = common.OriginatorTransactionState_Prepared              // Coordinator has prepared the public transaction; positive response to dispatch confirmation sent; not yet dispatched
-	State_Dispatched            = common.OriginatorTransactionState_Dispatched            // Active coordinator has dispatched the transaction to a public transaction manager for submission
-	State_Sequenced             = common.OriginatorTransactionState_Sequenced             // Assigned a nonce by the public transaction manager
-	State_Submitted             = common.OriginatorTransactionState_Submitted             // Submitted to the blockchain
-	State_Confirmed             = common.OriginatorTransactionState_Confirmed             // Confirmed by the blockchain as successful
-	State_Reverted              = common.OriginatorTransactionState_Reverted              // Domain code determined the intent is invalid; finalized as reverted
-	State_Parked                = common.OriginatorTransactionState_Parked                // Domain code determined not ready for assembly; parked for later; remaining transactions may continue unless explicitly dependent
-	State_Final                 = common.OriginatorTransactionState_Final                 // Final state; transactions are removed from memory on entry
+	State_Initial               = common.OriginatorTransactionState_Initial               // Transaction state machine created
+	State_Pending               = common.OriginatorTransactionState_Pending               // The transaction has not yet been delegated to a coordinator
+	State_Delegated             = common.OriginatorTransactionState_Delegated             // The transaction has been sent to the current active coordinator
+	State_Assembling            = common.OriginatorTransactionState_Assembling            // The coordinator has sent an assemble request to us and we have not yet sent the assembled transaction back to the coordinator
+	State_Endorsement_Gathering = common.OriginatorTransactionState_Endorsement_Gathering // An assemble response has been sent to the active coordinator, who should now be gathering endorsements for the transaction. A dispatch confirmation request is expected in this state.
+	State_Prepared              = common.OriginatorTransactionState_Prepared              // We know that the coordinator has got as far as preparing a public transaction for this transaction
+	State_Dispatched            = common.OriginatorTransactionState_Dispatched            // The active coordinator that this transaction was delegated to has dispatched the transaction to a public transaction manager for submission to the base ledger
+	State_Sequenced             = common.OriginatorTransactionState_Sequenced             // The public transaction manager at the coordinator has allocated a nonce for this transaction's base ledger transaction
+	State_Submitted             = common.OriginatorTransactionState_Submitted             // The base ledger transaction has been submitted to the blockchain
+	State_Confirmed             = common.OriginatorTransactionState_Confirmed             // The base ledger transaction has been confirmed by the blockchain as successful
+	State_Reverted              = common.OriginatorTransactionState_Reverted              // Upon attempting to assemble the transaction, the domain code has determined that the intent is not valid and the transaction is finalized as reverted
+	State_Parked                = common.OriginatorTransactionState_Parked                // Upon attempting to assemble the transaction, the domain code has determined that the transaction is not ready to be assembled and it is parked for later processing. Other transactions for the current originator can continue unless they have an explicit dependency on this transaction.
+	State_Final                 = common.OriginatorTransactionState_Final                 // Final state for the transaction. Transactions are removed from memory as soon as they enter this state
 )
 
 type EventType = common.EventType

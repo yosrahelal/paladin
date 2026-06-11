@@ -30,11 +30,13 @@ import (
 type State = common.OriginatorState
 type EventType = common.EventType
 
+// Note: inline comments on State_* constants are used in auto-generated documentation.
+// Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
-	State_Initial   = common.OriginatorState_Initial   // Waiting for OriginatorCreatedEvent to fire initial coordinator selection
+	State_Initial   = common.OriginatorState_Initial   // Waiting for initial coordinator selection
 	State_Idle      = common.OriginatorState_Idle      // Not acting as an originator and not aware of any active coordinators
-	State_Observing = common.OriginatorState_Observing // Not acting as an originator but aware of a node acting as a coordinator
-	State_Sending   = common.OriginatorState_Sending   // Has some transactions that have been sent to a coordinator but not yet confirmed
+	State_Observing = common.OriginatorState_Observing // Not acting as an originator but aware of a node (which may be the same node) acting as a coordinator
+	State_Sending   = common.OriginatorState_Sending   // Has some transactions that have been delegated to a coordinator but not yet confirmed
 )
 
 const (

@@ -1,4 +1,4 @@
-// Copyright 2025 Kaleido
+// Copyright 2026 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -466,7 +466,7 @@ func TestBlockIndexerCatchUpToHeadFromZeroWithConfirmations(t *testing.T) {
 		assert.Equal(t, receipts[blocks[i].Hash.String()][0].TransactionHash.String(), indexedTX.Hash.String())
 
 		// Query the transaction
-		txs, err := bi.QueryIndexedTransactions(ctx, query.NewQueryBuilder().Equal("hash", txHash).Limit(1).Query())
+		txs, err := bi.QueryIndexedTransactions(ctx, query.NewQueryBuilder().Equal("hash", txHash).Limit(1).Query(), false)
 		require.NoError(t, err)
 		require.Len(t, txs, 1)
 		require.Equal(t, txHash, txs[0].Hash)
@@ -1595,11 +1595,50 @@ func TestQueryNoLimit(t *testing.T) {
 	_, err := bi.QueryIndexedBlocks(ctx, query.NewQueryBuilder().Query())
 	assert.Regexp(t, "PD011311", err)
 
-	_, err = bi.QueryIndexedTransactions(ctx, query.NewQueryBuilder().Query())
+	_, err = bi.QueryIndexedTransactions(ctx, query.NewQueryBuilder().Query(), false)
 	assert.Regexp(t, "PD011311", err)
 
 	_, err = bi.QueryIndexedEvents(ctx, query.NewQueryBuilder().Query())
 	assert.Regexp(t, "PD011311", err)
+}
+
+func TestQueryIndexedTransactionsHasPaladinReceipt(t *testing.T) {
+	ctx, bi, mRPC, blDone := newTestBlockIndexer(t)
+	defer blDone()
+
+	blocks, receipts := testBlockArray(t, 1)
+	mockBlocksRPCCalls(mRPC, blocks, receipts)
+
+	utBatchNotify := make(chan []*pldapi.IndexedBlock)
+	addBlockPostCommit(bi, func(blocks []*pldapi.IndexedBlock) { utBatchNotify <- blocks })
+
+	bi.startOrReset()
+	<-utBatchNotify
+
+	txHash := pldtypes.Bytes32(receipts[blocks[0].Hash.String()][0].TransactionHash)
+
+	txs, err := bi.QueryIndexedTransactions(ctx, query.NewQueryBuilder().Equal("hash", txHash).Limit(1).Query(), true)
+	require.NoError(t, err)
+	require.Empty(t, txs)
+
+	txs, err = bi.QueryIndexedTransactions(ctx, query.NewQueryBuilder().Equal("hash", txHash).Limit(1).Query(), false)
+	require.NoError(t, err)
+	require.Len(t, txs, 1)
+	require.Equal(t, txHash, txs[0].Hash)
+
+	err = bi.persistence.DB().Exec(`INSERT INTO transaction_receipts ("transaction", domain, indexed, success, tx_hash) VALUES (?, ?, ?, ?, ?)`,
+		uuid.New(),
+		"",
+		pldtypes.TimestampNow(),
+		true,
+		txHash.HexString(),
+	).Error
+	require.NoError(t, err)
+
+	txs, err = bi.QueryIndexedTransactions(ctx, query.NewQueryBuilder().Equal("hash", txHash).Limit(1).Query(), true)
+	require.NoError(t, err)
+	require.Len(t, txs, 1)
+	require.Equal(t, txHash, txs[0].Hash)
 }
 
 func TestGetFromBlock(t *testing.T) {

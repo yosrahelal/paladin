@@ -264,9 +264,8 @@ func TestSendDelegationRequest_Success(t *testing.T) {
 	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
 	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
 
-	callCount := 0
+	var capturedRequest engineProto.DelegationRequest
 	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
-		callCount++
 		if msg.MessageType != MessageType_DelegationRequest {
 			return false
 		}
@@ -276,25 +275,8 @@ func TestSendDelegationRequest_Success(t *testing.T) {
 		if msg.Component.String() != "TRANSACTION_ENGINE" {
 			return false
 		}
-		var delegationRequest engineProto.DelegationRequest
-		err := proto.Unmarshal(msg.Payload, &delegationRequest)
-		if err != nil {
-			return false
-		}
-		if callCount == 1 && delegationRequest.TransactionId != tx1ID.String() {
-			return false
-		}
-		if callCount == 2 && delegationRequest.TransactionId != tx2ID.String() {
-			return false
-		}
-		if delegationRequest.DelegateNodeId != coordinatorNode {
-			return false
-		}
-		if delegationRequest.OriginatorBlockHeight != int64(blockHeight) {
-			return false
-		}
-		return true
-	})).Return(nil).Times(2)
+		return proto.Unmarshal(msg.Payload, &capturedRequest) == nil
+	})).Return(nil).Times(1)
 
 	tw := &transportWriter{
 		ctx:               ctx,
@@ -306,6 +288,18 @@ func TestSendDelegationRequest_Success(t *testing.T) {
 
 	err := tw.SendDelegationRequest(ctx, coordinatorNode, transactions, blockHeight)
 	require.NoError(t, err)
+
+	assert.Equal(t, coordinatorNode, capturedRequest.DelegateNodeId)
+	assert.Equal(t, int64(blockHeight), capturedRequest.OriginatorBlockHeight)
+	require.Len(t, capturedRequest.PrivateTransactions, 2)
+
+	var tx1 components.PrivateTransaction
+	require.NoError(t, json.Unmarshal(capturedRequest.PrivateTransactions[0], &tx1))
+	assert.Equal(t, tx1ID, tx1.ID)
+
+	var tx2 components.PrivateTransaction
+	require.NoError(t, json.Unmarshal(capturedRequest.PrivateTransactions[1], &tx2))
+	assert.Equal(t, tx2ID, tx2.ID)
 }
 
 func TestSendDelegationRequest_EmptyTransactions(t *testing.T) {
@@ -316,6 +310,13 @@ func TestSendDelegationRequest_EmptyTransactions(t *testing.T) {
 
 	mockTransportManager := componentsmocks.NewTransportManager(t)
 	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
+
+	var capturedRequest engineProto.DelegationRequest
+	mockTransportManager.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
+		return msg.MessageType == MessageType_DelegationRequest &&
+			proto.Unmarshal(msg.Payload, &capturedRequest) == nil
+	})).Return(nil).Times(1)
 
 	tw := &transportWriter{
 		ctx:               ctx,
@@ -327,7 +328,7 @@ func TestSendDelegationRequest_EmptyTransactions(t *testing.T) {
 
 	err := tw.SendDelegationRequest(ctx, coordinatorNode, []*components.PrivateTransaction{}, blockHeight)
 	require.NoError(t, err)
-	mockTransportManager.AssertNotCalled(t, "Send")
+	assert.Empty(t, capturedRequest.PrivateTransactions)
 }
 
 // ===== SendDelegationResponse Tests =====

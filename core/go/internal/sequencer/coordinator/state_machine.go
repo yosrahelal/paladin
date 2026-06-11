@@ -31,16 +31,19 @@ type State = common.CoordinatorState
 // EventType is an alias for common.EventType
 type EventType = common.EventType
 
+// Note: inline comments on State_* constants are used in auto-generated documentation.
+// Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
-	State_Initial       = common.CoordinatorState_Initial       // Coordinator created but not yet selected an active coordinator
-	State_Idle          = common.CoordinatorState_Idle          // Not acting as a coordinator and not aware of any other active coordinators
-	State_Observing     = common.CoordinatorState_Observing     // Not acting as a coordinator but aware of another node acting as a coordinator
-	State_Elect         = common.CoordinatorState_Elect         // Sent HandoverRequest to the active coordinator; waiting to see it start flushing
-	State_Prepared      = common.CoordinatorState_Prepared      // Confirmed the active coordinator is flushing; waiting for its Closing heartbeat before taking over
-	State_Active        = common.CoordinatorState_Active        // Assembling and dispatching transactions; may remain active across epoch boundaries
+
+	State_Initial       = common.CoordinatorState_Initial       // Coordinator state machine created
+	State_Idle          = common.CoordinatorState_Idle          // Not actively coordinating and not aware of any other active coordinators
+	State_Observing     = common.CoordinatorState_Observing     // Not actively coordinating but aware of another node actively coordinating
+	State_Elect         = common.CoordinatorState_Elect         // Has sent a handover request to an active coordinator and is waiting for that node to stop coordinating
+	State_Prepared      = common.CoordinatorState_Prepared      // Has seen the previous active coordinator begin to flush and is waiting for the flush to complete
+	State_Active        = common.CoordinatorState_Active        // Actively coordinating transactions for this domain instance
 	State_Active_Flush  = common.CoordinatorState_Active_Flush  // Draining dispatched transactions while still the active coordinator (key-rotation)
 	State_Closing_Flush = common.CoordinatorState_Closing_Flush // Draining dispatched transactions after stepping down (preemption)
-	State_Closing       = common.CoordinatorState_Closing       // Flush complete; sending closing heartbeats through the grace period
+	State_Closing       = common.CoordinatorState_Closing       // Has flushed and is continuing to send closing status for configured number of heartbeats
 )
 
 const (
