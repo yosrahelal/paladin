@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024 Kaleido, Inc.
+ * Copyright © 2026 Kaleido, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -33,7 +33,7 @@ type StateStore interface {
 	QueryContractStates(ctx context.Context, domain string, contractAddress pldtypes.EthAddress, schemaRef pldtypes.Bytes32, query *query.QueryJSON, qualifier pldapi.StateStatusQualifier) (states []*pldapi.State, err error)
 	QueryNullifiers(ctx context.Context, domain string, schemaRef pldtypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (states []*pldapi.State, err error)
 	QueryContractNullifiers(ctx context.Context, domain string, contractAddress pldtypes.EthAddress, schemaRef pldtypes.Bytes32, query *query.QueryJSON, status pldapi.StateStatusQualifier) (states []*pldapi.State, err error)
-	TransferState(ctx context.Context, domain string, stateID pldtypes.HexBytes, recipient pldtypes.PrivateIdentityLocator) (reliableMessageID uuid.UUID, err error)
+	TransferPrivateState(ctx context.Context, domain string, stateID pldtypes.HexBytes, recipient pldtypes.PrivateIdentityLocator) (reliableMessageID uuid.UUID, err error)
 }
 
 // This is necessary because there's no way to introspect function parameter names via reflection
@@ -64,7 +64,7 @@ var stateStoreInfo = &rpcModuleInfo{
 			Inputs: []string{"domain", "contractAddress", "schemaRef", "query", "qualifier"},
 			Output: "states",
 		},
-		"pstate_transferState": {
+		"pstate_transferPrivateState": {
 			Inputs: []string{"domain", "stateId", "recipient"},
 			Output: "reliableMessageId",
 		},
@@ -110,7 +110,7 @@ func (r *stateStore) QueryContractNullifiers(ctx context.Context, domain string,
 	return
 }
 
-func (r *stateStore) TransferState(ctx context.Context, domain string, stateID pldtypes.HexBytes, recipient pldtypes.PrivateIdentityLocator) (reliableMessageID uuid.UUID, err error) {
-	err = r.c.CallRPC(ctx, &reliableMessageID, "pstate_transferState", domain, stateID, recipient)
+func (r *stateStore) TransferPrivateState(ctx context.Context, domain string, stateID pldtypes.HexBytes, recipient pldtypes.PrivateIdentityLocator) (reliableMessageID uuid.UUID, err error) {
+	err = r.c.CallRPC(ctx, &reliableMessageID, "pstate_transferPrivateState", domain, stateID, recipient)
 	return
 }

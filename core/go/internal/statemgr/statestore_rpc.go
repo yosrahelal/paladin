@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -42,7 +42,7 @@ func (ss *stateManager) initRPC() {
 		Add("pstate_queryContractStates", ss.rpcQueryContractStates()).
 		Add("pstate_queryNullifiers", ss.rpcQueryNullifiers()).
 		Add("pstate_queryContractNullifiers", ss.rpcQueryContractNullifiers()).
-		Add("pstate_transferState", ss.rpcTransferState())
+		Add("pstate_transferPrivateState", ss.rpcTransferState())
 }
 
 func (ss *stateManager) rpcListSchema() rpcserver.RPCHandler {

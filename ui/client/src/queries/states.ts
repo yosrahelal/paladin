@@ -158,7 +158,7 @@ export const pushState = async (
   const requestPayload = {
     jsonrpc: "2.0",
     id: Date.now(),
-    method: RpcMethods.pstate_transferState,
+    method: RpcMethods.pstate_transferPrivateState,
     params: [
       domain,
       stateId,

@@ -78,7 +78,7 @@ title: pstate_*
 
 0. `state`: [`State`](../types/state.md#state)
 
-## `pstate_transferState`
+## `pstate_transferPrivateState`
 
 ### Parameters
 
