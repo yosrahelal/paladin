@@ -34,9 +34,6 @@ var NotoFactoryJSON []byte
 //go:embed abis/Noto_V0.json
 var NotoV0JSON []byte
 
-//go:embed abis/SmtLib.json
-var SmtLibJSON []byte
-
 //go:embed abis/NotoNullifiers.json
 var NotoNullifiersJSON []byte
 

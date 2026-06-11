@@ -25,12 +25,8 @@ describe("NotoNullifiers", function () {
     const [notary, other] = await ethers.getSigners();
 
     const notoFactory = await deployNotoFactory();
-    const { smtLib } = await registerNotoNullifiersImplementation(notoFactory);
-    const Noto = await ethers.getContractFactory("NotoNullifiers", {
-      libraries: {
-        SmtLib: smtLib.target,
-      },
-    });
+    await registerNotoNullifiersImplementation(notoFactory);
+    const Noto = await ethers.getContractFactory("NotoNullifiers");
     const noto = Noto.attach(
       await deployNotoInstance(notoFactory, notary.address, "nullifiers")
     );

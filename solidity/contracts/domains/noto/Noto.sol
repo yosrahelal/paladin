@@ -169,14 +169,14 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
     /**
      * @dev Returns the name of the token.
      */
-    function name() external view returns (string memory) {
+    function name() public view returns (string memory) {
         return _name;
     }
 
     /**
      * @dev Returns the symbol of the token.
      */
-    function symbol() external view returns (string memory) {
+    function symbol() public view returns (string memory) {
         return _symbol;
     }
 
@@ -737,12 +737,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
             delegateOp.newLockState
         );
 
-        emit LockDelegated(
-            lockId,
-            previousSpender,
-            newSpender,
-            data
-        );
+        emit LockDelegated(lockId, previousSpender, newSpender, data);
 
         emit NotoLockDelegated(
             delegateOp.txId,
@@ -822,5 +817,14 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
             }
             _locked[outputs[i]] = lockId;
         }
+    }
+
+    /**
+     * @dev Set the lock state for a lock.
+     * @param lockId The identifier of the lock.
+     * @param lockState The new lock state.
+     */
+    function _setLockState(bytes32 lockId, bytes32 lockState) internal {
+        _lockStates[lockId] = lockState;
     }
 }

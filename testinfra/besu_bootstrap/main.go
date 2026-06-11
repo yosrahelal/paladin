@@ -124,7 +124,7 @@ func main() {
 			LondonBlock:       0, // Enable EIP-1559 from genesis
 			CancunTime:        0,
 			ZeroBaseFee:       ptrTo(zeroBaseFee),
-			ContractSizeLimit: big.NewInt(24576 * 2), // to accommodate contracts in NotoNullifiers
+			ContractSizeLimit: big.NewInt(24576),
 			MinGasPrice:       minGasPrice,
 			QBFT: &besugenesis.QBFTConfig{
 				BlockPeriodSeconds:      ptrTo(1), // this is overwritten by the BlockPeriodMilliseconds

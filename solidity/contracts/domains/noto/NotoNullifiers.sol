@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {SmtLib} from "@iden3/contracts/contracts/lib/SmtLib.sol";
+import {NotoCommitmentTreeLib} from "./NotoCommitmentTreeLib.sol";
 import {Noto} from "./Noto.sol";
 
-uint256 constant MAX_SMT_DEPTH = 64;
-
 contract NotoNullifiers is Noto {
-    using SmtLib for SmtLib.Data;
+    using NotoCommitmentTreeLib for NotoCommitmentTreeLib.Data;
 
-    SmtLib.Data internal _commitmentsTree;
+    NotoCommitmentTreeLib.Data internal _commitmentsTree;
 
     uint64 public constant NotoVariantV2Nullifiers = 0x0003;
 
@@ -21,7 +19,7 @@ contract NotoNullifiers is Noto {
         address notary_
     ) public virtual override initializer {
         super.initialize(name_, symbol_, notary_);
-        _commitmentsTree.initialize(MAX_SMT_DEPTH);
+        _commitmentsTree.initialize();
     }
 
     function buildConfig(
@@ -30,8 +28,8 @@ contract NotoNullifiers is Noto {
         return
             _encodeConfig(
                 NotoConfig_V1({
-                    name: _name,
-                    symbol: _symbol,
+                    name: name(),
+                    symbol: symbol(),
                     decimals: decimals(),
                     notary: notary,
                     variant: NotoVariantV2Nullifiers,
@@ -51,9 +49,7 @@ contract NotoNullifiers is Noto {
             proof,
             (uint256, bytes)
         );
-        if (!_commitmentsTree.rootExists(root)) {
-            revert NotoInvalidRoot(root);
-        }
+        _requireValidRoot(root);
         _processNullifiers(inputs);
         _processOutputs(outputs);
         emit Transfer(txId, msg.sender, inputs, outputs, _signature, data);
@@ -69,16 +65,14 @@ contract NotoNullifiers is Noto {
         useTxId(args.txId);
 
         (uint256 root, ) = abi.decode(args.proof, (uint256, bytes));
-        if (!_commitmentsTree.rootExists(root)) {
-            revert NotoInvalidRoot(root);
-        }
+        _requireValidRoot(root);
 
         _processNullifiers(args.inputs);
         _processOutputs(args.outputs);
         _processLockContents(lockId, args.contents);
 
         _processOutput(args.newLockState);
-        _lockStates[lockId] = args.newLockState;
+        _setLockState(lockId, args.newLockState);
 
         lock.spendCommitment = spendCommitment;
         lock.cancelCommitment = cancelCommitment;
@@ -97,9 +91,7 @@ contract NotoNullifiers is Noto {
     ) internal virtual override {
         if (args.proof.length > 0) {
             (uint256 root, ) = abi.decode(args.proof, (uint256, bytes));
-            if (!_commitmentsTree.rootExists(root)) {
-                revert NotoInvalidRoot(root);
-            }
+            _requireValidRoot(root);
         }
         super._updateLock(
             args,
@@ -116,7 +108,7 @@ contract NotoNullifiers is Noto {
      */
     function _processInput(bytes32 input) internal virtual override {
         uint256 inputUint = uint256(input);
-        if (existsAsUnlocked(inputUint)) {
+        if (_existsAsUnlocked(inputUint)) {
             return;
         }
         super._processInput(input);
@@ -127,7 +119,7 @@ contract NotoNullifiers is Noto {
      */
     function _processOutput(bytes32 output) internal virtual override {
         uint256 outputUint = uint256(output);
-        if (existsAsUnlocked(outputUint) || getLockId(output) != bytes32(0)) {
+        if (_existsAsUnlocked(outputUint) || getLockId(output) != bytes32(0)) {
             revert NotoInvalidOutput(output);
         }
         _commitmentsTree.addLeaf(outputUint, outputUint);
@@ -143,27 +135,35 @@ contract NotoNullifiers is Noto {
             if (_nullifiers[inputNullifiers[i]]) {
                 revert NotoInvalidInput(inputNullifiers[i]);
             }
-            // record the nullifier as used
             _nullifiers[inputNullifiers[i]] = true;
         }
     }
 
-    // check the existence of a UTXO in the commitments tree. we take a shortcut
-    // by checking the list of nodes by their node hash, because the commitments
-    // tree is append-only, no updates or deletions are allowed. As a result, all
-    // nodes in the list are valid leaf nodes, aka there are no orphaned nodes.
-    function existsAsUnlocked(uint256 utxo) internal view returns (bool) {
-        uint256 nodeHash = getLeafNodeHash(utxo, utxo);
-        SmtLib.Node memory node = _commitmentsTree.getNode(nodeHash);
-        return node.nodeType != SmtLib.NodeType.EMPTY;
+    function _requireValidRoot(uint256 root) internal view {
+        if (!_commitmentsTree.rootExists(root)) {
+            revert NotoInvalidRoot(root);
+        }
     }
 
-    function getLeafNodeHash(
+    /**
+     * @dev Check the existence of a UTXO in the commitments tree. we take a shortcut
+     *      by checking the list of nodes by their node hash, because the commitments
+     *      tree is append-only, no updates or deletions are allowed. As a result, all
+     *      nodes in the list are valid leaf nodes, aka there are no orphaned nodes.
+     */
+    function _existsAsUnlocked(uint256 utxo) internal view returns (bool) {
+        uint256 nodeHash = _getLeafNodeHash(utxo, utxo);
+        NotoCommitmentTreeLib.Node memory node = _commitmentsTree.getNode(
+            nodeHash
+        );
+        return node.nodeType != NotoCommitmentTreeLib.NodeType.EMPTY;
+    }
+
+    function _getLeafNodeHash(
         uint256 index,
         uint256 value
     ) internal pure returns (uint256) {
         uint256[3] memory params = [index, value, uint256(1)];
-        bytes memory encoded = abi.encode(params);
-        return uint256(keccak256(encoded));
+        return uint256(keccak256(abi.encode(params)));
     }
 }
