@@ -82,6 +82,7 @@ export interface ITransactionReceipt {
   contractAddress?: string;
   states?: ITransactionStates;
   domainReceipt?: IPenteDomainReceipt | INotoDomainReceipt;
+  domainReceiptError?: string
   failureMessage?: string;
 }
 
@@ -117,14 +118,14 @@ export interface INotoLockInfoV1 {
 // V1 spendLock params in receipt
 export interface INotoSpendLockParams {
   lockId: string;
-  spendInputs: string;
+  spendArgs: string;
   data: string;
 }
 
 // V1 cancelLock params in receipt
 export interface INotoCancelLockParams {
   lockId: string;
-  cancelInputs: string;
+  cancelArgs: string;
   data: string;
 }
 
@@ -158,6 +159,7 @@ export interface INotoDomainReceipt {
   }[];
   lockInfo?: INotoReceiptLockInfo;
   data?: string;
+  sender?: string;
 }
 
 export interface INotoReceiptLockInfo {

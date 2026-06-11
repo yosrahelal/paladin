@@ -53,15 +53,24 @@ type ReceiptInput struct {
 	RevertData      pldtypes.HexBytes        // set for RT_FailedOnChainWithRevertData
 }
 
+type SequencingActivity struct {
+	SubjectID      string             `json:"subjectId,omitempty"`
+	Timestamp      pldtypes.Timestamp `json:"timestamp,omitempty"`
+	TransactionID  uuid.UUID          `json:"transactionId,omitempty"`
+	ActivityType   string             `json:"activityType,omitempty"`
+	SequencingNode string             `json:"sequencingNode,omitempty"`
+}
+
 type TxCompletion struct {
 	ReceiptInput
 	PSC DomainSmartContract
 }
 
 type ResolvedTransaction struct {
-	Transaction *pldapi.Transaction `json:"transaction"`
-	DependsOn   []uuid.UUID         `json:"dependsOn"`
-	Function    *ResolvedFunction   `json:"function"`
+	Transaction      *pldapi.Transaction `json:"transaction"`
+	DependsOn        []uuid.UUID         `json:"dependsOn"`
+	ChainedDependsOn []uuid.UUID         `json:"chainedDependsOn,omitempty"`
+	Function         *ResolvedFunction   `json:"function"`
 }
 
 // This is a transaction read for insertion into the Paladin database with all pre-verification completed.

@@ -1,4 +1,4 @@
-// Copyright © 2025 Kaleido, Inc.
+// Copyright © 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -23,11 +23,15 @@ export const constants = {
   KEYS_MODE: 'keys-mode',
   SUBMISSIONS_FILTERS_KEY: 'submissions-fiters',
   REGISTRY_FILTERS: 'registry-filters',
+  STATE_FILTERS: 'state-filters',
+  MESSAGES_FILTERS: 'messages-filters',
   EVENT_QUERY_LIMIT: 10,
   SUBMISSIONS_QUERY_LIMIT: 10,
   REGISTRY_ENTRIES_QUERY_LIMIT: 10,
   TRANSACTION_QUERY_LIMIT: 10,
   UPDATE_FREQUENCY_MILLISECONDS: 5000,
+  EVENTS_PER_TRANSACTION_DEFAULT_LIMIT: 100,
+  RECEIPTS_PER_TRANSACTION_DEFAULT_LIMIT: 100,
   ELLAPSED_TIME_AUTO_REFRESH_FREQUENCY_SECONDS: 60,
   KEY_ETHEREUM_TYPE: 'eth_address',
   KEY_ETHEREUM_ALGORITHM: 'ecdsa:secp256k1'

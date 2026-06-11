@@ -53,13 +53,23 @@ type persistedTransaction struct {
 	From               string                                `gorm:"column:from"`
 	To                 *pldtypes.EthAddress                  `gorm:"column:to"`
 	Data               pldtypes.RawJSON                      `gorm:"column:data"` // we always store in JSON object format
-	TransactionDeps    []*transactionDep                     `gorm:"foreignKey:transaction;references:id"`
-	TransactionReceipt *transactionReceipt                   `gorm:"foreignKey:transaction;references:id"`
+	TransactionDeps        []*transactionDep        `gorm:"foreignKey:transaction;references:id"`
+	TransactionChainedDeps []*transactionChainedDep `gorm:"foreignKey:transaction;references:id"`
+	TransactionReceipt     *transactionReceipt      `gorm:"foreignKey:transaction;references:id"`
 }
 
 type transactionDep struct {
 	Transaction uuid.UUID `gorm:"column:transaction;primaryKey"`
 	DependsOn   uuid.UUID `gorm:"column:depends_on"`
+}
+
+type transactionChainedDep struct {
+	Transaction uuid.UUID `gorm:"column:transaction;primaryKey"`
+	DependsOn   uuid.UUID `gorm:"column:depends_on"`
+}
+
+func (transactionChainedDep) TableName() string {
+	return "transaction_chained_deps"
 }
 
 func (persistedTransaction) TableName() string {
@@ -89,7 +99,7 @@ func (persistedTransactionHistory) TableName() string {
 	return "transaction_history"
 }
 
-type persistedChainedPrivateTxn struct {
+type persistedChainedDispatch struct {
 	ChainedTransaction uuid.UUID `gorm:"column:chained_transaction;primaryKey"`
 	Transaction        uuid.UUID `gorm:"column:transaction;primaryKey"`
 	Sender             string    `gorm:"column:sender;primaryKey"`
@@ -98,8 +108,8 @@ type persistedChainedPrivateTxn struct {
 	ID                 uuid.UUID `gorm:"column:id"`
 }
 
-func (persistedChainedPrivateTxn) TableName() string {
-	return "chained_private_txns"
+func (persistedChainedDispatch) TableName() string {
+	return "chained_dispatches"
 }
 
 var defaultConstructor = &abi.Entry{Type: abi.Constructor, Inputs: abi.ParameterArray{}}
@@ -374,10 +384,10 @@ func (tm *txManager) PrepareChainedPrivateTransaction(ctx context.Context, dbTX 
 func (tm *txManager) ChainPrivateTransactions(ctx context.Context, dbTX persistence.DBTX, chainedTxns []*components.ChainedPrivateTransaction) error {
 
 	txis := make([]*components.ValidatedTransaction, len(chainedTxns))
-	chainingRecords := make([]*persistedChainedPrivateTxn, len(chainedTxns))
+	chainingRecords := make([]*persistedChainedDispatch, len(chainedTxns))
 	for i, chainedTxn := range chainedTxns {
 		txis[i] = chainedTxn.NewTransaction
-		chainingRecords[i] = &persistedChainedPrivateTxn{
+		chainingRecords[i] = &persistedChainedDispatch{
 			Sender:             chainedTxn.OriginalSenderLocator,
 			Transaction:        chainedTxn.OriginalTransaction,
 			Domain:             chainedTxn.OriginalDomain,
@@ -385,6 +395,12 @@ func (tm *txManager) ChainPrivateTransactions(ctx context.Context, dbTX persiste
 			ChainedTransaction: *chainedTxn.NewTransaction.Transaction.ID,
 			ID:                 chainedTxn.ID,
 		}
+		log.L(ctx).Infof(
+			"Creating chained dispatch id=%s originalTransaction=%s chainedTransaction=%s",
+			chainingRecords[i].ID,
+			chainingRecords[i].Transaction,
+			chainingRecords[i].ChainedTransaction,
+		)
 	}
 
 	// On this path we handle the idempotency key matching - noting that we validate the existence of an idempotency key in PrepareChainedPrivateTransaction
@@ -435,7 +451,7 @@ func (tm *txManager) ChainPrivateTransactions(ctx context.Context, dbTX persiste
 	// So when it's flushed its internal transaction, it notifies itself.
 }
 
-func (tm *txManager) writeChainingRecords(ctx context.Context, dbTX persistence.DBTX, chainingRecords []*persistedChainedPrivateTxn) error {
+func (tm *txManager) writeChainingRecords(ctx context.Context, dbTX persistence.DBTX, chainingRecords []*persistedChainedDispatch) error {
 	return dbTX.DB().
 		Clauses(clause.OnConflict{DoNothing: true}).
 		WithContext(ctx).
@@ -713,6 +729,7 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX persistence.DB
 	ptxs := make([]*persistedTransaction, len(txis))
 	txhs := make([]*persistedTransactionHistory, len(txis))
 	var transactionDeps []*transactionDep
+	var transactionChainedDeps []*transactionChainedDep
 	for i, txi := range txis {
 		// Resolve the finalized fields on the input object for return
 		tx := txi.Transaction
@@ -735,6 +752,12 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX persistence.DB
 		}
 		for _, d := range txi.DependsOn {
 			transactionDeps = append(transactionDeps, &transactionDep{
+				Transaction: *tx.ID,
+				DependsOn:   d,
+			})
+		}
+		for _, d := range txi.ChainedDependsOn {
+			transactionChainedDeps = append(transactionChainedDeps, &transactionChainedDep{
 				Transaction: *tx.ID,
 				DependsOn:   d,
 			})
@@ -762,7 +785,7 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX persistence.DB
 	insert := dbTX.DB().
 		WithContext(ctx).
 		Table("transactions").
-		Omit("TransactionDeps")
+		Omit("TransactionDeps", "TransactionChainedDeps")
 	if ignoreConflicts {
 		insert = insert.Clauses(clause.OnConflict{DoNothing: true})
 	}
@@ -783,6 +806,14 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX persistence.DB
 			Create(transactionDeps).
 			Error
 	}
+	if err == nil && len(transactionChainedDeps) > 0 {
+		log.L(ctx).Debugf("insertTransactions to table 'transaction_chained_deps'")
+		err = dbTX.DB().
+			Table("transaction_chained_deps").
+			Clauses(clause.OnConflict{DoNothing: true}).
+			Create(transactionChainedDeps).
+			Error
+	}
 	if err != nil {
 		return -1, err
 	}
@@ -793,9 +824,10 @@ func (tm *txManager) insertTransactions(ctx context.Context, dbTX persistence.DB
 		if rowsAffected == int64(len(txis)) {
 			for _, tx := range txis {
 				tm.txCache.Set(*tx.Transaction.ID, &components.ResolvedTransaction{
-					Transaction: tx.Transaction,
-					DependsOn:   tx.DependsOn,
-					Function:    tx.Function,
+					Transaction:      tx.Transaction,
+					DependsOn:        tx.DependsOn,
+					ChainedDependsOn: tx.ChainedDependsOn,
+					Function:         tx.Function,
 				})
 			}
 		}

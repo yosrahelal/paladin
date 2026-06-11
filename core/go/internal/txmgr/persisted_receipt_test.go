@@ -101,7 +101,7 @@ func TestFinalizeTransactionsFailedWithRevertDataWithMessage(t *testing.T) {
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectBegin()
 			mc.db.ExpectQuery("INSERT.*transaction_receipts").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(1))
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(sqlmock.NewRows([]string{}))
+			mc.db.ExpectQuery("SELECT.*chained_dispatches").WillReturnRows(sqlmock.NewRows([]string{}))
 			mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnRows(sqlmock.NewRows([]string{}))
 			mc.db.ExpectCommit()
 		},
@@ -153,7 +153,7 @@ func TestFinalizeTransactionsRedactFailureOverSuccessInBatch(t *testing.T) {
 			}).AddRow(txID, false))
 			mc.db.ExpectExec("DELETE.*transaction_receipts").WillReturnResult(driver.ResultNoRows)
 			mc.db.ExpectQuery("INSERT.*transaction_receipts").WillReturnRows(sqlmock.NewRows([]string{}))
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(sqlmock.NewRows([]string{}))
+			mc.db.ExpectQuery("SELECT.*chained_dispatches").WillReturnRows(sqlmock.NewRows([]string{}))
 			// Mock the transaction_deps query used by dependency notification pre-commit (no dependents)
 			mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnRows(sqlmock.NewRows([]string{}))
 			mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -186,7 +186,7 @@ func TestFinalizeTransactionsDoNotOverrideSuccessWithFailure(t *testing.T) {
 			mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(sqlmock.NewRows([]string{
 				"transaction", "success",
 			}).AddRow(txID, true /* do not override */))
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(sqlmock.NewRows([]string{}))
+			mc.db.ExpectQuery("SELECT.*chained_dispatches").WillReturnRows(sqlmock.NewRows([]string{}))
 			// Mock the transaction_deps query used by dependency notification pre-commit (no dependents)
 			mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnRows(sqlmock.NewRows([]string{}))
 			mc.db.ExpectCommit()
@@ -212,7 +212,7 @@ func TestFinalizeTransactionsRedactFailureOverSuccessPersistedDoesNotSkip(t *tes
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectBegin()
 			mc.db.ExpectQuery("INSERT.*transaction_receipts").WillReturnRows(sqlmock.NewRows([]string{"transaction"}).AddRow(txID1))
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(sqlmock.NewRows([]string{}))
+			mc.db.ExpectQuery("SELECT.*chained_dispatches").WillReturnRows(sqlmock.NewRows([]string{}))
 			// Mock the transaction_deps query used by dependency notification pre-commit (no dependents)
 			mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnRows(sqlmock.NewRows([]string{}))
 			mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnRows(sqlmock.NewRows([]string{}))
@@ -299,7 +299,7 @@ func TestFinalizeTransactionsChainedLookupFail(t *testing.T) {
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectBegin()
 			mc.db.ExpectQuery("INSERT.*transaction_receipts").WillReturnRows(sqlmock.NewRows([]string{"transaction"}).AddRow(txID))
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnError(fmt.Errorf("pop"))
+			mc.db.ExpectQuery("SELECT.*chained_dispatches").WillReturnError(fmt.Errorf("pop"))
 		})
 	defer done()
 
@@ -624,7 +624,7 @@ func TestGetTransactionReceiptFullNoResult(t *testing.T) {
 
 }
 
-func TestGetTransactionReceiptFullMergeDispatchesError(t *testing.T) {
+func TestGetTransactionReceiptFullWithDomainReceiptSuccess(t *testing.T) {
 
 	txID := uuid.New()
 	ctx, txm, done := newTestTransactionManager(t, false,
@@ -645,56 +645,15 @@ func TestGetTransactionReceiptFullMergeDispatchesError(t *testing.T) {
 			md := componentsmocks.NewDomain(t)
 			mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
 			md.On("BuildDomainReceipt", mock.Anything, mock.Anything, txID, mock.Anything).Return(nil, nil)
-
-			// Mock dispatches query to return an error - this will trigger line 444
-			mc.db.ExpectQuery("SELECT.*dispatches").WillReturnError(fmt.Errorf("database error"))
 		})
 	defer done()
 
 	res, err := txm.GetTransactionReceiptByIDFull(ctx, txID)
-	assert.Error(t, err)
-	assert.Nil(t, res)
-	assert.Regexp(t, "database error", err.Error())
-
-}
-
-func TestGetTransactionReceiptFullMergeChainedTransactionsError(t *testing.T) {
-
-	txID := uuid.New()
-	ctx, txm, done := newTestTransactionManager(t, false,
-		mockEmptyReceiptListeners,
-		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
-			// Mock successful transaction_receipts query
-			mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(
-				sqlmock.NewRows([]string{"transaction", "sequence", "indexed", "domain", "success", "tx_hash", "block_number", "tx_index", "log_index", "source", "failure_message", "revert_data", "contract_address"}).
-					AddRow(txID, 1, "2024-01-01T00:00:00Z", "domain1", true, nil, nil, nil, nil, nil, nil, nil, nil),
-			)
-
-			// Mock GetTransactionStates
-			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, txID).Return(
-				&pldapi.TransactionStates{None: true}, nil,
-			)
-
-			// Mock GetDomainByName and BuildDomainReceipt
-			md := componentsmocks.NewDomain(t)
-			mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
-			md.On("BuildDomainReceipt", mock.Anything, mock.Anything, txID, mock.Anything).Return(nil, nil)
-
-			// Mock successful dispatches query
-			mc.db.ExpectQuery("SELECT.*dispatches").WillReturnRows(
-				sqlmock.NewRows([]string{"id", "private_transaction_id", "public_transaction_address", "public_transaction_id"}),
-			)
-
-			// Mock chained_private_txns query to return an error - this will trigger line 424
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnError(fmt.Errorf("chained transactions query error"))
-		})
-	defer done()
-
-	res, err := txm.GetTransactionReceiptByIDFull(ctx, txID)
-	assert.Error(t, err)
-	assert.Nil(t, res)
-	assert.Regexp(t, "chained transactions query error", err.Error())
-
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "domain1", res.Domain)
+	require.NotNil(t, res.States)
+	assert.True(t, res.States.None)
 }
 
 func TestGetTransactionReceiptFullMergePublicTransactionsError(t *testing.T) {
@@ -719,17 +678,7 @@ func TestGetTransactionReceiptFullMergePublicTransactionsError(t *testing.T) {
 			mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
 			md.On("BuildDomainReceipt", mock.Anything, mock.Anything, txID, mock.Anything).Return(nil, nil)
 
-			// Mock successful dispatches query
-			mc.db.ExpectQuery("SELECT.*dispatches").WillReturnRows(
-				sqlmock.NewRows([]string{"id", "private_transaction_id", "public_transaction_address", "public_transaction_id"}),
-			)
-
-			// Mock chained_private_txns query - called by mergeChainedTranasctions before mergeReceiptPublicTransactions
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(
-				sqlmock.NewRows([]string{"chained_transaction", "transaction", "sender", "domain", "contract_address"}),
-			)
-
-			// Mock QueryPublicTxForTransactions to return an error - this will trigger line 428
+			// Mock QueryPublicTxForTransactions to return an error
 			mc.publicTxMgr.On("QueryPublicTxForTransactions", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return(nil, fmt.Errorf("public tx query error"))
 		})
@@ -743,11 +692,7 @@ func TestGetTransactionReceiptFullMergePublicTransactionsError(t *testing.T) {
 }
 
 func TestMergeDispatchesGroupsByPrivateTransactionID(t *testing.T) {
-	// This test specifically exercises line 449 where dispatches are grouped by PrivateTransactionID
 	txID := uuid.New()
-	txIDStr := txID.String()
-	contractAddr1 := pldtypes.MustEthAddress("0x1111111111111111111111111111111111111111")
-	contractAddr2 := pldtypes.MustEthAddress("0x2222222222222222222222222222222222222222")
 
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
@@ -767,55 +712,20 @@ func TestMergeDispatchesGroupsByPrivateTransactionID(t *testing.T) {
 			md := componentsmocks.NewDomain(t)
 			mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
 			md.On("BuildDomainReceipt", mock.Anything, mock.Anything, txID, mock.Anything).Return(nil, nil)
-
-			// Mock dispatches query to return multiple dispatches with the same PrivateTransactionID
-			// This tests the grouping logic at line 449: txdpMap[txdp.PrivateTransactionID] = append(...)
-			mc.db.ExpectQuery("SELECT.*dispatches").WillReturnRows(
-				sqlmock.NewRows([]string{"id", "private_transaction_id", "public_transaction_address", "public_transaction_id"}).
-					AddRow("dispatch-1", txIDStr, contractAddr1.String(), uint64(100)).
-					AddRow("dispatch-2", txIDStr, contractAddr2.String(), uint64(200)).
-					AddRow("dispatch-3", txIDStr, contractAddr1.String(), uint64(300)),
-			)
-
-			// Mock chained_private_txns query - called by mergeChainedTranasctions after mergeDispatches
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(
-				sqlmock.NewRows([]string{"chained_transaction", "transaction", "sender", "domain", "contract_address"}),
-			)
-
-			// Mock QueryPublicTxForTransactions - called by mergeReceiptPublicTransactions after mergeDispatches
-			mc.publicTxMgr.On("QueryPublicTxForTransactions", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return(make(map[uuid.UUID][]*pldapi.PublicTx), nil)
 		})
 	defer done()
 
 	res, err := txm.GetTransactionReceiptByIDFull(ctx, txID)
 	require.NoError(t, err)
 	require.NotNil(t, res)
-
-	// Verify that all three dispatches were grouped together and assigned to the transaction
-	assert.Len(t, res.Dispatches, 3, "All dispatches with the same PrivateTransactionID should be grouped together")
-
-	// Verify the dispatches are correctly mapped
-	dispatchIDs := make(map[string]bool)
-	for _, dispatch := range res.Dispatches {
-		assert.Equal(t, txIDStr, dispatch.PrivateTransactionID, "All dispatches should have the same PrivateTransactionID")
-		dispatchIDs[dispatch.ID] = true
-	}
-	assert.True(t, dispatchIDs["dispatch-1"], "dispatch-1 should be present")
-	assert.True(t, dispatchIDs["dispatch-2"], "dispatch-2 should be present")
-	assert.True(t, dispatchIDs["dispatch-3"], "dispatch-3 should be present")
+	assert.Equal(t, txID, res.ID)
+	assert.Equal(t, "domain1", res.Domain)
+	require.NotNil(t, res.States)
+	assert.True(t, res.States.None)
 }
 
 func TestMergeChainedTranasctionsGroupsByTransactionID(t *testing.T) {
-	// This test specifically exercises line 480 where chained transactions are grouped by Transaction ID
 	txID := uuid.New()
-	txIDStr := txID.String()
-	chainedTxID1 := uuid.New()
-	chainedTxID2 := uuid.New()
-	chainedTxID3 := uuid.New()
-	localID1 := uuid.New()
-	localID2 := uuid.New()
-	localID3 := uuid.New()
 
 	ctx, txm, done := newTestTransactionManager(t, false,
 		mockEmptyReceiptListeners,
@@ -835,52 +745,80 @@ func TestMergeChainedTranasctionsGroupsByTransactionID(t *testing.T) {
 			md := componentsmocks.NewDomain(t)
 			mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
 			md.On("BuildDomainReceipt", mock.Anything, mock.Anything, txID, mock.Anything).Return(nil, nil)
-
-			// Mock successful dispatches query
-			mc.db.ExpectQuery("SELECT.*dispatches").WillReturnRows(
-				sqlmock.NewRows([]string{"id", "private_transaction_id", "public_transaction_address", "public_transaction_id"}),
-			)
-
-			// Mock chained_private_txns query to return multiple chained transactions with the same Transaction ID
-			// This tests the grouping logic at line 480: txdpMap[string(txdp.Transaction.String())] = append(...)
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(
-				sqlmock.NewRows([]string{"chained_transaction", "transaction", "sender", "domain", "contract_address", "id"}).
-					AddRow(chainedTxID1, txID, "sender1", "domain1", "0x1111", localID1).
-					AddRow(chainedTxID2, txID, "sender2", "domain2", "0x2222", localID2).
-					AddRow(chainedTxID3, txID, "sender3", "domain3", "0x3333", localID3),
-			)
-
-			// Mock QueryPublicTxForTransactions - called by mergeReceiptPublicTransactions after mergeChainedTranasctions
-			mc.publicTxMgr.On("QueryPublicTxForTransactions", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return(make(map[uuid.UUID][]*pldapi.PublicTx), nil)
 		})
 	defer done()
 
 	res, err := txm.GetTransactionReceiptByIDFull(ctx, txID)
 	require.NoError(t, err)
 	require.NotNil(t, res)
+	assert.Equal(t, txID, res.ID)
+	assert.Equal(t, "domain1", res.Domain)
+	require.NotNil(t, res.States)
+	assert.True(t, res.States.None)
+}
 
-	// Verify that all three chained transactions were grouped together and assigned to the transaction
-	assert.Len(t, res.ChainedPrivateTransactions, 3, "All chained transactions with the same Transaction ID should be grouped together")
+func TestGetFullReceiptSharedReadInfoStates(t *testing.T) {
 
-	// Verify the chained transactions are correctly mapped
-	chainedTxIDs := make(map[string]bool)
-	for _, chainedTx := range res.ChainedPrivateTransactions {
-		assert.Equal(t, txIDStr, chainedTx.TransactionID, "All chained transactions should have the same Transaction ID")
-		chainedTxIDs[chainedTx.ChainedTransactionID] = true
-	}
-	assert.True(t, chainedTxIDs[chainedTxID1.String()], "chainedTxID1 should be present")
-	assert.True(t, chainedTxIDs[chainedTxID2.String()], "chainedTxID2 should be present")
-	assert.True(t, chainedTxIDs[chainedTxID3.String()], "chainedTxID3 should be present")
+	txID1 := uuid.New()
+	txID2 := uuid.New()
+	sharedReadState := &pldapi.StateBase{ID: pldtypes.HexBytes(pldtypes.RandBytes(32))}
+	sharedInfoState := &pldapi.StateBase{ID: pldtypes.HexBytes(pldtypes.RandBytes(32))}
 
-	// Verify LocalIDs are correctly mapped
-	localIDs := make(map[string]bool)
-	for _, chainedTx := range res.ChainedPrivateTransactions {
-		localIDs[chainedTx.LocalID] = true
-	}
-	assert.True(t, localIDs[localID1.String()], "localID1 should be present")
-	assert.True(t, localIDs[localID2.String()], "localID2 should be present")
-	assert.True(t, localIDs[localID3.String()], "localID3 should be present")
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			// --- receipt 1 ---
+			mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(
+				sqlmock.NewRows([]string{"transaction", "sequence", "indexed", "domain", "success"}).
+					AddRow(txID1, 1, "2024-01-01T00:00:00Z", "domain1", true),
+			)
+
+			// --- receipt 2 ---
+			mc.db.ExpectQuery("SELECT.*transaction_receipts").WillReturnRows(
+				sqlmock.NewRows([]string{"transaction", "sequence", "indexed", "domain", "success"}).
+					AddRow(txID2, 2, "2024-01-01T00:00:00Z", "domain1", true),
+			)
+
+			// Both transactions return the same read and info states
+			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, txID1).Return(
+				&pldapi.TransactionStates{
+					Read: []*pldapi.StateBase{sharedReadState},
+					Info: []*pldapi.StateBase{sharedInfoState},
+				}, nil,
+			)
+			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, txID2).Return(
+				&pldapi.TransactionStates{
+					Read: []*pldapi.StateBase{sharedReadState},
+					Info: []*pldapi.StateBase{sharedInfoState},
+				}, nil,
+			)
+
+			md := componentsmocks.NewDomain(t)
+			mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(md, nil)
+			md.On("BuildDomainReceipt", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+
+			mc.publicTxMgr.On("QueryPublicTxForTransactions", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Return(make(map[uuid.UUID][]*pldapi.PublicTx), nil)
+		})
+	defer done()
+
+	receipt1, err := txm.GetTransactionReceiptByIDFull(ctx, txID1)
+	require.NoError(t, err)
+	require.NotNil(t, receipt1)
+	require.NotNil(t, receipt1.States)
+	require.Len(t, receipt1.States.Read, 1)
+	assert.Equal(t, sharedReadState.ID, receipt1.States.Read[0].ID)
+	require.Len(t, receipt1.States.Info, 1)
+	assert.Equal(t, sharedInfoState.ID, receipt1.States.Info[0].ID)
+
+	receipt2, err := txm.GetTransactionReceiptByIDFull(ctx, txID2)
+	require.NoError(t, err)
+	require.NotNil(t, receipt2)
+	require.NotNil(t, receipt2.States)
+	require.Len(t, receipt2.States.Read, 1)
+	assert.Equal(t, sharedReadState.ID, receipt2.States.Read[0].ID)
+	require.Len(t, receipt2.States.Info, 1)
+	assert.Equal(t, sharedInfoState.ID, receipt2.States.Info[0].ID)
 }
 
 func TestGetDomainReceiptFail(t *testing.T) {
@@ -1030,8 +968,6 @@ func TestBuildFullReceiptFailDomainFindFail(t *testing.T) {
 		mockEmptyReceiptListeners,
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectExec("INSERT.*receipt_listeners").WillReturnResult(driver.ResultNoRows)
-			mc.db.ExpectQuery("SELECT.*dispatches").WillReturnRows(sqlmock.NewRows([]string{}))
-			mc.db.ExpectQuery("SELECT.*chained_private_txns").WillReturnRows(sqlmock.NewRows([]string{}))
 
 			mc.stateMgr.On("GetTransactionStates", mock.Anything, mock.Anything, txID).Return(&pldapi.TransactionStates{}, nil)
 			mc.domainManager.On("GetDomainByName", mock.Anything, "domain1").Return(nil, fmt.Errorf("pop"))
@@ -1081,7 +1017,7 @@ func TestFinalizeTransactionsChainedReceiptPropagationSuccess(t *testing.T) {
 			// Mock the receipt insert (with RETURNING clause, so it's a Query)
 			mc.db.ExpectQuery("INSERT.*transaction_receipts.*RETURNING").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(1))
 			// Mock the chaining records query - return a matching chaining record
-			mc.db.ExpectQuery(`SELECT.*chained_private_txns.*WHERE.*chained_transaction.*(IN|ANY)`).
+			mc.db.ExpectQuery(`SELECT.*chained_dispatches.*WHERE.*chained_transaction.*(IN|ANY)`).
 				WithArgs(sqlmock.AnyArg()).
 				WillReturnRows(sqlmock.NewRows([]string{"chained_transaction", "transaction", "sender", "domain", "contract_address"}).
 					AddRow(chainedTxID, originalTxID, originalSender, originalDomain, contractAddress))
@@ -1091,6 +1027,7 @@ func TestFinalizeTransactionsChainedReceiptPropagationSuccess(t *testing.T) {
 			mc.sequencerMgr.On("HandleChainedTransactionOutcome", mock.Anything, mock.MatchedBy(func(addr pldtypes.EthAddress) bool {
 				return addr == *pldtypes.MustEthAddress(contractAddress)
 			}), originalTxID, components.RT_Success, mock.Anything, mock.Anything, mock.Anything).Return()
+			// No mock for WriteOrDistributeChainedTransactionReceipts - it should not be called
 			mc.db.ExpectCommit()
 		})
 	defer done()
@@ -1105,9 +1042,6 @@ func TestFinalizeTransactionsChainedReceiptPropagationSuccess(t *testing.T) {
 		})
 	})
 	require.NoError(t, err)
-	mc := txm.sequencerMgr.(*componentsmocks.SequencerManager)
-	mc.AssertNotCalled(t, "WriteOrDistributeChainedTransactionReceipts", mock.Anything, mock.Anything, mock.Anything)
-	mc.AssertExpectations(t)
 }
 
 func TestFinalizeTransactionsChainedReceiptPropagationNoMatch(t *testing.T) {
@@ -1121,7 +1055,7 @@ func TestFinalizeTransactionsChainedReceiptPropagationNoMatch(t *testing.T) {
 			// Mock the receipt insert (with RETURNING clause, so it's a Query)
 			mc.db.ExpectQuery("INSERT.*transaction_receipts.*RETURNING").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(1))
 			// Mock the chaining records query - return a chaining record that doesn't match any receipt
-			mc.db.ExpectQuery(`SELECT.*chained_private_txns.*WHERE.*chained_transaction.*(IN|ANY)`).
+			mc.db.ExpectQuery(`SELECT.*chained_dispatches.*WHERE.*chained_transaction.*(IN|ANY)`).
 				WithArgs(sqlmock.AnyArg()).
 				WillReturnRows(sqlmock.NewRows([]string{"chained_transaction", "transaction", "sender", "domain", "contract_address"}).
 					AddRow(nonMatchingTxID, uuid.New(), "sender1", "domain1", "0x1234"))
@@ -1154,7 +1088,7 @@ func TestFinalizeTransactionsChainedReceiptPropagationQueryError(t *testing.T) {
 			// Mock the receipt insert (with RETURNING clause, so it's a Query)
 			mc.db.ExpectQuery("INSERT.*transaction_receipts.*RETURNING").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(1))
 			// Mock the chaining records query to return an error
-			mc.db.ExpectQuery(`SELECT.*chained_private_txns.*WHERE.*chained_transaction.*(IN|ANY)`).
+			mc.db.ExpectQuery(`SELECT.*chained_dispatches.*WHERE.*chained_transaction.*(IN|ANY)`).
 				WithArgs(sqlmock.AnyArg()).
 				WillReturnError(fmt.Errorf("database query error"))
 			mc.db.ExpectRollback()
@@ -1184,7 +1118,7 @@ func TestFinalizeTransactionsChainedReceiptPropagationNoChainingRecords(t *testi
 			// Mock the receipt insert (with RETURNING clause, so it's a Query)
 			mc.db.ExpectQuery("INSERT.*transaction_receipts.*RETURNING").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(1))
 			// Mock the chaining records query - return no records
-			mc.db.ExpectQuery(`SELECT.*chained_private_txns.*WHERE.*chained_transaction.*(IN|ANY)`).
+			mc.db.ExpectQuery(`SELECT.*chained_dispatches.*WHERE.*chained_transaction.*(IN|ANY)`).
 				WithArgs(sqlmock.AnyArg()).
 				WillReturnRows(sqlmock.NewRows([]string{"chained_transaction", "transaction", "sender", "domain", "contract_address"}))
 			// Mock the transaction_deps query used by dependency notification pre-commit (no dependents)
@@ -1218,7 +1152,7 @@ func TestFinalizeTransactionsChainedOnChainRevertNotifiesCoordinator(t *testing.
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectBegin()
 			mc.db.ExpectQuery("INSERT.*transaction_receipts.*RETURNING").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(1))
-			mc.db.ExpectQuery(`SELECT.*chained_private_txns.*WHERE.*chained_transaction.*(IN|ANY)`).
+			mc.db.ExpectQuery(`SELECT.*chained_dispatches.*WHERE.*chained_transaction.*(IN|ANY)`).
 				WithArgs(sqlmock.AnyArg()).
 				WillReturnRows(sqlmock.NewRows([]string{"chained_transaction", "transaction", "sender", "domain", "contract_address"}).
 					AddRow(chainedTxID, originalTxID, "sender1", "domain1", contractAddress))
@@ -1263,7 +1197,7 @@ func TestFinalizeTransactionsChainedOffChainRevertNotifiesCoordinator(t *testing
 		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
 			mc.db.ExpectBegin()
 			mc.db.ExpectQuery("INSERT.*transaction_receipts.*RETURNING").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(1))
-			mc.db.ExpectQuery(`SELECT.*chained_private_txns.*WHERE.*chained_transaction.*(IN|ANY)`).
+			mc.db.ExpectQuery(`SELECT.*chained_dispatches.*WHERE.*chained_transaction.*(IN|ANY)`).
 				WithArgs(sqlmock.AnyArg()).
 				WillReturnRows(sqlmock.NewRows([]string{"chained_transaction", "transaction", "sender", "domain", "contract_address"}).
 					AddRow(chainedTxID, originalTxID, "sender1", "domain1", contractAddress))
@@ -1289,4 +1223,36 @@ func TestFinalizeTransactionsChainedOffChainRevertNotifiesCoordinator(t *testing
 	require.NoError(t, err)
 	mc := txm.sequencerMgr.(*componentsmocks.SequencerManager)
 	mc.AssertExpectations(t)
+}
+
+func TestFinalizeTransactionsChainedReceiptInvalidContractAddress(t *testing.T) {
+	chainedTxID := uuid.New()
+	originalTxID := uuid.New()
+
+	ctx, txm, done := newTestTransactionManager(t, false,
+		mockEmptyReceiptListeners,
+		func(conf *pldconf.TxManagerConfig, mc *mockComponents) {
+			mc.db.ExpectBegin()
+			mc.db.ExpectQuery("INSERT.*transaction_receipts.*RETURNING").WillReturnRows(sqlmock.NewRows([]string{"sequence"}).AddRow(1))
+			// Return a chaining record with an invalid (non-parseable) contract address
+			mc.db.ExpectQuery(`SELECT.*chained_dispatches.*WHERE.*chained_transaction.*(IN|ANY)`).
+				WithArgs(sqlmock.AnyArg()).
+				WillReturnRows(sqlmock.NewRows([]string{"chained_transaction", "transaction", "sender", "domain", "contract_address"}).
+					AddRow(chainedTxID, originalTxID, "sender1", "domain1", "not-a-valid-address"))
+			mc.db.ExpectQuery("SELECT.*transaction_deps").WillReturnRows(sqlmock.NewRows([]string{}))
+			mc.db.ExpectCommit()
+		})
+	defer done()
+
+	// HandleChainedTransactionOutcome should NOT be called since the address is invalid
+	err := txm.p.Transaction(ctx, func(ctx context.Context, dbTX persistence.DBTX) error {
+		return txm.FinalizeTransactions(ctx, dbTX, []*components.ReceiptInput{
+			{
+				TransactionID: chainedTxID,
+				Domain:        "chainedDomain",
+				ReceiptType:   components.RT_Success,
+			},
+		})
+	})
+	require.NoError(t, err)
 }

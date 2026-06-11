@@ -39,6 +39,7 @@
 
  import java.io.ByteArrayOutputStream;
  import java.io.IOException;
+ import java.nio.ByteBuffer;
  import java.nio.charset.StandardCharsets;
  import java.util.*;
  import java.util.concurrent.CompletableFuture;
@@ -71,10 +72,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
          // we get called on for this and subsequent gRPC calls is safe).
          config.initFromConfig(request);
 
-         var domainConfig = DomainConfig.newBuilder()
-                 .addAllAbiStateSchemasJson(config.allPenteSchemas())
-                 .setAbiEventsJson(config.getEventsABI().toString())
-                 .build();
+        var domainConfig = DomainConfig.newBuilder()
+                .addAllAbiStateSchemasJson(config.allPenteSchemas())
+                .setAbiEventsJson(config.getEventsABI().toString())
+                .setFullStateAvailablityRequired(true)
+                .build();
          return CompletableFuture.completedFuture(ConfigureDomainResponse.newBuilder()
                  .setDomainConfig(domainConfig)
                  .build()
@@ -264,8 +266,20 @@ import com.fasterxml.jackson.core.JsonProcessingException;
          return ex.getErrorType() == Header.ErrorType.INVALID_INPUT;
      }
 
+    static String txIdForLog(String txId) {
+         try {
+             var txIdBytes = HexFormat.of().parseHex(JsonHex.trimOxPrefix(txId));
+             if (txIdBytes.length == 32) {
+                 var bb = ByteBuffer.wrap(txIdBytes, 0, 16);
+                 return new UUID(bb.getLong(), bb.getLong()).toString();
+             }
+         } catch (IllegalArgumentException ignored) {
+         }
+         return txId;
+     }
+
      private void setTransactionLogContext(TransactionSpecification txSpec) {
-         ThreadContext.put("tx", txSpec.getTransactionId());
+         ThreadContext.put("tx", txIdForLog(txSpec.getTransactionId()));
          ThreadContext.put("contract", txSpec.getContractInfo().getContractAddress());
      }
 
@@ -632,7 +646,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 
      @Override
      protected CompletableFuture<BuildReceiptResponse> buildReceipt(BuildReceiptRequest request) {
-         ThreadContext.put("tx", request.getTransactionId());
+         ThreadContext.put("tx", txIdForLog(request.getTransactionId()));
          try {
              if (request.getUnavailableStates()) {
                  throw new IllegalStateException("all states must be available to build an EVM receipt");
@@ -911,6 +925,52 @@ import com.fasterxml.jackson.core.JsonProcessingException;
          return CompletableFuture.completedFuture(
              IsBaseLedgerRevertRetryableResponse.newBuilder().setRetryable(retryable).setDecodedReason(decodedReason).build()
          );
+     }
+
+     @Override
+     protected CompletableFuture<InvokeRPCResponse> invokeRPC(InvokeRPCRequest request) {
+         try {
+             var params = new ObjectMapper().readTree(request.getParamsJson());
+             return switch (request.getMethod()) {
+                 case "pente_getCodeHash" -> invokeGetCodeHash(request.getStateQueryContext(), params);
+                 case "pente_getCode" -> invokeGetCode(request.getStateQueryContext(), params);
+                 default -> CompletableFuture.failedFuture(
+                         new UnsupportedOperationException("unknown RPC method: " + request.getMethod()));
+             };
+         } catch (Exception e) {
+             return CompletableFuture.failedFuture(e);
+         }
+     }
+
+     private CompletableFuture<InvokeRPCResponse> invokeGetCodeHash(String stateQueryContext, com.fasterxml.jackson.databind.JsonNode params) {
+         try {
+             var address = org.hyperledger.besu.datatypes.Address.fromHexString(params.get(0).asText());
+             var accountLoader = new AssemblyAccountLoader(stateQueryContext);
+             var codeHash = accountLoader.load(address)
+                     .map(PersistedAccount::getCodeHashOrZero)
+                     .orElse(org.hyperledger.besu.datatypes.Hash.ZERO);
+             var resultJson = new ObjectMapper().writeValueAsString(codeHash.toHexString());
+             return CompletableFuture.completedFuture(
+                     InvokeRPCResponse.newBuilder().setResultJson(resultJson).build());
+         } catch (Exception e) {
+             return CompletableFuture.failedFuture(e);
+         }
+     }
+
+     private CompletableFuture<InvokeRPCResponse> invokeGetCode(String stateQueryContext, com.fasterxml.jackson.databind.JsonNode params) {
+         try {
+             var address = org.hyperledger.besu.datatypes.Address.fromHexString(params.get(0).asText());
+             var accountLoader = new AssemblyAccountLoader(stateQueryContext);
+             var codeBytes = accountLoader.load(address)
+                     .map(PersistedAccount::getCode)
+                     .orElse(null);
+             var codeHex = (codeBytes != null) ? codeBytes.toHexString() : "";
+             var resultJson = new ObjectMapper().writeValueAsString(codeHex);
+             return CompletableFuture.completedFuture(
+                     InvokeRPCResponse.newBuilder().setResultJson(resultJson).build());
+         } catch (Exception e) {
+             return CompletableFuture.failedFuture(e);
+         }
      }
 
      private static boolean matchesSelector(byte[] data, byte[] selector) {

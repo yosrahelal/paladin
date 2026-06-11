@@ -430,6 +430,43 @@ func TestDeactivateFail(t *testing.T) {
 
 }
 
+func TestReapPeerDeactivateErrorWhileSenderStarted(t *testing.T) {
+
+	ctx, tm, tp, done := newTestTransport(t, false)
+	defer done()
+
+	tp.Functions.DeactivatePeer = func(ctx context.Context, dnr *prototk.DeactivatePeerRequest) (*prototk.DeactivatePeerResponse, error) {
+		return nil, fmt.Errorf("deactivate error")
+	}
+
+	// Simulate the race window in reapPeer where senderDone has been closed (first defer)
+	// but senderStarted has not yet been set to false (second defer runs after).
+	// We achieve this deterministically by pre-closing senderDone while keeping senderStarted=true.
+	senderDone := make(chan struct{})
+	close(senderDone)
+
+	pCtx, pCancelCtx := context.WithCancel(ctx)
+	p := &peer{
+		ctx:                    pCtx,
+		cancelCtx:              pCancelCtx,
+		tm:                     tm,
+		transport:              tp.t,
+		senderDone:             senderDone,
+		persistedMsgsAvailable: make(chan struct{}, 1),
+		sendQueue:              make(chan *msgWithErrChan, 1),
+		PeerInfo:               pldapi.PeerInfo{Name: "node2"},
+	}
+	p.senderStarted.Store(true)
+
+	tm.peersLock.Lock()
+	tm.peers["node2"] = p
+	tm.peersLock.Unlock()
+
+	// reapPeer must enter the senderStarted branch and log the DeactivatePeer error
+	tm.reapPeer(p)
+
+}
+
 func TestGetReliableMessageByIDFail(t *testing.T) {
 
 	ctx, tm, _, done := newTestTransport(t, false, func(mc *mockComponents, conf *pldconf.TransportManagerInlineConfig) {
@@ -964,7 +1001,7 @@ func TestProcessReliableMsgPageSequencingActivity(t *testing.T) {
 		transport: tp.t,
 	}
 
-	sequencerActivity := &pldapi.SequencerActivity{
+	sequencerActivity := &components.SequencingActivity{
 		SubjectID:      "subjectID",
 		Timestamp:      pldtypes.TimestampNow(),
 		ActivityType:   string(pldapi.SequencerActivityType_Dispatch),
@@ -997,7 +1034,7 @@ func TestProcessReliableMsgPageSequencingActivity(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RMHMessageTypeSequencingActivity, rMsg.MessageType)
 
-	var receivedSequencerActivity pldapi.SequencerActivity
+	var receivedSequencerActivity components.SequencingActivity
 	err = json.Unmarshal(rMsg.Payload, &receivedSequencerActivity)
 	require.NoError(t, err)
 	require.Equal(t, sequencerActivity.SubjectID, receivedSequencerActivity.SubjectID)
@@ -1005,4 +1042,45 @@ func TestProcessReliableMsgPageSequencingActivity(t *testing.T) {
 	require.Equal(t, sequencerActivity.ActivityType, receivedSequencerActivity.ActivityType)
 	require.Equal(t, sequencerActivity.SequencingNode, receivedSequencerActivity.SequencingNode)
 	require.Equal(t, sequencerActivity.TransactionID, receivedSequencerActivity.TransactionID)
+}
+
+func TestIsInactiveNewPeerNotReapedBeforeTimeout(t *testing.T) {
+
+	_, tm, _, done := newTestTransport(t, false)
+	defer done()
+
+	// set sufficently high that it will never be exceeded by this test
+	tm.peerInactivityTimeout = 1 * time.Hour
+
+	now := pldtypes.TimestampNow()
+	p := &peer{
+		tm: tm,
+		PeerInfo: pldapi.PeerInfo{
+			Stats: pldapi.PeerStats{
+				CreatedAt: &now,
+			},
+		},
+	}
+
+	assert.False(t, p.isInactive(), "newly created peer must not be considered inactive")
+}
+
+func TestIsInactiveOldPeerReapedWithNoActivity(t *testing.T) {
+
+	_, tm, _, done := newTestTransport(t, false)
+	defer done()
+
+	tm.peerInactivityTimeout = 5 * time.Millisecond
+
+	past := pldtypes.Timestamp(time.Now().Add(-10 * time.Millisecond).UnixNano())
+	p := &peer{
+		tm: tm,
+		PeerInfo: pldapi.PeerInfo{
+			Stats: pldapi.PeerStats{
+				CreatedAt: &past,
+			},
+		},
+	}
+
+	assert.True(t, p.isInactive(), "peer older than timeout with no send/receive should be inactive")
 }

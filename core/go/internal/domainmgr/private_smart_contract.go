@@ -40,6 +40,7 @@ type PrivateSmartContract struct {
 	RegistryAddress pldtypes.EthAddress `json:"domainAddress"       gorm:"column:domain_address"`
 	Address         pldtypes.EthAddress `json:"address"             gorm:"column:address"`
 	ConfigBytes     pldtypes.HexBytes   `json:"configBytes"         gorm:"column:config_bytes"`
+	Created         pldtypes.Timestamp  `json:"created"             gorm:"column:created;autoCreateTime:nano"`
 }
 
 type domainContract struct {
@@ -105,8 +106,7 @@ func (dc *domainContract) buildTransactionSpecification(ctx context.Context, loc
 		return nil, i18n.NewError(ctx, msgs.MsgDomainTxnInputDefinitionInvalid)
 	}
 
-	// Query the base block height to inform the assembly step that comes later
-	confirmedBlockHeight, err := dc.dm.blockIndexer.GetConfirmedBlockHeight(ctx)
+	latestConfirmedBlock, err := dc.dm.blockIndexer.GetLatestConfirmedBlockMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -135,8 +135,9 @@ func (dc *domainContract) buildTransactionSpecification(ctx context.Context, loc
 		FunctionAbiJson:    string(abiJSON),
 		FunctionParamsJson: string(paramsJSON),
 		FunctionSignature:  fnDef.SolString(), // we use the proprietary "Solidity inspired" form that is very specific, including param names and nested struct defs
-		BaseBlock:          int64(confirmedBlockHeight),
+		BaseBlock:          latestConfirmedBlock.Number,
 		Intent:             intent,
+		BaseBlockTimestamp: latestConfirmedBlock.Timestamp,
 	}, nil
 }
 
@@ -206,7 +207,7 @@ func (dc *domainContract) fullyQualifyAssemblyIdentities(res *prototk.AssembleTr
 	}
 }
 
-func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, readTX persistence.DBTX, tx *components.PrivateTransaction, localTx *components.ResolvedTransaction) error {
+func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, readTX persistence.DBTX, tx *components.PrivateTransaction, localTx *components.ResolvedTransaction, resolvedVerifiers []*prototk.ResolvedVerifier) error {
 	if tx.PreAssembly == nil || localTx.Transaction == nil || localTx.Transaction.ID == nil || *localTx.Transaction.ID != tx.ID {
 		return i18n.NewError(dCtx.Ctx(), msgs.MsgDomainTXIncompleteAssembleTransaction)
 	}
@@ -234,7 +235,7 @@ func (dc *domainContract) AssembleTransaction(dCtx components.DomainContext, rea
 	res, err := dc.api.AssembleTransaction(dCtx.Ctx(), &prototk.AssembleTransactionRequest{
 		StateQueryContext: c.id,
 		Transaction:       preAssembly.TransactionSpecification,
-		ResolvedVerifiers: preAssembly.Verifiers,
+		ResolvedVerifiers: resolvedVerifiers,
 	})
 	if err != nil {
 		return err
@@ -303,11 +304,11 @@ func (dc *domainContract) WritePotentialStates(dCtx components.DomainContext, re
 		log.L(dCtx.Ctx()).Debugf("WritePotentialStates: Writing %+v info potentialstates", len(postAssembly.InfoStatesPotential))
 		postAssembly.InfoStates, err = dc.upsertPotentialStates(dCtx, readTX, tx, postAssembly.InfoStatesPotential, false)
 	}
-
-	log.L(dCtx.Ctx()).Debugf("WritePotentialStates: %d post assembly output states", len(postAssembly.OutputStates))
-	log.L(dCtx.Ctx()).Debugf("WritePotentialStates: %d post assembly info states", len(postAssembly.InfoStates))
 	return err
+}
 
+func (dc *domainContract) MapPotentialStates(dCtx components.DomainContext, potentialStates []*prototk.NewState, outputStates bool, createdByTX *components.PrivateTransaction) (stateUpserts []*components.StateUpsert, err error) {
+	return dc.d.mapPotentialStates(dCtx, potentialStates, outputStates, createdByTX)
 }
 
 func (dc *domainContract) upsertPotentialStates(dCtx components.DomainContext, readTX persistence.DBTX, tx *components.PrivateTransaction, potentialStates []*prototk.NewState, isOutput bool) (writtenStates []*components.FullState, err error) {
@@ -430,12 +431,6 @@ func (dc *domainContract) EndorseTransaction(dCtx components.DomainContext, read
 
 	if req == nil ||
 		req.TransactionSpecification == nil ||
-		req.Verifiers == nil ||
-		req.Signatures == nil ||
-		req.InputStates == nil ||
-		req.ReadStates == nil ||
-		req.OutputStates == nil ||
-		req.InfoStates == nil ||
 		req.Endorsement == nil ||
 		req.Endorser == nil {
 		return nil, i18n.NewError(dCtx.Ctx(), msgs.MsgDomainReqIncompleteEndorseTransaction)
@@ -504,7 +499,7 @@ func (dc *domainContract) PrepareTransaction(dCtx components.DomainContext, read
 		OutputStates:      dc.d.toEndorsableList(postAssembly.OutputStates),
 		InfoStates:        dc.d.toEndorsableList(postAssembly.InfoStates),
 		AttestationResult: dc.allAttestations(tx),
-		ResolvedVerifiers: preAssembly.Verifiers,
+		ResolvedVerifiers: postAssembly.ResolvedVerifiers,
 		DomainData:        postAssembly.DomainData,
 	})
 	if err != nil {
@@ -809,4 +804,18 @@ func (dc *domainContract) IsBaseLedgerRevertRetryable(ctx context.Context, rever
 		return false, "", err
 	}
 	return res.Retryable, res.DecodedReason, nil
+}
+
+func (dc *domainContract) InvokeRPC(ctx context.Context, dCtx components.DomainContext, dbTX persistence.DBTX, rpcCall pldapi.DomainInvokeRPC) (pldtypes.RawJSON, error) {
+	c := dc.d.newInFlightDomainRequest(dbTX, dCtx, false)
+	defer c.close()
+	res, err := dc.api.InvokeRPC(ctx, &prototk.InvokeRPCRequest{
+		StateQueryContext: c.id,
+		Method:            rpcCall.Method,
+		ParamsJson:        string(rpcCall.Params),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return pldtypes.RawJSON(res.ResultJson), nil
 }

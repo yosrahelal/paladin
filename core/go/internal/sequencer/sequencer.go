@@ -33,7 +33,6 @@ import (
 
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 
-	"github.com/LFDT-Paladin/paladin/core/pkg/blockindexer"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
@@ -46,20 +45,17 @@ import (
 )
 
 type sequencerManager struct {
-	ctx                           context.Context
-	cancelCtx                     func()
-	config                        *pldconf.SequencerConfig
-	components                    components.AllComponents
-	nodeName                      string
-	sequencersLock                sync.RWMutex
-	syncPoints                    syncpoints.SyncPoints
-	metrics                       metrics.DistributedSequencerMetrics
-	sequencers                    map[string]*sequencer
-	blockHeight                   int64
-	blockHeightMutex              sync.RWMutex
-	engineIntegration             common.EngineIntegration
-	targetActiveCoordinatorsLimit int // Max number of contracts this node aims to concurrently act as coordinator for. It could still efficiently respond to dispatch requests from other coordinators because the originator will remain in memory.
-	targetActiveSequencersLimit   int // Max number of sequencers this node aims to retain in memory concurrently. Hitting this limit will cause an attempt to remove the lowest priority sequencer from memory, and hence require it to be recreated from persisted state if it is needed in the future
+	ctx                         context.Context
+	cancelCtx                   func()
+	config                      *pldconf.SequencerConfig
+	components                  components.AllComponents
+	nodeName                    string
+	sequencersLock              sync.RWMutex
+	syncPoints                  syncpoints.SyncPoints
+	metrics                     metrics.DistributedSequencerMetrics
+	sequencers                  map[string]*sequencer
+	heartbeatInterval           time.Duration
+	targetActiveSequencersLimit int // Max number of sequencers this node aims to retain in memory concurrently. Hitting this limit will cause an attempt to remove the lowest priority sequencer from memory, and hence require it to be recreated from persisted state if it is needed in the future
 }
 
 // Init implements Engine.
@@ -67,15 +63,7 @@ func (sMgr *sequencerManager) PreInit(c components.PreInitComponents) (*componen
 	log.L(sMgr.ctx).Infof("PreInit distributed sequencer manager")
 	sMgr.metrics = metrics.InitMetrics(sMgr.ctx, c.MetricsManager().Registry())
 
-	return &components.ManagerInitResult{
-		PreCommitHandler: func(ctx context.Context, dbTX persistence.DBTX, blocks []*pldapi.IndexedBlock, transactions []*blockindexer.IndexedTransactionNotify) error {
-			latestBlockNumber := blocks[len(blocks)-1].Number
-			dbTX.AddPostCommit(func(ctx context.Context) {
-				sMgr.OnNewBlockHeight(ctx, latestBlockNumber)
-			})
-			return nil
-		},
-	}, nil
+	return &components.ManagerInitResult{}, nil
 }
 
 func (sMgr *sequencerManager) PostInit(c components.AllComponents) error {
@@ -90,6 +78,7 @@ func (sMgr *sequencerManager) Start() error {
 	log.L(sMgr.ctx).Infof("Starting distributed sequencer manager")
 	sMgr.syncPoints.Start()
 	sMgr.pollForIncompleteTransactions(sMgr.ctx, confutil.DurationMinIfPositive(sMgr.config.TransactionResumePollInterval, pldconf.SequencerMinimum.TransactionResumePollInterval, *pldconf.SequencerDefaults.TransactionResumePollInterval))
+	sMgr.cleanupIdleSequencers(sMgr.ctx, confutil.DurationMinIfPositive(sMgr.config.IdleSequencerCleanupInterval, pldconf.SequencerMinimum.IdleSequencerCleanupInterval, *pldconf.SequencerDefaults.IdleSequencerCleanupInterval))
 
 	return nil
 }
@@ -106,12 +95,12 @@ func NewDistributedSequencerManager(ctx context.Context, config *pldconf.Sequenc
 
 	dsmCtx, dsmCtxCancel := context.WithCancel(log.WithComponent(ctx, "sequencer_manager"))
 	sMgr := &sequencerManager{
-		ctx:                           dsmCtx,
-		cancelCtx:                     dsmCtxCancel,
-		config:                        config,
-		sequencers:                    make(map[string]*sequencer),
-		targetActiveCoordinatorsLimit: confutil.IntMin(config.TargetActiveCoordinators, pldconf.SequencerMinimum.TargetActiveCoordinators, *pldconf.SequencerDefaults.TargetActiveCoordinators),
-		targetActiveSequencersLimit:   confutil.IntMin(config.TargetActiveSequencers, pldconf.SequencerMinimum.TargetActiveSequencers, *pldconf.SequencerDefaults.TargetActiveSequencers),
+		ctx:                         dsmCtx,
+		cancelCtx:                   dsmCtxCancel,
+		config:                      config,
+		sequencers:                  make(map[string]*sequencer),
+		heartbeatInterval:           confutil.DurationMin(config.HeartbeatInterval, pldconf.SequencerMinimum.HeartbeatInterval, *pldconf.SequencerDefaults.HeartbeatInterval),
+		targetActiveSequencersLimit: confutil.IntMin(config.TargetActiveSequencers, pldconf.SequencerMinimum.TargetActiveSequencers, *pldconf.SequencerDefaults.TargetActiveSequencers),
 	}
 	return sMgr
 }
@@ -124,7 +113,6 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 	}
 	// Repeat getting pending transactions until none are returned. Run in a goroutine to avoid blocking the main thread
 	go func() {
-	waitForIndexerReady:
 		for {
 			// On startup we can't assemble any transactions without having a confirmed block height so
 			// wait until the indexer is ready
@@ -132,87 +120,86 @@ func (sMgr *sequencerManager) pollForIncompleteTransactions(ctx context.Context,
 			if err == nil {
 				break
 			}
-
-			timeoutCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
-			defer cancel()
-
 			// Wait for the block indexer to be ready
+			retryTimer := time.NewTimer(1 * time.Second)
 			select {
-			case <-timeoutCtx.Done():
-				log.L(ctx).Debugf("timeout - check again if indexer is ready")
-				break waitForIndexerReady
+			case <-retryTimer.C:
 			case <-ctx.Done():
-				log.L(ctx).Errorf("context cancelled - ending DB poll")
+				log.L(ctx).Infof("sequencer manager context cancelled - ending DB poll")
+				retryTimer.Stop()
 				return
 			}
 		}
 
+		// now the block indexer is ready, do an initial resume of incomplete transactions, then repeat on a ticker
+		sMgr.resumeIncompleteTransactions(ctx)
+
+		ticker := time.NewTicker(rePollInterval)
+		defer ticker.Stop()
 		for {
-			pageSize := confutil.IntMin(sMgr.config.TransactionResumePageSize, pldconf.SequencerMinimum.TransactionResumePageSize, *pldconf.SequencerDefaults.TransactionResumePageSize)
-			maxTransactions := *pldconf.SequencerDefaults.TransactionResumeMaxTransactions
-			if sMgr.config.TransactionResumeMaxTransactions != nil {
-				maxTransactions = *sMgr.config.TransactionResumeMaxTransactions
-			}
-
-			resumedTransactions := 0
-			var lastCreatedTime int64
-
-			// Originators are responsible for resuming and re-delegating their own transactions.
-			// Paginate through all pending transactions with configurable page size and optional upper limit.
-			for maxTransactions > 0 && resumedTransactions < maxTransactions {
-				limit := pageSize
-				if resumedTransactions+limit > maxTransactions {
-					limit = maxTransactions - resumedTransactions
-				}
-
-				query := query.NewQueryBuilder().
-					Limit(limit).
-					Sort("created")
-				if lastCreatedTime > 0 {
-					log.L(sMgr.ctx).Debugf("Retrieving the next %d incomplete transactions to resume from timestamp %d", limit, lastCreatedTime)
-					query.GreaterThan("created", lastCreatedTime)
-				} else {
-					log.L(sMgr.ctx).Debugf("Retrieving the next %d incomplete transactions to resume", limit)
-				}
-				q := query.Query()
-
-				pendingTx, err := sMgr.components.TxManager().QueryTransactionsResolved(sMgr.ctx, q, sMgr.components.Persistence().NOTX(), true)
-				if err != nil {
-					log.L(sMgr.ctx).Errorf("Error querying pending transactions to resume incomplete ones: %s", err)
-					break
-				}
-
-				resumedTransactions += len(pendingTx)
-				log.L(sMgr.ctx).Tracef("Resuming %d transactions", len(pendingTx))
-				for _, tx := range pendingTx {
-					err = sMgr.HandleTxResume(sMgr.ctx, &components.ValidatedTransaction{
-						ResolvedTransaction: *tx,
-					})
-					if err != nil {
-						log.L(sMgr.ctx).Errorf("Error resuming pending transaction %s: %s", tx.Transaction.ID, err)
-					}
-				}
-				if len(pendingTx) > 0 {
-					lastCreatedTime = int64(pendingTx[len(pendingTx)-1].Transaction.Created)
-				}
-				if len(pendingTx) < pageSize {
-					break
-				}
-			}
-
-			// Repeat DB poll every N minutes to check for incomplete transactions to resume
-			timeoutCtx, cancel := context.WithTimeout(sMgr.ctx, rePollInterval)
-			defer cancel()
-
 			select {
-			case <-timeoutCtx.Done():
-				log.L(sMgr.ctx).Debug("timeout - checking for pending DB transactions")
+			case <-ticker.C:
+				sMgr.resumeIncompleteTransactions(ctx)
 			case <-ctx.Done():
-				log.L(sMgr.ctx).Debug("context cancelled - ending DB poll")
 				return
 			}
 		}
 	}()
+}
+
+// resumeIncompleteTransactions queries the DB for pending transactions and resumes them.
+// Originators are responsible for resuming and re-delegating their own transactions.
+// Paginates through all pending transactions with configurable page size and optional upper limit.
+func (sMgr *sequencerManager) resumeIncompleteTransactions(ctx context.Context) {
+	pageSize := confutil.IntMin(sMgr.config.TransactionResumePageSize, pldconf.SequencerMinimum.TransactionResumePageSize, *pldconf.SequencerDefaults.TransactionResumePageSize)
+	maxTransactions := *pldconf.SequencerDefaults.TransactionResumeMaxTransactions
+	if sMgr.config.TransactionResumeMaxTransactions != nil {
+		maxTransactions = *sMgr.config.TransactionResumeMaxTransactions
+	}
+
+	resumedTransactions := 0
+	var lastCreatedTime int64
+
+	for maxTransactions > 0 && resumedTransactions < maxTransactions {
+		limit := pageSize
+		if resumedTransactions+limit > maxTransactions {
+			limit = maxTransactions - resumedTransactions
+		}
+
+		query := query.NewQueryBuilder().
+			Limit(limit).
+			Sort("created")
+		if lastCreatedTime > 0 {
+			log.L(ctx).Debugf("Retrieving the next %d incomplete transactions to resume from timestamp %d", limit, lastCreatedTime)
+			query.GreaterThan("created", lastCreatedTime)
+		} else {
+			log.L(ctx).Debugf("Retrieving the next %d incomplete transactions to resume", limit)
+		}
+		q := query.Query()
+
+		pendingTx, err := sMgr.components.TxManager().QueryTransactionsResolved(ctx, q, sMgr.components.Persistence().NOTX(), true)
+		if err != nil {
+			log.L(ctx).Errorf("Error querying pending transactions to resume incomplete ones: %s", err)
+			break
+		}
+
+		resumedTransactions += len(pendingTx)
+		log.L(ctx).Tracef("Resuming %d transactions", len(pendingTx))
+		for _, tx := range pendingTx {
+			err = sMgr.HandleTxResume(ctx, &components.ValidatedTransaction{
+				ResolvedTransaction: *tx,
+			})
+			if err != nil {
+				log.L(ctx).Errorf("Error resuming pending transaction %s: %s", tx.Transaction.ID, err)
+			}
+		}
+		if len(pendingTx) > 0 {
+			lastCreatedTime = int64(pendingTx[len(pendingTx)-1].Transaction.Created)
+		}
+		if len(pendingTx) < pageSize {
+			break
+		}
+	}
 }
 
 // Synchronous function to submit a deployment request which is asynchronously processed
@@ -342,7 +329,7 @@ func (sMgr *sequencerManager) evaluateDeployment(ctx context.Context, domain com
 	sequence := &syncpoints.PublicDispatch{
 		PrivateTransactionDispatches: []*syncpoints.DispatchPersisted{
 			{
-				PrivateTransactionID: tx.ID.String(),
+				TransactionID: tx.ID.String(),
 			},
 		},
 	}
@@ -354,7 +341,7 @@ func (sMgr *sequencerManager) evaluateDeployment(ctx context.Context, domain com
 	}
 
 	// as this is a deploy we specify the null address
-	err = sMgr.syncPoints.PersistDeployDispatchBatch(ctx, dispatchBatch)
+	err = sMgr.syncPoints.PersistDeployDispatchBatch(ctx, tx.ID, dispatchBatch)
 	if err != nil {
 		log.L(ctx).Errorf("error persisting batch: %s", err)
 		return sMgr.revertDeploy(ctx, tx, err)
@@ -453,7 +440,7 @@ func (sMgr *sequencerManager) HandleTxResume(ctx context.Context, txi *component
 			if txi.Transaction.SubmitMode.V() != pldapi.SubmitModeAuto {
 				return i18n.NewError(ctx, msgs.MsgSequencerPrepareNotSupportedDeploy)
 			}
-			log.L(sMgr.ctx).Infof("resuming deploy transaction %s from %s", txi.Transaction.ID, txi.Transaction.From)
+			log.L(sMgr.ctx).Infof("resuming deploy transaction %s (from=%s)", txi.Transaction.ID, txi.Transaction.From)
 			return sMgr.handleDeployTx(ctx, &components.PrivateContractDeploy{
 				ID:     *tx.ID,
 				Domain: tx.Domain,
@@ -468,7 +455,7 @@ func (sMgr *sequencerManager) HandleTxResume(ctx context.Context, txi *component
 		if txi.Function == nil || txi.Function.Definition == nil {
 			return i18n.NewError(ctx, msgs.MsgSequencerFunctionNotProvided)
 		}
-		log.L(sMgr.ctx).Infof("resuming transaction %s from %s", tx.ID, tx.From)
+		log.L(sMgr.ctx).Infof("resuming transaction %s (from=%s, to=%s)", tx.ID, tx.From, tx.To)
 		return sMgr.handleTx(ctx, dbTX, &components.PrivateTransaction{
 			ID:      *tx.ID,
 			Domain:  tx.Domain,
@@ -507,11 +494,12 @@ func (sMgr *sequencerManager) handleTx(ctx context.Context, dbTX persistence.DBT
 		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "PreAssembly is nil")
 	}
 
+	tx.PreAssembly.ChainedDependsOn = localTx.ChainedDependsOn
+
 	sequencer, err := sMgr.LoadSequencer(ctx, dbTX, contractAddr, domainAPI, tx)
 	if err != nil {
 		return err
 	}
-
 	txCreatedEvent := &originator.TransactionCreatedEvent{
 		Transaction: tx,
 	}
@@ -527,19 +515,6 @@ func (sMgr *sequencerManager) handleTx(ctx context.Context, dbTX persistence.DBT
 	}
 
 	return nil
-}
-
-func (sMgr *sequencerManager) OnNewBlockHeight(ctx context.Context, blockHeight int64) {
-	log.L(ctx).Tracef("new block height %d", blockHeight)
-	sMgr.blockHeightMutex.Lock()
-	defer sMgr.blockHeightMutex.Unlock()
-	sMgr.blockHeight = blockHeight
-}
-
-func (sMgr *sequencerManager) GetBlockHeight() int64 {
-	sMgr.blockHeightMutex.RLock()
-	defer sMgr.blockHeightMutex.RUnlock()
-	return sMgr.blockHeight
 }
 
 func (sMgr *sequencerManager) GetNodeName() string {
@@ -560,14 +535,9 @@ func (sMgr *sequencerManager) GetTxStatus(ctx context.Context, domainAddress str
 func (sMgr *sequencerManager) HandleTransactionCollected(ctx context.Context, signerAddress string, contractAddress string, txID uuid.UUID) error {
 	log.L(sMgr.ctx).Tracef("HandleTransactionCollected %s %s %s", signerAddress, contractAddress, txID.String())
 
-	// Get the sequencer for the signer address
-	sequencer, err := sMgr.GetSequencer(ctx, *pldtypes.MustEthAddress(contractAddress))
-	if err != nil {
-		return err
-	}
-
 	// Public TX manager doesn't distinguish between new contracts (for which a sequencer doesn't yet exist) and a transaction,
 	// so accept the fact that there may not be a sequencer for this public TX submission
+	sequencer := sMgr.GetSequencer(ctx, *pldtypes.MustEthAddress(contractAddress))
 	if sequencer != nil {
 		collectedEvent := &coordinatorTx.CollectedEvent{
 			BaseCoordinatorEvent: coordinatorTx.BaseCoordinatorEvent{
@@ -589,14 +559,9 @@ func (sMgr *sequencerManager) HandleTransactionCollected(ctx context.Context, si
 func (sMgr *sequencerManager) HandleNonceAssigned(ctx context.Context, nonce uint64, contractAddress string, txID uuid.UUID) error {
 	log.L(sMgr.ctx).Tracef("HandleNonceAssigned %d %s %s", nonce, contractAddress, txID.String())
 
-	// Get the sequencer for the signer address
-	sequencer, err := sMgr.GetSequencer(ctx, *pldtypes.MustEthAddress(contractAddress))
-	if err != nil {
-		return err
-	}
-
 	// Public TX manager doesn't distinguish between new contracts (for which a sequencer doesn't yet exist) and a transaction,
 	// so accept the fact that there may not be a sequencer for this public TX submission
+	sequencer := sMgr.GetSequencer(ctx, *pldtypes.MustEthAddress(contractAddress))
 	if sequencer != nil {
 		coordinatorNonceAllocatedEvent := &coordinatorTx.NonceAllocatedEvent{
 			BaseCoordinatorEvent: coordinatorTx.BaseCoordinatorEvent{
@@ -618,13 +583,9 @@ func (sMgr *sequencerManager) HandlePublicTXSubmission(ctx context.Context, dbTX
 
 	deploy := tx.To == nil
 	if !deploy {
-		sequencer, err := sMgr.GetSequencer(ctx, *pldtypes.MustEthAddress(tx.TransactionContractAddress))
-		if err != nil {
-			return err
-		}
-
 		// Public TX manager doesn't distinguish between new contracts (for which a sequencer doesn't yet exist) and a transaction,
 		// so accept the fact that there may not be a sequencer for this public TX submission
+		sequencer := sMgr.GetSequencer(ctx, *pldtypes.MustEthAddress(tx.TransactionContractAddress))
 		if sequencer != nil {
 			coordinatorSubmittedEvent := &coordinatorTx.SubmittedEvent{
 				BaseCoordinatorEvent: coordinatorTx.BaseCoordinatorEvent{
@@ -676,12 +637,8 @@ func (sMgr *sequencerManager) handleTransactionConfirmedSuccess(ctx context.Cont
 	// Invoke of an existing contract.
 	contractAddress := confirmedTxn.PSC.Address()
 
-	sequencer, err := sMgr.GetSequencer(ctx, contractAddress)
-	if err != nil {
-		return err
-	}
-
 	// If we don't have a loaded sequencer already then a newly loaded one will not know about this transaction.
+	sequencer := sMgr.GetSequencer(ctx, contractAddress)
 	if sequencer == nil {
 		return nil
 	}
@@ -696,18 +653,16 @@ func (sMgr *sequencerManager) handleTransactionConfirmedSuccess(ctx context.Cont
 			},
 			TransactionID: confirmedTxn.TransactionID,
 		},
-		Hash:  confirmedTxn.OnChain.TransactionHash,
-		Nonce: nonce,
+		Hash:    confirmedTxn.OnChain.TransactionHash,
+		Nonce:   nonce,
+		OnChain: confirmedTxn.OnChain,
 	})
 	return nil
 }
 
 func (sMgr *sequencerManager) queueConfirmedRevertedEventToCoordinator(ctx context.Context, contractAddress pldtypes.EthAddress, txID uuid.UUID, revertData pldtypes.HexBytes, onChain pldtypes.OnChainLocation, nonce *pldtypes.HexUint64) error {
-	sequencer, err := sMgr.GetSequencer(ctx, contractAddress)
-	if err != nil {
-		return err
-	}
 	// If we don't have a loaded sequencer already then a newly loaded one will not know about this transaction
+	sequencer := sMgr.GetSequencer(ctx, contractAddress)
 	if sequencer == nil {
 		return nil
 	}
@@ -733,11 +688,7 @@ func (sMgr *sequencerManager) queueConfirmedRevertedEventToCoordinator(ctx conte
 func (sMgr *sequencerManager) HandleChainedTransactionOutcome(ctx context.Context, contractAddress pldtypes.EthAddress, txID uuid.UUID, receiptType components.ReceiptType, failureMessage string, revertData pldtypes.HexBytes, onChain pldtypes.OnChainLocation) {
 	log.L(ctx).Infof("HandleChainedTransactionOutcome txID=%s contract=%s receiptType=%d", txID, contractAddress, receiptType)
 
-	sequencer, err := sMgr.GetSequencer(ctx, contractAddress)
-	if err != nil {
-		log.L(ctx).Errorf("HandleChainedTransactionOutcome: error getting sequencer for %s: %s", contractAddress, err)
-		return
-	}
+	sequencer := sMgr.GetSequencer(ctx, contractAddress)
 	if sequencer == nil {
 		log.L(ctx).Warnf("HandleChainedTransactionOutcome: no loaded sequencer for contract %s txID=%s", contractAddress, txID)
 		return
@@ -753,6 +704,7 @@ func (sMgr *sequencerManager) HandleChainedTransactionOutcome(ctx context.Contex
 				},
 				TransactionID: txID,
 			},
+			OnChain: onChain,
 		})
 	case components.RT_FailedOnChainWithRevertData:
 		log.L(ctx).Infof("HandleChainedTransactionOutcome: queuing ConfirmedRevertedEvent (on-chain) for parent txID=%s on contract=%s hasRevertData=%t", txID, contractAddress, len(revertData) > 0)
@@ -945,7 +897,7 @@ func (sMgr *sequencerManager) PrivateTransactionsConfirmed(ctx context.Context, 
 				var chainedCount int64
 				err := persistence.NOTX().DB().
 					WithContext(ctx).
-					Table("chained_private_txns").
+					Table("chained_dispatches").
 					Where(`"transaction" = ?`, completion.TransactionID).
 					Count(&chainedCount).
 					Error

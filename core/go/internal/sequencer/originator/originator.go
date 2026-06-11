@@ -18,7 +18,6 @@ package originator
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
@@ -28,6 +27,8 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/originator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/transport"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
+	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
 
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
@@ -36,6 +37,9 @@ import (
 
 // Originator is the interface that consumers use to interact with the originator.
 type Originator interface {
+	// Start begins the event loop. It must be called once after construction before any events are queued.
+	Start(ctx context.Context) error
+
 	// Asynchronously update the state machine by queueing an event to be processed
 	// This the only interface by which consumers should update the state of the originator
 	QueueEvent(ctx context.Context, event common.Event)
@@ -53,72 +57,91 @@ type originator struct {
 	// Any functions that expose non atomic state outside of the originator must
 	// take the read lock when called.
 	sync.RWMutex
-	ctx context.Context
+	ctx     context.Context
+	started bool
 
 	/* State machine - using generic statemachine.StateMachineEventLoop */
-	stateMachineEventLoop     *statemachine.StateMachineEventLoop[State, *originator]
-	activeCoordinatorNode     string
-	timeOfMostRecentHeartbeat *time.Time
-	transactionsByID          map[uuid.UUID]transaction.OriginatorTransaction
-	transactionsOrdered       []transaction.OriginatorTransaction
-	currentBlockHeight        uint64
-	latestCoordinatorSnapshot *common.CoordinatorSnapshot
+	stateMachineEventLoop              *statemachine.StateMachineEventLoop[State, *originator]
+	currentActiveCoordinator           string
+	heartbeatIntervalsSinceLastReceive int
+	transactionsByID                   map[uuid.UUID]transaction.OriginatorTransaction
+	transactionsOrdered                []transaction.OriginatorTransaction
+	effectiveBlockHeight               uint64
+	currentBlockHeight                 int64
+	endorserCandidates                 []string // COORDINATOR_ENDORSER mode: deduped+sorted candidate pool; updated when EndorserNodesDiscoveredEvent arrives
+	coordinatorPriorityList            []string // COORDINATOR_ENDORSER mode: priority-ordered list computed independently from endorserCandidates + effectiveBlockHeight + blockRangeSize
+	failoverIndex                      int      // COORDINATOR_ENDORSER mode:t he next position in coordinatorPriorityList to try when the current active coordinator exceeds the inactive grace period
 
 	/* Config */
 	nodeName            string
-	blockRangeSize      uint64
+	blockRange          uint64
 	contractAddress     *pldtypes.EthAddress
-	heartbeatInterval   time.Duration
-	idleThreshold       int // expressed as a multiple of heartbeat intervals
-	redelegateThreshold int // expressed as a multiple of heartbeat intervals
+	inactiveGracePeriod int // expressed as a multiple of heartbeat intervals
 
 	/* Dependencies */
 	transportWriter   transport.TransportWriter
-	clock             common.Clock
 	engineIntegration common.EngineIntegration
 	metrics           metrics.DistributedSequencerMetrics
-
-	/* Heartbeat loop */
-	heartbeatCtx    context.Context
-	heartbeatCancel context.CancelFunc
 }
 
 func NewOriginator(
-	ctx context.Context,
 	nodeName string,
 	transportWriter transport.TransportWriter,
-	clock common.Clock,
 	engineIntegration common.EngineIntegration,
 	contractAddress *pldtypes.EthAddress,
 	configuration *pldconf.SequencerConfig,
 	metrics metrics.DistributedSequencerMetrics,
-) (*originator, error) {
-	origCtx := log.WithLogField(ctx, "role", "originator")
+	selectionConfig *common.CoordinatorSelectionConfig,
+) *originator {
 	o := &originator{
-		ctx:                 origCtx,
 		nodeName:            nodeName,
 		transactionsByID:    make(map[uuid.UUID]transaction.OriginatorTransaction),
 		transportWriter:     transportWriter,
-		blockRangeSize:      confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
+		blockRange:          confutil.Uint64Min(configuration.BlockRange, pldconf.SequencerMinimum.BlockRange, *pldconf.SequencerDefaults.BlockRange),
 		contractAddress:     contractAddress,
-		clock:               clock,
 		engineIntegration:   engineIntegration,
 		metrics:             metrics,
-		heartbeatInterval:   confutil.DurationMin(configuration.HeartbeatInterval, pldconf.SequencerMinimum.HeartbeatInterval, *pldconf.SequencerDefaults.HeartbeatInterval),
-		idleThreshold:       confutil.IntMin(configuration.OriginatorIdleGracePeriod, pldconf.SequencerMinimum.OriginatorIdleGracePeriod, *pldconf.SequencerDefaults.OriginatorIdleGracePeriod),
-		redelegateThreshold: confutil.IntMin(configuration.RedelegateGracePeriod, pldconf.SequencerMinimum.RedelegateGracePeriod, *pldconf.SequencerDefaults.RedelegateGracePeriod),
+		inactiveGracePeriod: confutil.IntMin(configuration.InactiveGracePeriod, pldconf.SequencerMinimum.InactiveGracePeriod, *pldconf.SequencerDefaults.InactiveGracePeriod),
+	}
+
+	switch selectionConfig.Mode {
+	case prototk.ContractConfig_COORDINATOR_STATIC:
+		o.currentActiveCoordinator = selectionConfig.StaticCoordinator
+	case prototk.ContractConfig_COORDINATOR_SENDER:
+		o.currentActiveCoordinator = nodeName
+	case prototk.ContractConfig_COORDINATOR_ENDORSER:
+		o.endorserCandidates = selectionConfig.Endorsers
 	}
 
 	originatorEventQueueSize := confutil.IntMin(configuration.OriginatorEventQueueSize, pldconf.SequencerMinimum.OriginatorEventQueueSize, *pldconf.SequencerDefaults.OriginatorEventQueueSize)
 	originatorPriorityEventQueueSize := confutil.IntMin(configuration.OriginatorPriorityEventQueueSize, pldconf.SequencerMinimum.OriginatorPriorityEventQueueSize, *pldconf.SequencerDefaults.OriginatorPriorityEventQueueSize)
-	o.initializeStateMachineEventLoop(State_Idle, originatorEventQueueSize, originatorPriorityEventQueueSize)
+	o.initializeStateMachineEventLoop(State_Initial, originatorEventQueueSize, originatorPriorityEventQueueSize)
 
-	go o.stateMachineEventLoop.Start(origCtx)
+	return o
+}
 
-	return o, nil
+func (o *originator) Start(ctx context.Context) error {
+	if o.started {
+		return nil
+	}
+	o.ctx = log.WithLogField(ctx, "role", "originator")
+
+	blockHeight := o.engineIntegration.GetBlockHeight(ctx)
+	o.effectiveBlockHeight = common.ComputeEffectiveBlockHeight(uint64(blockHeight), o.blockRange)
+
+	o.started = true
+
+	go o.stateMachineEventLoop.Start(o.ctx)
+
+	o.QueueEvent(o.ctx, &OriginatorCreatedEvent{})
+
+	return nil
 }
 
 func (o *originator) WaitForDone(ctx context.Context) {
+	if !o.started {
+		return
+	}
 	o.stateMachineEventLoop.WaitForDone(ctx)
 }
 
@@ -140,43 +163,6 @@ func (o *originator) queueEventInternal(ctx context.Context, event common.Event)
 	log.L(ctx).Tracef("Pushed internal originator event onto priority queue: %s", event.TypeString())
 }
 
-func (o *originator) heartbeatLoop(ctx context.Context, queueEvent func(context.Context, common.Event)) {
-	if o.heartbeatCtx == nil {
-		o.heartbeatCtx, o.heartbeatCancel = context.WithCancel(ctx)
-		log.L(ctx).Debugf("orig    | %s   | Starting heartbeat loop", o.contractAddress.String()[0:8])
-
-		// Send an initial heartbeat interval event to be handled immediately
-		queueEvent(ctx, &common.HeartbeatIntervalEvent{})
-
-		// Then every N seconds
-		ticker := time.NewTicker(o.heartbeatInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				queueEvent(ctx, &common.HeartbeatIntervalEvent{})
-			case <-o.heartbeatCtx.Done():
-				log.L(ctx).Infof("Ending heartbeat loop for %s", o.contractAddress.String())
-				o.heartbeatCtx = nil
-				o.heartbeatCancel = nil
-				return
-			}
-		}
-	}
-}
-
-func action_StartHeartbeatLoop(ctx context.Context, o *originator, _ common.Event) error {
-	go o.heartbeatLoop(ctx, o.QueueEvent)
-	return nil
-}
-
-func action_StopHeartbeatLoop(ctx context.Context, o *originator, _ common.Event) error {
-	if o.heartbeatCancel != nil {
-		o.heartbeatCancel()
-	}
-	return nil
-}
-
 func (o *originator) propagateEventToTransaction(ctx context.Context, event transaction.Event) error {
 	if txn := o.transactionsByID[event.GetTransactionID()]; txn != nil {
 		return txn.HandleEvent(ctx, event)
@@ -185,24 +171,19 @@ func (o *originator) propagateEventToTransaction(ctx context.Context, event tran
 	// Transaction not known to this originator.
 	// The most likely cause is that the transaction reached a terminal state (e.g., reverted during assembly)
 	// and has since been removed from memory after cleanup. We need to tell the coordinator so they can clean up.
-	log.L(ctx).Debugf("transaction not known to this originator %s", event.GetTransactionID().String())
-
-	// Extract coordinator from events that require a response
-	var coordinator string
+	log.L(ctx).Warnf("received %s for unknown transaction %s", event.TypeString(), event.GetTransactionID())
 
 	switch e := event.(type) {
 	case *transaction.AssembleRequestReceivedEvent:
-		coordinator = e.Coordinator
+		return o.transportWriter.SendAssembleRejection(ctx, e.GetTransactionID(), e.RequestID, e.Coordinator,
+			engineProto.RejectionReason_TRANSACTION_UNKNOWN, 0, 0)
 	case *transaction.PreDispatchRequestReceivedEvent:
-		coordinator = e.Coordinator
+		return o.transportWriter.SendPreDispatchRejection(ctx, e.GetTransactionID(), e.RequestID, e.Coordinator,
+			engineProto.RejectionReason_TRANSACTION_UNKNOWN)
 	default:
 		// Other events can be safely ignored
 		return nil
 	}
-
-	log.L(ctx).Warnf("received %s for unknown transaction %s, notifying coordinator %s",
-		event.TypeString(), event.GetTransactionID(), coordinator)
-	return o.transportWriter.SendTransactionUnknown(ctx, coordinator, event.GetTransactionID())
 }
 
 // getTransactionsInStates returns transactions in any of the given states.
@@ -238,8 +219,4 @@ func (o *originator) getTransactionsNotInStates(states []transaction.State) []tr
 		}
 	}
 	return matchingTxns
-}
-
-func ptrTo[T any](v T) *T {
-	return &v
 }
