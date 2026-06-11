@@ -481,7 +481,7 @@ func Test_action_AssembleAndSign_UsesDeadlineContext_WhenExpirySet(t *testing.T)
 	}
 }
 
-func Test_validator_IsPrivateStateIncompleteForAssembly_Complete_ReturnsFalse(t *testing.T) {
+func Test_validator_IsPrivateStateDataPendingForAssembly_Complete_ReturnsFalse(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Delegated).BuildWithMocks() // default: checkStateComplete=true
 
@@ -490,12 +490,12 @@ func Test_validator_IsPrivateStateIncompleteForAssembly_Complete_ReturnsFalse(t 
 		CoordinatorBlockHeight: 100,
 		BlockHeightTolerance:   10,
 	}
-	result, err := validator_IsPrivateStateIncompleteForAssembly(ctx, txn, event)
+	result, err := validator_IsPrivateStateDataPendingForAssembly(ctx, txn, event)
 	require.NoError(t, err)
 	assert.False(t, result)
 }
 
-func Test_validator_IsPrivateStateIncompleteForAssembly_Incomplete_ReturnsTrue(t *testing.T) {
+func Test_validator_IsPrivateStateDataPendingForAssembly_Incomplete_ReturnsTrue(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Delegated).
 		WithCheckPendingPrivateStateData(false).
@@ -506,12 +506,12 @@ func Test_validator_IsPrivateStateIncompleteForAssembly_Incomplete_ReturnsTrue(t
 		CoordinatorBlockHeight: 100,
 		BlockHeightTolerance:   10,
 	}
-	result, err := validator_IsPrivateStateIncompleteForAssembly(ctx, txn, event)
+	result, err := validator_IsPrivateStateDataPendingForAssembly(ctx, txn, event)
 	require.NoError(t, err)
 	assert.True(t, result)
 }
 
-func Test_validator_IsPrivateStateIncompleteForAssembly_Error_Propagates(t *testing.T) {
+func Test_validator_IsPrivateStateDataPendingForAssembly_Error_Propagates(t *testing.T) {
 	ctx := context.Background()
 	dbErr := errors.New("db error")
 	txn, _ := NewTransactionBuilderForTesting(t, State_Delegated).
@@ -523,11 +523,11 @@ func Test_validator_IsPrivateStateIncompleteForAssembly_Error_Propagates(t *test
 		CoordinatorBlockHeight: 100,
 		BlockHeightTolerance:   10,
 	}
-	_, err := validator_IsPrivateStateIncompleteForAssembly(ctx, txn, event)
+	_, err := validator_IsPrivateStateDataPendingForAssembly(ctx, txn, event)
 	assert.ErrorIs(t, err, dbErr)
 }
 
-func Test_action_RejectAssemblyPrivateStateIncomplete_SendsRejection(t *testing.T) {
+func Test_action_RejectAssemblyPrivateStateDataPending_SendsRejection(t *testing.T) {
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Delegated).BuildWithMocks()
 
@@ -541,7 +541,7 @@ func Test_action_RejectAssemblyPrivateStateIncomplete_SendsRejection(t *testing.
 		BlockHeightTolerance:   10,
 	}
 
-	err := action_RejectAssemblyPrivateStateIncomplete(ctx, txn, event)
+	err := action_RejectAssemblyPrivateStateDataPending(ctx, txn, event)
 	require.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "expected assemble rejection to be sent")
 }

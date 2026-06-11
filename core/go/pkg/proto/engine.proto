@@ -62,7 +62,7 @@ enum RejectionReason {
     NOT_CURRENT_DELEGATE = 1;           // receiver does not recognise the sender as its current active coordinator/delegate
     TRANSACTION_UNKNOWN = 2;            // receiver does not recognise the transaction (likely already cleaned up)
     ENDORSER_IS_ACTIVE_COORDINATOR = 3; // endorser is currently the active coordinator and will not accept requests from a different coordinator
-    PRIVATE_STATE_INCOMPLETE = 4;       // node is missing private state data it is entitled to up to the assembly/endorsement low watermark
+    PRIVATE_STATE_DATA_PENDING = 4;     // private state data for this contract is pending arrival at this node up to the assembly/endorsement low watermark
 }
 
 message EndorsementRequest {

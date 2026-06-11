@@ -171,28 +171,28 @@ func action_RefreshBlockHeight(ctx context.Context, t *originatorTransaction, _ 
 	return nil
 }
 
-// validator_IsPrivateStateIncompleteForAssembly returns true when the node is missing private state
-// data it is entitled to up to the coordinator's low watermark (coordinatorsBlockHeight - blockHeightTolerance).
-func validator_IsPrivateStateIncompleteForAssembly(ctx context.Context, t *originatorTransaction, event common.Event) (bool, error) {
+// validator_IsPrivateStateDataPendingForAssembly returns true when private state data is pending
+// arrival at this node up to the coordinator's low watermark (coordinatorsBlockHeight - blockHeightTolerance).
+func validator_IsPrivateStateDataPendingForAssembly(ctx context.Context, t *originatorTransaction, event common.Event) (bool, error) {
 	e := event.(*AssembleRequestReceivedEvent)
 	complete, err := t.engineIntegration.CheckPendingPrivateStateData(ctx, e.CoordinatorBlockHeight-e.BlockHeightTolerance)
 	return !complete, err
 }
 
-// action_RejectAssemblyPrivateStateIncomplete sends an AssembleRejection with reason
-// PrivateStateIncomplete to the coordinator. The originator stays in its current state;
-// the coordinator will retry once private state has caught up.
-func action_RejectAssemblyPrivateStateIncomplete(ctx context.Context, t *originatorTransaction, event common.Event) error {
+// action_RejectAssemblyPrivateStateDataPending sends an AssembleRejection with reason
+// PrivateStateDataPending to the coordinator. The originator stays in its current state;
+// the coordinator will retry once the pending private state data has arrived.
+func action_RejectAssemblyPrivateStateDataPending(ctx context.Context, t *originatorTransaction, event common.Event) error {
 	e := event.(*AssembleRequestReceivedEvent)
 	receiverBlockHeight := t.getBlockHeight()
-	log.L(ctx).Warnf("rejecting assemble request from coordinator due to incomplete private state (coordinator=%d, assembler=%d, tolerance=%d)",
+	log.L(ctx).Warnf("rejecting assemble request from coordinator due to pending private state data (coordinator=%d, assembler=%d, tolerance=%d)",
 		e.CoordinatorBlockHeight, receiverBlockHeight, e.BlockHeightTolerance)
 	return t.transportWriter.SendAssembleRejection(
 		ctx,
 		t.pt.ID,
 		e.RequestID,
 		e.Coordinator,
-		engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
 		e.CoordinatorBlockHeight,
 		receiverBlockHeight,
 	)

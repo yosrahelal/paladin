@@ -650,6 +650,27 @@ func TestCoordinatorTransaction_Assembling_ToPooled_OnAssembleRequestRejected_Bl
 	assert.Equal(t, State_Pooled, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
+func TestCoordinatorTransaction_Assembling_ToPooled_OnAssembleRequestRejected_PrivateStateDataPending(t *testing.T) {
+	// When the originator rejects the assemble request because it is missing private state
+	// it is entitled to, the coordinator repools so that state distribution can complete
+	// before retrying.
+	ctx := context.Background()
+	mockGrapher := graphermocks.NewGrapher(t)
+	txn, _ := NewTransactionBuilderForTesting(t, State_Assembling).
+		Grapher(mockGrapher).
+		Build()
+	mockGrapher.EXPECT().ForgetTransactionAndLocks(mock.Anything, txn.GetID())
+
+	err := txn.HandleEvent(ctx, &AssembleRequestRejectedEvent{
+		BaseCoordinatorEvent:   BaseCoordinatorEvent{TransactionID: txn.GetID()},
+		RejectionReason:        engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
+		CoordinatorBlockHeight: 100,
+		AssemblerBlockHeight:   100,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_Pooled, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
+
 func TestCoordinatorTransaction_Endorsement_Gathering_ToConfirmingDispatch_OnEndorsed_IfAttestationPlanComplete(t *testing.T) {
 	ctx := context.Background()
 	builder := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).

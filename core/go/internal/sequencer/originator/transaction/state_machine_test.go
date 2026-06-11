@@ -304,7 +304,7 @@ func TestOriginatorTransaction_Delegated_StaysInState_OnAssembleRequestReceived_
 	assert.Equal(t, State_Delegated, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestOriginatorTransaction_Delegated_StaysInState_OnAssembleRequestReceived_PrivateStateIncomplete(t *testing.T) {
+func TestOriginatorTransaction_Delegated_StaysInState_OnAssembleRequestReceived_PrivateStateDataPending(t *testing.T) {
 	// When private state is incomplete the originator sends an AssembleRejection and stays in State_Delegated.
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Delegated).
@@ -475,7 +475,7 @@ func TestOriginatorTransaction_Assembling_StaysInState_OnAssembleRequestReceived
 	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestOriginatorTransaction_Assembling_StaysInState_OnAssembleRequestReceived_PrivateStateIncomplete(t *testing.T) {
+func TestOriginatorTransaction_Assembling_StaysInState_OnAssembleRequestReceived_PrivateStateDataPending(t *testing.T) {
 	// When private state is incomplete the originator sends an AssembleRejection and stays in State_Assembling.
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Assembling).
@@ -679,7 +679,7 @@ func TestOriginatorTransaction_Reverted_StaysInState_OnAssembleRequestReceived_N
 	assert.Equal(t, State_Reverted, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestOriginatorTransaction_Reverted_StaysInState_OnAssembleRequestReceived_PrivateStateIncomplete(t *testing.T) {
+func TestOriginatorTransaction_Reverted_StaysInState_OnAssembleRequestReceived_PrivateStateDataPending(t *testing.T) {
 	// When private state is incomplete the originator sends an AssembleRejection and stays in State_Reverted.
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Reverted).
@@ -786,7 +786,7 @@ func TestOriginatorTransaction_Parked_StaysInState_OnAssembleRequestReceived_Not
 	assert.Equal(t, State_Parked, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestOriginatorTransaction_Parked_StaysInState_OnAssembleRequestReceived_PrivateStateIncomplete(t *testing.T) {
+func TestOriginatorTransaction_Parked_StaysInState_OnAssembleRequestReceived_PrivateStateDataPending(t *testing.T) {
 	// When private state is incomplete the originator sends an AssembleRejection and stays in State_Parked.
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Parked).
@@ -868,7 +868,7 @@ func TestOriginatorTransaction_Endorsement_Gathering_StaysInState_OnAssembleRequ
 	assert.Equal(t, State_Endorsement_Gathering, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestOriginatorTransaction_Endorsement_Gathering_StaysInState_OnAssembleRequestReceived_PrivateStateIncomplete(t *testing.T) {
+func TestOriginatorTransaction_Endorsement_Gathering_StaysInState_OnAssembleRequestReceived_PrivateStateDataPending(t *testing.T) {
 	// When private state is incomplete the originator sends an AssembleRejection and stays in State_Endorsement_Gathering.
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Endorsement_Gathering).
@@ -1041,7 +1041,7 @@ func TestOriginatorTransaction_Prepared_StaysInState_OnAssembleRequestReceived_N
 	assert.Equal(t, State_Prepared, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestOriginatorTransaction_Prepared_StaysInState_OnAssembleRequestReceived_PrivateStateIncomplete(t *testing.T) {
+func TestOriginatorTransaction_Prepared_StaysInState_OnAssembleRequestReceived_PrivateStateDataPending(t *testing.T) {
 	// When private state is incomplete the originator sends an AssembleRejection and stays in State_Prepared.
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Prepared).
@@ -1215,7 +1215,7 @@ func TestOriginatorTransaction_Dispatched_StaysInState_OnAssembleRequestReceived
 	assert.Equal(t, State_Dispatched, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestOriginatorTransaction_Dispatched_StaysInState_OnAssembleRequestReceived_PrivateStateIncomplete(t *testing.T) {
+func TestOriginatorTransaction_Dispatched_StaysInState_OnAssembleRequestReceived_PrivateStateDataPending(t *testing.T) {
 	// When private state is incomplete the originator sends an AssembleRejection and stays in State_Dispatched.
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
@@ -1373,7 +1373,7 @@ func TestOriginatorTransaction_Sequenced_StaysInState_OnAssembleRequestReceived_
 	assert.Equal(t, State_Sequenced, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestOriginatorTransaction_Sequenced_StaysInState_OnAssembleRequestReceived_PrivateStateIncomplete(t *testing.T) {
+func TestOriginatorTransaction_Sequenced_StaysInState_OnAssembleRequestReceived_PrivateStateDataPending(t *testing.T) {
 	// When private state is incomplete the originator sends an AssembleRejection and stays in State_Sequenced.
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Sequenced).
@@ -1558,7 +1558,7 @@ func TestOriginatorTransaction_Submitted_StaysInState_OnAssembleRequestReceived_
 	assert.Equal(t, State_Submitted, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 
-func TestOriginatorTransaction_Submitted_StaysInState_OnAssembleRequestReceived_PrivateStateIncomplete(t *testing.T) {
+func TestOriginatorTransaction_Submitted_StaysInState_OnAssembleRequestReceived_PrivateStateDataPending(t *testing.T) {
 	// When private state is incomplete the originator sends an AssembleRejection and stays in State_Submitted.
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Submitted).

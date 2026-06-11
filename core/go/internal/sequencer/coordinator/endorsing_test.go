@@ -83,9 +83,9 @@ func setupEndorsementMocks(t *testing.T, mocks *CoordinatorDependencyMocks) (*co
 	return mockDomainContext, mockKeyManager
 }
 
-// --- validator_IsPrivateStateIncompleteForEndorsement tests ---
+// --- validator_IsPrivateStateDataPendingForEndorsement tests ---
 
-func Test_validator_IsPrivateStateIncompleteForEndorsement_Complete_ReturnsFalse(t *testing.T) {
+func Test_validator_IsPrivateStateDataPendingForEndorsement_Complete_ReturnsFalse(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(true, nil) // lowWatermark = 100 - 10
@@ -95,12 +95,12 @@ func Test_validator_IsPrivateStateIncompleteForEndorsement_Complete_ReturnsFalse
 		BlockHeightTolerance:   10,
 		AttestationRequest:     &prototk.AttestationRequest{},
 	}
-	result, err := validator_IsPrivateStateIncompleteForEndorsement(ctx, c, event)
+	result, err := validator_IsPrivateStateDataPendingForEndorsement(ctx, c, event)
 	require.NoError(t, err)
 	assert.False(t, result)
 }
 
-func Test_validator_IsPrivateStateIncompleteForEndorsement_Incomplete_ReturnsTrue(t *testing.T) {
+func Test_validator_IsPrivateStateDataPendingForEndorsement_Incomplete_ReturnsTrue(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil) // lowWatermark = 100 - 10
@@ -110,12 +110,12 @@ func Test_validator_IsPrivateStateIncompleteForEndorsement_Incomplete_ReturnsTru
 		BlockHeightTolerance:   10,
 		AttestationRequest:     &prototk.AttestationRequest{},
 	}
-	result, err := validator_IsPrivateStateIncompleteForEndorsement(ctx, c, event)
+	result, err := validator_IsPrivateStateDataPendingForEndorsement(ctx, c, event)
 	require.NoError(t, err)
 	assert.True(t, result)
 }
 
-func Test_validator_IsPrivateStateIncompleteForEndorsement_Error_Propagates(t *testing.T) {
+func Test_validator_IsPrivateStateDataPendingForEndorsement_Error_Propagates(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 	dbErr := fmt.Errorf("db error")
@@ -126,11 +126,11 @@ func Test_validator_IsPrivateStateIncompleteForEndorsement_Error_Propagates(t *t
 		BlockHeightTolerance:   10,
 		AttestationRequest:     &prototk.AttestationRequest{},
 	}
-	_, err := validator_IsPrivateStateIncompleteForEndorsement(ctx, c, event)
+	_, err := validator_IsPrivateStateDataPendingForEndorsement(ctx, c, event)
 	assert.ErrorIs(t, err, dbErr)
 }
 
-func Test_action_RejectEndorsementPrivateStateIncomplete_SendsRejection(t *testing.T) {
+func Test_action_RejectEndorsementPrivateStateDataPending_SendsRejection(t *testing.T) {
 	ctx := context.Background()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
 		WithMockTransportWriter().
@@ -138,7 +138,7 @@ func Test_action_RejectEndorsementPrivateStateIncomplete_SendsRejection(t *testi
 
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
 		int64(100), int64(0), int64(10),
 	).Return(nil)
 
@@ -151,7 +151,7 @@ func Test_action_RejectEndorsementPrivateStateIncomplete_SendsRejection(t *testi
 		AttestationRequest:     &prototk.AttestationRequest{Name: "att1"},
 		Party:                  "party1@node2",
 	}
-	err := action_RejectEndorsementPrivateStateIncomplete(ctx, c, event)
+	err := action_RejectEndorsementPrivateStateDataPending(ctx, c, event)
 	require.NoError(t, err)
 }
 

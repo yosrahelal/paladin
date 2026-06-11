@@ -259,7 +259,7 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_UpdatesEndorserCandidat
 	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
-func TestCoordinator_WhenIdle_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysIdle(t *testing.T) {
+func TestCoordinator_WhenIdle_EndorsementRequestReceived_PrivateStateDataPending_RejectsAndStaysIdle(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).
 		NodeName("node1").
@@ -273,7 +273,7 @@ func TestCoordinator_WhenIdle_EndorsementRequestReceived_PrivateStateIncomplete_
 	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
 		int64(100), int64(0), int64(10),
 	).Return(nil)
 
@@ -439,7 +439,7 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_UpdatesEndorserCan
 	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
-func TestCoordinator_WhenObserving_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysObserving(t *testing.T) {
+func TestCoordinator_WhenObserving_EndorsementRequestReceived_PrivateStateDataPending_RejectsAndStaysObserving(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Observing).
 		NodeName("node2").
@@ -453,7 +453,7 @@ func TestCoordinator_WhenObserving_EndorsementRequestReceived_PrivateStateIncomp
 	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
 		int64(100), int64(0), int64(10),
 	).Return(nil)
 
@@ -952,7 +952,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_UpdatesEndorserCandida
 	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
-func TestCoordinator_WhenElect_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysElect(t *testing.T) {
+func TestCoordinator_WhenElect_EndorsementRequestReceived_PrivateStateDataPending_RejectsAndStaysElect(t *testing.T) {
 	// Private state check is evaluated before the priority check — even a higher-priority sender
 	// is rejected if private state is incomplete.
 	ctx := t.Context()
@@ -968,7 +968,7 @@ func TestCoordinator_WhenElect_EndorsementRequestReceived_PrivateStateIncomplete
 	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
 		int64(100), int64(0), int64(10),
 	).Return(nil)
 
@@ -1452,7 +1452,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_UpdatesEndorserCand
 	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
-func TestCoordinator_WhenPrepared_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysPrepared(t *testing.T) {
+func TestCoordinator_WhenPrepared_EndorsementRequestReceived_PrivateStateDataPending_RejectsAndStaysPrepared(t *testing.T) {
 	// Private state check is evaluated before the priority check — even a higher-priority sender
 	// is rejected if private state is incomplete.
 	ctx := t.Context()
@@ -1468,7 +1468,7 @@ func TestCoordinator_WhenPrepared_EndorsementRequestReceived_PrivateStateIncompl
 	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
 		int64(100), int64(0), int64(10),
 	).Return(nil)
 
@@ -1975,7 +1975,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_UpdatesEndorserCandid
 	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
-func TestCoordinator_WhenActive_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysActive(t *testing.T) {
+func TestCoordinator_WhenActive_EndorsementRequestReceived_PrivateStateDataPending_RejectsAndStaysActive(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node1").
@@ -1989,7 +1989,7 @@ func TestCoordinator_WhenActive_EndorsementRequestReceived_PrivateStateIncomplet
 	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
 		int64(100), int64(0), int64(10),
 	).Return(nil)
 
@@ -2311,7 +2311,7 @@ func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_UpdatesEndorserC
 	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
-func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysActiveFlush(t *testing.T) {
+func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_PrivateStateDataPending_RejectsAndStaysActiveFlush(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
 		NodeName("node1").
@@ -2325,7 +2325,7 @@ func TestCoordinator_WhenActiveFlush_EndorsementRequestReceived_PrivateStateInco
 	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
 		int64(100), int64(0), int64(10),
 	).Return(nil)
 
@@ -2602,7 +2602,7 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_UpdatesEndorser
 	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
-func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysClosingFlush(t *testing.T) {
+func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_PrivateStateDataPending_RejectsAndStaysClosingFlush(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
 		NodeName("node2").
@@ -2616,7 +2616,7 @@ func TestCoordinator_WhenClosingFlush_EndorsementRequestReceived_PrivateStateInc
 	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
 		int64(100), int64(0), int64(10),
 	).Return(nil)
 
@@ -2927,7 +2927,7 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_UpdatesEndorserCandi
 	assert.Contains(t, c.endorserCandidates, "node3")
 }
 
-func TestCoordinator_WhenClosing_EndorsementRequestReceived_PrivateStateIncomplete_RejectsAndStaysClosing(t *testing.T) {
+func TestCoordinator_WhenClosing_EndorsementRequestReceived_PrivateStateDataPending_RejectsAndStaysClosing(t *testing.T) {
 	ctx := t.Context()
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing).
 		NodeName("node2").
@@ -2941,7 +2941,7 @@ func TestCoordinator_WhenClosing_EndorsementRequestReceived_PrivateStateIncomple
 	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, int64(90)).Return(false, nil)
 	mocks.TransportWriter.EXPECT().SendEndorsementRejection(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_INCOMPLETE,
+		mock.Anything, mock.Anything, mock.Anything, engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
 		int64(100), int64(0), int64(10),
 	).Return(nil)
 
