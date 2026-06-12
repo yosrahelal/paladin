@@ -122,8 +122,7 @@ func (tm *txManager) rpcPrepareTransaction() rpcserver.RPCHandler {
 	) (*uuid.UUID, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("prepareTransaction")
-		txID, err := tm.prepareTransactionNewDBTX(ctx, &tx)
-		return txID, err
+		return tm.prepareTransactionNewDBTX(ctx, &tx)
 	})
 }
 
@@ -133,8 +132,7 @@ func (tm *txManager) rpcPrepareTransactions() rpcserver.RPCHandler {
 	) ([]uuid.UUID, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("prepareTransactions")
-		txIDs, err := tm.prepareTransactionsNewDBTX(ctx, txs)
-		return txIDs, err
+		return tm.prepareTransactionsNewDBTX(ctx, txs)
 	})
 }
 
@@ -145,8 +143,7 @@ func (tm *txManager) rpcUpdateTransaction() rpcserver.RPCHandler {
 	) (uuid.UUID, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("updateTransaction")
-		txID, err := tm.UpdateTransaction(ctx, id, tx)
-		return txID, err
+		return tm.UpdateTransaction(ctx, id, tx)
 	})
 }
 
@@ -157,7 +154,7 @@ func (tm *txManager) rpcCall() rpcserver.RPCHandler {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("call")
 		err = tm.CallTransaction(ctx, tm.p.NOTX(), &result, tx)
-		return result, err
+		return
 	})
 }
 
@@ -167,8 +164,7 @@ func (tm *txManager) rpcGetTransaction() rpcserver.RPCHandler {
 	) (*pldapi.Transaction, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getTransaction")
-		tx, err := tm.GetTransactionByID(ctx, id)
-		return tx, err
+		return tm.GetTransactionByID(ctx, id)
 	})
 }
 
@@ -178,8 +174,7 @@ func (tm *txManager) rpcGetTransactionFull() rpcserver.RPCHandler {
 	) (*pldapi.TransactionFull, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getTransactionFull")
-		tx, err := tm.GetTransactionByIDFull(ctx, id)
-		return tx, err
+		return tm.GetTransactionByIDFull(ctx, id)
 	})
 }
 
@@ -189,8 +184,7 @@ func (tm *txManager) rpcGetTransactionByIdempotencyKey() rpcserver.RPCHandler {
 	) (*pldapi.Transaction, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getTransactionByIdempotencyKey")
-		tx, err := tm.GetTransactionByIdempotencyKey(ctx, idempotencyKey)
-		return tx, err
+		return tm.GetTransactionByIdempotencyKey(ctx, idempotencyKey)
 	})
 }
 
@@ -200,8 +194,7 @@ func (tm *txManager) rpcQueryTransactions() rpcserver.RPCHandler {
 	) ([]*pldapi.Transaction, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryTransactions")
-		txs, err := tm.QueryTransactions(ctx, &query, tm.p.NOTX(), false)
-		return txs, err
+		return tm.QueryTransactions(ctx, &query, tm.p.NOTX(), false)
 	})
 }
 
@@ -211,8 +204,7 @@ func (tm *txManager) rpcQueryTransactionsFull() rpcserver.RPCHandler {
 	) ([]*pldapi.TransactionFull, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryTransactionsFull")
-		txs, err := tm.QueryTransactionsFull(ctx, &query, tm.p.NOTX(), false)
-		return txs, err
+		return tm.QueryTransactionsFull(ctx, &query, tm.p.NOTX(), false)
 	})
 }
 
@@ -224,12 +216,10 @@ func (tm *txManager) rpcQueryPendingTransactions() rpcserver.RPCHandler {
 		ctx = log.WithComponent(ctx, "txmanager")
 		if full {
 			tm.metrics.IncRpc("queryPendingTransactionsFull")
-			txs, err := tm.QueryTransactionsFull(ctx, &query, tm.p.NOTX(), true)
-			return txs, err
+			return tm.QueryTransactionsFull(ctx, &query, tm.p.NOTX(), true)
 		}
 		tm.metrics.IncRpc("queryPendingTransactions")
-		txs, err := tm.QueryTransactions(ctx, &query, tm.p.NOTX(), true)
-		return txs, err
+		return tm.QueryTransactions(ctx, &query, tm.p.NOTX(), true)
 	})
 }
 
@@ -238,8 +228,7 @@ func (tm *txManager) rpcGetTransactionReceipt() rpcserver.RPCHandler {
 		id uuid.UUID,
 	) (*pldapi.TransactionReceipt, error) {
 		tm.metrics.IncRpc("getTransactionReceipt")
-		receipt, err := tm.GetTransactionReceiptByID(ctx, id)
-		return receipt, err
+		return tm.GetTransactionReceiptByID(ctx, id)
 	})
 }
 
@@ -249,8 +238,7 @@ func (tm *txManager) rpcGetTransactionReceiptFull() rpcserver.RPCHandler {
 	) (*pldapi.TransactionReceiptFull, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getTransactionReceiptFull")
-		receipt, err := tm.GetTransactionReceiptByIDFull(ctx, id)
-		return receipt, err
+		return tm.GetTransactionReceiptByIDFull(ctx, id)
 	})
 }
 
@@ -260,8 +248,7 @@ func (tm *txManager) rpcGetPreparedTransaction() rpcserver.RPCHandler {
 	) (*pldapi.PreparedTransaction, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getPreparedTransaction")
-		receipt, err := tm.GetPreparedTransactionByID(ctx, tm.p.NOTX(), id)
-		return receipt, err
+		return tm.GetPreparedTransactionByID(ctx, tm.p.NOTX(), id)
 	})
 }
 
@@ -272,8 +259,7 @@ func (tm *txManager) rpcGetDomainReceipt() rpcserver.RPCHandler {
 	) (pldtypes.RawJSON, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getDomainReceipt")
-		receipt, err := tm.GetDomainReceiptByID(ctx, domain, id)
-		return receipt, err
+		return tm.GetDomainReceiptByID(ctx, domain, id)
 	})
 }
 
@@ -283,8 +269,7 @@ func (tm *txManager) rpcGetStateReceipt() rpcserver.RPCHandler {
 	) (*pldapi.TransactionStates, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getStateReceipt")
-		states, err := tm.GetStateReceiptByID(ctx, id)
-		return states, err
+		return tm.GetStateReceiptByID(ctx, id)
 	})
 }
 
@@ -294,8 +279,7 @@ func (tm *txManager) rpcGetTransactionDependencies() rpcserver.RPCHandler {
 	) (*pldapi.TransactionDependencies, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getTransactionDependencies")
-		dependencies, err := tm.GetTransactionDependencies(ctx, id)
-		return dependencies, err
+		return tm.GetTransactionDependencies(ctx, id)
 	})
 }
 
@@ -305,8 +289,7 @@ func (tm *txManager) rpcQueryTransactionReceipts() rpcserver.RPCHandler {
 	) ([]*pldapi.TransactionReceipt, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryTransactionReceipts")
-		receipts, err := tm.QueryTransactionReceipts(ctx, &query)
-		return receipts, err
+		return tm.QueryTransactionReceipts(ctx, &query)
 	})
 }
 
@@ -316,8 +299,7 @@ func (tm *txManager) rpcQueryPreparedTransactions() rpcserver.RPCHandler {
 	) ([]*pldapi.PreparedTransaction, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryPreparedTransactions")
-		preparedTransactions, err := tm.QueryPreparedTransactions(ctx, tm.p.NOTX(), &query)
-		return preparedTransactions, err
+		return tm.QueryPreparedTransactions(ctx, tm.p.NOTX(), &query)
 	})
 }
 
@@ -327,8 +309,7 @@ func (tm *txManager) rpcQueryPublicTransactions() rpcserver.RPCHandler {
 	) ([]*pldapi.PublicTxWithBinding, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryPublicTransactions")
-		publicTransactions, err := tm.queryPublicTransactions(ctx, &query)
-		return publicTransactions, err
+		return tm.queryPublicTransactions(ctx, &query)
 	})
 }
 
@@ -338,8 +319,7 @@ func (tm *txManager) rpcQueryPendingPublicTransactions() rpcserver.RPCHandler {
 	) ([]*pldapi.PublicTxWithBinding, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryPendingPublicTransactions")
-		publicTransactions, err := tm.queryPublicTransactions(ctx, query.ToBuilder().Null("transactionHash").Query())
-		return publicTransactions, err
+		return tm.queryPublicTransactions(ctx, query.ToBuilder().Null("transactionHash").Query())
 	})
 }
 
@@ -350,8 +330,7 @@ func (tm *txManager) rpcGetPublicTransactionByNonce() rpcserver.RPCHandler {
 	) (*pldapi.PublicTxWithBinding, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getPublicTransactionByNonce")
-		publicTransaction, err := tm.GetPublicTransactionByNonce(ctx, from, nonce)
-		return publicTransaction, err
+		return tm.GetPublicTransactionByNonce(ctx, from, nonce)
 	})
 }
 
@@ -361,8 +340,7 @@ func (tm *txManager) rpcGetPublicTransaction() rpcserver.RPCHandler {
 	) (*pldapi.PublicTxWithBinding, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getPublicTransaction")
-		publicTransaction, err := tm.GetPublicTransactionByID(ctx, id)
-		return publicTransaction, err
+		return tm.GetPublicTransactionByID(ctx, id)
 	})
 }
 
@@ -372,8 +350,7 @@ func (tm *txManager) rpcGetPublicTransactionByHash() rpcserver.RPCHandler {
 	) (*pldapi.PublicTxWithBinding, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getPublicTransactionByHash")
-		publicTransaction, err := tm.GetPublicTransactionByHash(ctx, hash)
-		return publicTransaction, err
+		return tm.GetPublicTransactionByHash(ctx, hash)
 	})
 }
 
@@ -383,8 +360,7 @@ func (tm *txManager) rpcStoreABI() rpcserver.RPCHandler {
 	) (hash *pldtypes.Bytes32, err error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("storeABI")
-		hash, err = tm.storeABINewDBTX(ctx, a)
-		return hash, err
+		return tm.storeABINewDBTX(ctx, a)
 	})
 }
 
@@ -394,8 +370,7 @@ func (tm *txManager) rpcGetStoredABI() rpcserver.RPCHandler {
 	) (*pldapi.StoredABI, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getStoredABI")
-		abi, err := tm.getABIByHash(ctx, tm.p.NOTX(), hash)
-		return abi, err
+		return tm.getABIByHash(ctx, tm.p.NOTX(), hash)
 	})
 }
 
@@ -405,8 +380,7 @@ func (tm *txManager) rpcQueryStoredABIs() rpcserver.RPCHandler {
 	) ([]*pldapi.StoredABI, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryStoredABIs")
-		abis, err := tm.queryABIs(ctx, &query)
-		return abis, err
+		return tm.queryABIs(ctx, &query)
 	})
 }
 
@@ -418,8 +392,7 @@ func (tm *txManager) rpcResolveVerifier() rpcserver.RPCHandler {
 	) (string, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("resolveVerifier")
-		verifier, err := tm.identityResolver.ResolveVerifier(ctx, lookup, algorithm, verifierType)
-		return verifier, err
+		return tm.identityResolver.ResolveVerifier(ctx, lookup, algorithm, verifierType)
 	})
 }
 
@@ -430,8 +403,7 @@ func (tm *txManager) rpcDebugTransactionStatus() rpcserver.RPCHandler {
 	) (components.PrivateTxStatus, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("debugTransactionStatus")
-		status, err := tm.sequencerMgr.GetTxStatus(ctx, contractAddress, id)
-		return status, err
+		return tm.sequencerMgr.GetTxStatus(ctx, contractAddress, id)
 	})
 }
 
@@ -442,8 +414,7 @@ func (tm *txManager) rpcDecodeError() rpcserver.RPCHandler {
 	) (*pldapi.ABIDecodedData, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("decodeError")
-		decodedData, err := tm.DecodeRevertError(ctx, tm.p.NOTX(), revertError, dataFormat)
-		return decodedData, err
+		return tm.DecodeRevertError(ctx, tm.p.NOTX(), revertError, dataFormat)
 	})
 }
 
@@ -454,8 +425,7 @@ func (tm *txManager) rpcDecodeCall() rpcserver.RPCHandler {
 	) (*pldapi.ABIDecodedData, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("decodeCall")
-		decodedData, err := tm.DecodeCall(ctx, tm.p.NOTX(), callData, dataFormat)
-		return decodedData, err
+		return tm.DecodeCall(ctx, tm.p.NOTX(), callData, dataFormat)
 	})
 }
 
@@ -467,8 +437,7 @@ func (tm *txManager) rpcDecodeEvent() rpcserver.RPCHandler {
 	) (*pldapi.ABIDecodedData, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("decodeEvent")
-		decodedData, err := tm.DecodeEvent(ctx, tm.p.NOTX(), topics, data, dataFormat)
-		return decodedData, err
+		return tm.DecodeEvent(ctx, tm.p.NOTX(), topics, data, dataFormat)
 	})
 }
 
@@ -489,8 +458,7 @@ func (tm *txManager) rpcQueryReceiptListeners() rpcserver.RPCHandler {
 	) ([]*pldapi.TransactionReceiptListener, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryReceiptListeners")
-		listeners, err := tm.QueryReceiptListeners(ctx, tm.p.NOTX(), &query)
-		return listeners, err
+		return tm.QueryReceiptListeners(ctx, tm.p.NOTX(), &query)
 	})
 }
 
@@ -510,8 +478,7 @@ func (tm *txManager) rpcStartReceiptListener() rpcserver.RPCHandler {
 	) (bool, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("startReceiptListener")
-		err := tm.StartReceiptListener(ctx, name)
-		return err == nil, err
+		return true, tm.StartReceiptListener(ctx, name)
 	})
 }
 
@@ -521,8 +488,7 @@ func (tm *txManager) rpcStopReceiptListener() rpcserver.RPCHandler {
 	) (bool, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("stopReceiptListener")
-		err := tm.StopReceiptListener(ctx, name)
-		return err == nil, err
+		return true, tm.StopReceiptListener(ctx, name)
 	})
 }
 
@@ -532,8 +498,7 @@ func (tm *txManager) rpcDeleteReceiptListener() rpcserver.RPCHandler {
 	) (bool, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("deleteReceiptListener")
-		err := tm.DeleteReceiptListener(ctx, name)
-		return err == nil, err
+		return true, tm.DeleteReceiptListener(ctx, name)
 	})
 }
 
@@ -554,8 +519,7 @@ func (tm *txManager) rpcQueryBlockchainEventListeners() rpcserver.RPCHandler {
 	) ([]*pldapi.BlockchainEventListener, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryBlockchainEventListeners")
-		listeners, err := tm.QueryBlockchainEventListeners(ctx, tm.p.NOTX(), &query)
-		return listeners, err
+		return tm.QueryBlockchainEventListeners(ctx, tm.p.NOTX(), &query)
 	})
 }
 
@@ -575,8 +539,7 @@ func (tm *txManager) rpcStartBlockchainEventListener() rpcserver.RPCHandler {
 	) (bool, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("startBlockchainEventListener")
-		err := tm.StartBlockchainEventListener(ctx, name)
-		return err == nil, err
+		return true, tm.StartBlockchainEventListener(ctx, name)
 	})
 }
 
@@ -586,8 +549,7 @@ func (tm *txManager) rpcStopBlockchainEventListener() rpcserver.RPCHandler {
 	) (bool, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("stopBlockchainEventListener")
-		err := tm.StopBlockchainEventListener(ctx, name)
-		return err == nil, err
+		return true, tm.StopBlockchainEventListener(ctx, name)
 	})
 }
 
@@ -597,8 +559,7 @@ func (tm *txManager) rpcDeleteBlockchainEventListener() rpcserver.RPCHandler {
 	) (bool, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("deleteBlockchainEventListener")
-		err := tm.DeleteBlockchainEventListener(ctx, name)
-		return err == nil, err
+		return true, tm.DeleteBlockchainEventListener(ctx, name)
 	})
 }
 
@@ -608,8 +569,7 @@ func (tm *txManager) rpcGetBlockchainEventListenerStatus() rpcserver.RPCHandler 
 	) (*pldapi.BlockchainEventListenerStatus, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getBlockchainEventListenerStatus")
-		status, err := tm.GetBlockchainEventListenerStatus(ctx, name)
-		return status, err
+		return tm.GetBlockchainEventListenerStatus(ctx, name)
 	})
 }
 
@@ -619,8 +579,7 @@ func (tm *txManager) rpcQueryDispatches() rpcserver.RPCHandler {
 	) ([]*pldapi.Dispatch, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryDispatches")
-		dispatches, err := tm.QueryDispatches(ctx, &query)
-		return dispatches, err
+		return tm.QueryDispatches(ctx, &query)
 	})
 }
 
@@ -630,8 +589,7 @@ func (tm *txManager) rpcGetDispatch() rpcserver.RPCHandler {
 	) (*pldapi.Dispatch, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getDispatch")
-		dispatch, err := tm.GetDispatchByID(ctx, id)
-		return dispatch, err
+		return tm.GetDispatchByID(ctx, id)
 	})
 }
 
@@ -641,8 +599,7 @@ func (tm *txManager) rpcQueryChainedDispatches() rpcserver.RPCHandler {
 	) ([]*pldapi.ChainedDispatch, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("queryChainedDispatches")
-		chainedDispatches, err := tm.QueryChainedDispatches(ctx, &query)
-		return chainedDispatches, err
+		return tm.QueryChainedDispatches(ctx, &query)
 	})
 }
 
@@ -652,7 +609,6 @@ func (tm *txManager) rpcGetChainedDispatch() rpcserver.RPCHandler {
 	) (*pldapi.ChainedDispatch, error) {
 		ctx = log.WithComponent(ctx, "txmanager")
 		tm.metrics.IncRpc("getChainedDispatch")
-		chainedDispatch, err := tm.GetChainedDispatchByID(ctx, id)
-		return chainedDispatch, err
+		return tm.GetChainedDispatchByID(ctx, id)
 	})
 }
