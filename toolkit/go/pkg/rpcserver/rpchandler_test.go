@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldclient"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/rpcclient"
 	"github.com/go-resty/resty/v2"
@@ -246,24 +247,25 @@ func TestRPCMessageBatchAllFail(t *testing.T) {
 
 }
 
-func TestRPCIdempotencyConflict_Returns200WithError(t *testing.T) {
+
+func TestRPCMethod1WithRPCCode(t *testing.T) {
 
 	url, s, done := newTestServerHTTP(t, &pldconf.RPCServerConfig{})
 	defer done()
 
 	var mu sync.Mutex
 	seenKeys := make(map[string]bool)
-	regTestRPC(s, "ut_idempotent", RPCMethod1(func(ctx context.Context, idempotencyKey string) (string, error) {
+	regTestRPC(s, "ut_idempotent", RPCMethod1WithRPCCode(func(ctx context.Context, idempotencyKey string) (string, rpcclient.RPCCode, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		if seenKeys[idempotencyKey] {
-			return "", fmt.Errorf("PD012220 duplicate request with idempotency key: %s", idempotencyKey)
+			return "", pldclient.RPCCodeConflict, fmt.Errorf("PD012220 duplicate request with idempotency key: %s", idempotencyKey)
 		}
 		seenKeys[idempotencyKey] = true
-		return "ok", nil
+		return "ok", 0, nil
 	}))
 
-	// First call with the key succeeds
+	// First call succeeds
 	var firstResponse pldtypes.RawJSON
 	res, err := resty.New().R().
 		SetBody(`{"jsonrpc":"2.0","id":"1","method":"ut_idempotent","params":["my-key"]}`).
@@ -273,7 +275,7 @@ func TestRPCIdempotencyConflict_Returns200WithError(t *testing.T) {
 	assert.True(t, res.IsSuccess())
 	assert.JSONEq(t, `{"jsonrpc":"2.0","id":"1","result":"ok"}`, string(firstResponse))
 
-	// Second call with the same idempotency key: HTTP 200 with a JSON/RPC error, not HTTP 500
+	// Second call: handler explicitly returns RPCCodeConflict; HTTP 200 with error body
 	var conflictResponse rpcclient.RPCResponse
 	res, err = resty.New().R().
 		SetBody(`{"jsonrpc":"2.0","id":"2","method":"ut_idempotent","params":["my-key"]}`).
@@ -281,9 +283,9 @@ func TestRPCIdempotencyConflict_Returns200WithError(t *testing.T) {
 		SetError(&conflictResponse).
 		Post(url)
 	require.NoError(t, err)
-	assert.True(t, res.IsSuccess()) // HTTP 200, not 500 or 409
+	assert.True(t, res.IsSuccess())
 	assert.NotNil(t, conflictResponse.Error)
-	assert.Equal(t, int64(rpcclient.RPCCodeConflict), conflictResponse.Error.Code) // Paladin's custom JSON/RPC error code equivalent to HTTP 409 Conflict
+	assert.Equal(t, int64(pldclient.RPCCodeConflict), conflictResponse.Error.Code)
 	assert.Contains(t, conflictResponse.Error.Message, "PD012220")
 
 }

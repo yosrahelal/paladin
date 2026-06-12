@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
+	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldclient"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/rpcclient"
 	"github.com/go-resty/resty/v2"
@@ -187,7 +188,7 @@ func TestProcessRPC_AuthorizerDeniesAccess(t *testing.T) {
 
 	assert.False(t, res.IsSuccess())
 	assert.Equal(t, http.StatusForbidden, res.StatusCode())
-	assert.Equal(t, int64(rpcclient.RPCCodeUnauthorized), errResponse.Error.Code)
+	assert.Equal(t, int64(pldclient.RPCCodeUnauthorized), errResponse.Error.Code)
 	assert.Contains(t, errResponse.Error.Message, "Unauthorized")
 }
 
@@ -325,7 +326,7 @@ func TestRPCProcessor_ChainAuthorize_Fails(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, res.StatusCode())
 	assert.True(t, auth1Called)
 	assert.False(t, auth2Called) // Should not be called after first authorization failure
-	assert.Equal(t, int64(rpcclient.RPCCodeUnauthorized), errResponse.Error.Code)
+	assert.Equal(t, int64(pldclient.RPCCodeUnauthorized), errResponse.Error.Code)
 	assert.Contains(t, errResponse.Error.Message, "Unauthorized")
 }
 
@@ -389,7 +390,7 @@ func TestRPCProcessor_ChainAuthorize_MiddleFails(t *testing.T) {
 	assert.True(t, auth2AuthCalled)
 	assert.True(t, auth2AuthzCalled)
 	assert.False(t, auth3AuthzCalled) // Should not be called after auth2 authorization failure
-	assert.Equal(t, int64(rpcclient.RPCCodeUnauthorized), errResponse.Error.Code)
+	assert.Equal(t, int64(pldclient.RPCCodeUnauthorized), errResponse.Error.Code)
 	assert.Contains(t, errResponse.Error.Message, "Unauthorized")
 }
 
@@ -453,7 +454,7 @@ func TestRPCProcessor_ChainAuthorize_ReturnsError(t *testing.T) {
 	assert.True(t, auth2AuthCalled)
 	assert.True(t, auth2AuthzCalled)
 	assert.False(t, auth3AuthzCalled) // Should not be called after auth2 returns error
-	assert.Equal(t, int64(rpcclient.RPCCodeUnauthorized), errResponse.Error.Code)
+	assert.Equal(t, int64(pldclient.RPCCodeUnauthorized), errResponse.Error.Code)
 }
 
 func TestRPCProcessor_HTTP_NoStoredAuthenticationResults(t *testing.T) {
@@ -490,7 +491,7 @@ func TestRPCProcessor_HTTP_NoStoredAuthenticationResults(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, httpStatus)
 	assert.NotNil(t, response)
 	assert.NotNil(t, response.Error)
-	assert.Equal(t, int64(rpcclient.RPCCodeUnauthorized), response.Error.Code)
+	assert.Equal(t, int64(pldclient.RPCCodeUnauthorized), response.Error.Code)
 	assert.Contains(t, response.Error.Message, "Unauthorized")
 }
 
@@ -530,7 +531,7 @@ func TestRPCProcessor_WebSocket_NoStoredIdentities(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, httpStatus)
 	assert.NotNil(t, response)
 	assert.NotNil(t, response.Error)
-	assert.Equal(t, int64(rpcclient.RPCCodeUnauthorized), response.Error.Code)
+	assert.Equal(t, int64(pldclient.RPCCodeUnauthorized), response.Error.Code)
 	assert.Contains(t, response.Error.Message, "Unauthorized")
 }
 
@@ -578,6 +579,6 @@ func TestRPCProcessor_AuthenticationResultMismatch(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, httpStatus)
 	assert.NotNil(t, response)
 	assert.NotNil(t, response.Error)
-	assert.Equal(t, int64(rpcclient.RPCCodeUnauthorized), response.Error.Code)
+	assert.Equal(t, int64(pldclient.RPCCodeUnauthorized), response.Error.Code)
 	assert.Contains(t, response.Error.Message, "Unauthorized")
 }
