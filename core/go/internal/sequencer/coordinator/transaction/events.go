@@ -204,7 +204,6 @@ type AssembleRequestRejectedEvent struct {
 	RejectionReason        engineProto.RejectionReason
 	CoordinatorBlockHeight int64
 	AssemblerBlockHeight   int64
-	BlockHeightTolerance   int64
 }
 
 func (*AssembleRequestRejectedEvent) Type() EventType {

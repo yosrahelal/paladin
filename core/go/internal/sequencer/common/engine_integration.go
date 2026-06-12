@@ -28,18 +28,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// This is the subset of the StateDistributer interface from "github.com/LFDT-Paladin/paladin/core/internal/statedistribution"
-// Here we define the subset that we rely on in this package
-
-type Hooks interface {
-	GetBlockHeight() int64
-	GetNodeName() string
-}
-
 type EngineIntegration interface {
 	WriteStatesForTransaction(ctx context.Context, txn *components.PrivateTransaction) error
 	MapPotentialStates(ctx context.Context, potentialStates []*prototk.NewState, createdByTX *components.PrivateTransaction) (stateUpserts []*components.StateUpsert, err error)
 	GetBlockHeight(ctx context.Context) int64
+	// Domain returns the domain associated with the contract being sequenced.
+	Domain() components.Domain
+	// CheckPendingPrivateStateData returns true when the node has all private state data for
+	// opted-in domain contracts up to and including the provided block number.
+	CheckPendingPrivateStateData(ctx context.Context, block int64) (bool, error)
 	//Assemble and sign is a single, synchronous operation that assembles a transaction using the domain smart contract
 	// and then fulfills any signature requests in the attestation plan
 	// there would be a benefit in separating this out to `assemble` and `sign` steps and to make then asynchronous
@@ -52,9 +49,8 @@ type EngineIntegration interface {
 	AssembleAndSign(ctx context.Context, transactionID uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocksJSON []byte, blockHeight int64) (*components.TransactionPostAssembly, error)
 }
 
-func NewEngineIntegration(ctx context.Context, allComponents components.AllComponents, nodeName string, domainSmartContract components.DomainSmartContract, domainContext components.DomainContext, hooks Hooks) EngineIntegration {
+func NewEngineIntegration(ctx context.Context, allComponents components.AllComponents, nodeName string, domainSmartContract components.DomainSmartContract, domainContext components.DomainContext) EngineIntegration {
 	return &engineIntegration{
-		environment:         hooks,
 		components:          allComponents,
 		domainSmartContract: domainSmartContract,
 		domainContext:       domainContext,
@@ -68,7 +64,6 @@ type engineIntegration struct {
 	domainSmartContract components.DomainSmartContract
 	domainContext       components.DomainContext
 	nodeName            string
-	environment         Hooks
 }
 
 func (e *engineIntegration) MapPotentialStates(ctx context.Context, potentialStates []*prototk.NewState, createdByTX *components.PrivateTransaction) (stateUpserts []*components.StateUpsert, err error) {
@@ -94,7 +89,21 @@ func (e *engineIntegration) WriteStatesForTransaction(ctx context.Context, txn *
 }
 
 func (e *engineIntegration) GetBlockHeight(_ context.Context) int64 {
-	return e.environment.GetBlockHeight()
+	return e.domainSmartContract.Domain().GetBlockHeight()
+}
+
+func (e *engineIntegration) Domain() components.Domain {
+	return e.domainSmartContract.Domain()
+}
+
+func (e *engineIntegration) CheckPendingPrivateStateData(ctx context.Context, block int64) (bool, error) {
+	if !e.domainSmartContract.Domain().FullStateAvailablityRequired() {
+		return true, nil
+	}
+	return e.components.StateManager().CheckPendingPrivateStateDataForContract(
+		ctx, e.components.Persistence().NOTX(),
+		e.domainSmartContract.Address().String(), block,
+	)
 }
 
 // assemble a transaction that we are not coordinating, using the provided state locks
@@ -102,7 +111,7 @@ func (e *engineIntegration) GetBlockHeight(_ context.Context) int64 {
 // if the domain as deemed the request as invalid then it will communicate the `revert` directive via the AssembleTransactionResponse_REVERT result without any error
 func (e *engineIntegration) AssembleAndSign(ctx context.Context, transactionID uuid.UUID, preAssembly *components.TransactionPreAssembly, stateLocksJSON []byte, blockHeight int64) (*components.TransactionPostAssembly, error) {
 
-	log.L(ctx).Debugf("Assembling transaction %s. Resetting domain context with state locks from the coordinator which assumes a block height of %d compared with local blockHeight of %d", transactionID, blockHeight, e.environment.GetBlockHeight())
+	log.L(ctx).Debugf("Assembling transaction %s. Creating domain context with coordinator state locks", transactionID)
 
 	// Create a domain context just for this call that the snapshot can be loaded into.
 	dCtx := e.components.StateManager().NewDomainContext(ctx, e.domainSmartContract.Domain(), e.domainSmartContract.Address())

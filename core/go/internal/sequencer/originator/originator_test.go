@@ -45,6 +45,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	builder := NewOriginatorBuilderForTesting(t, State_Idle).CurrentActiveCoordinator(coordinatorNode)
 	o, mocks := builder.Build()
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
+	mocks.EngineIntegration.On("CheckPendingPrivateStateData", mock.Anything, mock.Anything).Return(true, nil)
 	require.NoError(t, o.Start(ctx))
 	defer func() {
 		cancel()
@@ -83,7 +84,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 	o.QueueEvent(ctx, &transaction.AssembleRequestReceivedEvent{
 		BaseEvent: transaction.BaseEvent{TransactionID: txn.ID},
 		RequestID: assembleRequestIdempotencyKey, Coordinator: coordinatorNode,
-		CoordinatorsBlockHeight: 0, StateLocksJSON: []byte("{}"),
+		CoordinatorBlockHeight: 0, StateLocksJSON: []byte("{}"),
 	})
 	sync = statemachine.NewSyncEvent()
 	o.QueueEvent(ctx, sync)
@@ -156,10 +157,10 @@ func Test_propagateEventToTransaction_UnknownTransaction_AssembleRequestSendsRej
 		BaseEvent: transaction.BaseEvent{
 			TransactionID: unknownTxID,
 		},
-		RequestID:               assembleRequestIdempotencyKey,
-		Coordinator:             coordinatorLocator,
-		CoordinatorsBlockHeight: 1000,
-		StateLocksJSON:          []byte("{}"),
+		RequestID:              assembleRequestIdempotencyKey,
+		Coordinator:            coordinatorLocator,
+		CoordinatorBlockHeight: 1000,
+		StateLocksJSON:         []byte("{}"),
 	}
 	require.NoError(t, o.stateMachineEventLoop.ProcessEvent(ctx, event))
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "SendAssembleRejection should be called for unknown transaction")
@@ -302,7 +303,6 @@ func TestOriginator_Start_Idempotent(t *testing.T) {
 	// Second call should be a no-op (idempotent).
 	require.NoError(t, o.Start(ctx))
 }
-
 
 func TestOriginator_WaitForDone_NotStarted_ReturnsImmediately(t *testing.T) {
 	ctx := t.Context()

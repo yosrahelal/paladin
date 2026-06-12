@@ -29,9 +29,11 @@ import (
 
 func action_AssembleRequestReceived(ctx context.Context, t *originatorTransaction, event common.Event) error {
 	e := event.(*AssembleRequestReceivedEvent)
+	log.L(ctx).Debugf("Received assemble request from coordinator %s. (Coordinator block height: %d, local block height: %d)",
+		e.Coordinator, e.CoordinatorBlockHeight, t.getBlockHeight())
 	t.currentDelegate = e.Coordinator
 	t.latestAssembleRequest = &assembleRequestFromCoordinator{
-		coordinatorsBlockHeight: e.CoordinatorsBlockHeight,
+		coordinatorsBlockHeight: e.CoordinatorBlockHeight,
 		stateLocksJSON:          e.StateLocksJSON,
 		requestID:               e.RequestID,
 		preAssembly:             e.PreAssembly,
@@ -169,13 +171,40 @@ func action_RefreshBlockHeight(ctx context.Context, t *originatorTransaction, _ 
 	return nil
 }
 
+// validator_IsPrivateStateDataPendingForAssembly returns true when private state data is pending
+// arrival at this node up to the coordinator's low watermark (coordinatorsBlockHeight - blockHeightTolerance).
+func validator_IsPrivateStateDataPendingForAssembly(ctx context.Context, t *originatorTransaction, event common.Event) (bool, error) {
+	e := event.(*AssembleRequestReceivedEvent)
+	complete, err := t.engineIntegration.CheckPendingPrivateStateData(ctx, e.CoordinatorBlockHeight-e.BlockHeightTolerance)
+	return !complete, err
+}
+
+// action_RejectAssemblyPrivateStateDataPending sends an AssembleRejection with reason
+// PrivateStateDataPending to the coordinator. The originator stays in its current state;
+// the coordinator will retry once the pending private state data has arrived.
+func action_RejectAssemblyPrivateStateDataPending(ctx context.Context, t *originatorTransaction, event common.Event) error {
+	e := event.(*AssembleRequestReceivedEvent)
+	receiverBlockHeight := t.getBlockHeight()
+	log.L(ctx).Warnf("rejecting assemble request from coordinator due to pending private state data (coordinator=%d, assembler=%d, tolerance=%d)",
+		e.CoordinatorBlockHeight, receiverBlockHeight, e.BlockHeightTolerance)
+	return t.transportWriter.SendAssembleRejection(
+		ctx,
+		t.pt.ID,
+		e.RequestID,
+		e.Coordinator,
+		engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
+		e.CoordinatorBlockHeight,
+		receiverBlockHeight,
+	)
+}
+
 // validator_AssembleBlockHeightToleranceExceeded returns true when the absolute difference between
 // the coordinator's block height (from the assemble request) and this originator's block height
 // exceeds the tolerance carried on the event.
 func validator_AssembleBlockHeightToleranceExceeded(_ context.Context, t *originatorTransaction, event common.Event) (bool, error) {
 	e := event.(*AssembleRequestReceivedEvent)
 	receiverBH := uint64(t.getBlockHeight())
-	coordinatorBH := uint64(e.CoordinatorsBlockHeight)
+	coordinatorBH := uint64(e.CoordinatorBlockHeight)
 	diff := max(receiverBH, coordinatorBH) - min(receiverBH, coordinatorBH)
 	return diff > uint64(e.BlockHeightTolerance), nil
 }
@@ -186,14 +215,14 @@ func action_SendAssembleBlockHeightRejection(ctx context.Context, t *originatorT
 	e := event.(*AssembleRequestReceivedEvent)
 	receiverBlockHeight := t.getBlockHeight()
 	log.L(ctx).Warnf("rejecting assemble request from coordinator due to block height tolerance (coordinator=%d, assembler=%d, tolerance=%d)",
-		e.CoordinatorsBlockHeight, receiverBlockHeight, e.BlockHeightTolerance)
+		e.CoordinatorBlockHeight, receiverBlockHeight, e.BlockHeightTolerance)
 	return t.transportWriter.SendAssembleRejection(
 		ctx,
 		t.pt.ID,
 		e.RequestID,
 		e.Coordinator,
 		engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
-		e.CoordinatorsBlockHeight,
+		e.CoordinatorBlockHeight,
 		receiverBlockHeight,
 	)
 }

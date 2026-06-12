@@ -1,5 +1,5 @@
 /*
- * Copyright © 2024 Kaleido, Inc.
+ * Copyright © 2026 Kaleido, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -84,7 +84,7 @@ type transportManager struct {
 
 var reliableMessageFilters = filters.FieldMap{
 	"sequence":    filters.Int64Field("sequence"),
-	"id":          filters.UUIDField("id"),
+	"id":          filters.UUIDField(`"reliable_msgs"."id"`),
 	"created":     filters.TimestampField("created"),
 	"node":        filters.StringField("node"),
 	"messageType": filters.StringField("msg_type"),

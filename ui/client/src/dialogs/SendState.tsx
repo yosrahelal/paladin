@@ -102,7 +102,7 @@ export const SendStateDialog: React.FC<Props> = ({
         handleSubmit();
       }}>
         <DialogTitle>
-          {t('sendState')}
+          {t('sendPrivateState')}
           {errorMessage !== undefined &&
             <Alert sx={{ marginTop: '15px' }} variant="filled" severity="warning">{errorMessage}</Alert>}
         </DialogTitle>
@@ -117,6 +117,9 @@ export const SendStateDialog: React.FC<Props> = ({
             >
               {t('messageValue', { value: messageId })}
             </Alert>}
+            <Alert sx={{ marginBottom: '25px'}} variant="filled" severity="warning">
+              {t('sendPrivateStateWarning')}
+            </Alert>
           <Box sx={{ marginTop: '6px' }}>
             <TextField
               label={t('recipient')}

@@ -23,6 +23,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { JSONBox } from "../components/JSONBox";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { getState } from "../queries/states";
+import { StateActions } from "../components/StateActions";
 
 export const State: React.FC = () => {
 
@@ -82,6 +83,14 @@ export const State: React.FC = () => {
               </Box>
             } />
         </Tabs>
+        <Box sx={{
+          paddingLeft: '5px',
+          paddingTop: '15px',
+          paddingBottom: '5px',
+          backgroundColor: theme => theme.palette.background.paper,
+        }}>
+          <StateActions state={state} />
+        </Box>
         <Accordion elevation={0} disableGutters defaultExpanded>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             {t('details')}

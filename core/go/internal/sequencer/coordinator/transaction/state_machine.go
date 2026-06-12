@@ -23,6 +23,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/statemachine"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 )
 
 type State = common.CoordinatorTransactionState
@@ -345,23 +346,30 @@ var stateDefinitionsMap = StateDefinitions{
 				}},
 			},
 			Event_AssembleRequestRejected: {
-				Match: statemachine.MatchFirst,
+				Match: statemachine.MatchAll,
 				Handlers: []EventHandler{{
-					Validator: validator_IsAssembleBlockHeightRejection,
-					Actions:   []ActionRule{{Action: action_HandleAssembleBlockHeightRejection}},
+					// nil Validator — always fires first; logs the reason before any transition
+					Actions: []ActionRule{{Action: action_LogAssembleRejection}},
+				}, {
+					// BLOCK_HEIGHT_TOLERANCE and PRIVATE_STATE_DATA_PENDING are both transient;
+					// reset to Pooled so the system retries once the pending state data has arrived
+					Validator: validator_IsAssembleRejection(
+						engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE,
+						engineProto.RejectionReason_PRIVATE_STATE_DATA_PENDING,
+					),
 					Transitions: []Transition{{
 						To:      State_Pooled,
 						Actions: []ActionRule{{Action: action_NotifyDependentsOfReset}},
 					}},
 				}, {
 					// Originator does not recognise this node as the active coordinator; evict.
-					Validator: validator_IsAssembleNotCurrentDelegateRejection,
+					Validator: validator_IsAssembleRejection(engineProto.RejectionReason_NOT_CURRENT_DELEGATE),
 					Transitions: []Transition{{
 						To: State_Evicted,
 					}},
 				}, {
 					// Originator no longer holds this transaction in memory; finalize.
-					Validator: validator_IsAssembleTransactionUnknownRejection,
+					Validator: validator_IsAssembleRejection(engineProto.RejectionReason_TRANSACTION_UNKNOWN),
 					Transitions: []Transition{{
 						To:      State_Final,
 						Actions: []ActionRule{{Action: action_FinalizeAsUnknownByOriginator}},
