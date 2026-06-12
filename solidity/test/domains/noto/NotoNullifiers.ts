@@ -201,11 +201,9 @@ describe("NotoNullifiers", function () {
           root.bigInt().toString(10),
           randomBytes32()
         ));
-        // only the outputs are tracked in the merkle tree.
-        // the locked outputs are tracked in the locked states map and
-        // to be consumed using the UTXO ids instead of nullifiers
+        // only transaction outputs are tracked in the merkle tree.
+        // lock states use base Noto _unspent; locked contents use _locked.
         await smtNotary.add(BigInt(txo3.hash!), BigInt(txo3.hash!));
-        await smtNotary.add(BigInt(lockStateAtLock), BigInt(lockStateAtLock));
       });
 
       it("Check that the same state cannot be locked again", async function () {
@@ -271,7 +269,6 @@ describe("NotoNullifiers", function () {
           root.bigInt().toString(10),
           randomBytes32()
         ));
-        await smtNotary.add(BigInt(lockStateSecondLock), BigInt(lockStateSecondLock));
       });
 
       it("prepare unlock, delegate lock, and perform unlock", async function () {
@@ -290,6 +287,7 @@ describe("NotoNullifiers", function () {
         );
         const cancelHash = await newUnlockHash(noto, unlockTxId, [locked2.hash!], [txo6.hash!], unlockData);
         const lockStateAfterPrepare = randomBytes32();
+        expect(await noto.isUnspent(lockStateSecondLock)).to.equal(true);
         const root = await smtNotary.root();
         await doPrepareUnlock(
           randomBytes32(),
@@ -305,7 +303,8 @@ describe("NotoNullifiers", function () {
           unlockData,
           root.bigInt().toString(10),
         );
-        await smtNotary.add(BigInt(lockStateAfterPrepare), BigInt(lockStateAfterPrepare));
+        expect(await noto.isUnspent(lockStateSecondLock)).to.equal(false);
+        expect(await noto.isUnspent(lockStateAfterPrepare)).to.equal(true);
 
         // Delegate the unlock
         const lockStateAfterDelegate = randomBytes32();
@@ -451,7 +450,6 @@ describe("NotoNullifiers", function () {
         lockId = lr.lockId;
         lockStateAfterSuccessfulLock = lr.newLockState;
         await smtNotary.add(BigInt(txo3.hash!), BigInt(txo3.hash!));
-        await smtNotary.add(BigInt(lockStateAfterSuccessfulLock), BigInt(lockStateAfterSuccessfulLock));
 
         // Unlock the UTXO using the same TX ID as the transfer - should fail
         txo4 = newUTXO(1);
@@ -507,7 +505,6 @@ describe("NotoNullifiers", function () {
           unlockData,
           root.bigInt().toString(10),
         );
-        await smtNotary.add(BigInt(prepareNewState), BigInt(prepareNewState));
 
         // Delegate the lock using the same TX ID as the transfer - should fail
         await expect(

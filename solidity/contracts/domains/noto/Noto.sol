@@ -758,7 +758,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
         bytes32 lockId,
         bytes32 oldLockState,
         bytes32 newLockState
-    ) internal {
+    ) internal virtual {
         bytes32 currentLockState = _lockStates[lockId];
         if (currentLockState != oldLockState) {
             revert NotoInvalidLockState(lockId, oldLockState, currentLockState);

@@ -73,7 +73,7 @@ contract NotoNullifiers is Noto {
         _processOutputs(args.outputs);
         _processLockContents(lockId, args.contents);
 
-        _processOutput(args.newLockState);
+        super._processOutput(args.newLockState);
         _setLockState(lockId, args.newLockState);
 
         lock.spendCommitment = spendCommitment;
@@ -106,21 +106,27 @@ contract NotoNullifiers is Noto {
     }
 
     /**
-     * @dev For spending with nullifiers like transfer(), we have introduced _processNullifiers().
-     *      This _processInput() function is only used when processing lock states like spendLock().
-     *      Lock state IDs, like other regulard (unlocked) outputs, live in the commitment tree, not _unspent.
-     *      So we make sure
+     * @dev Lock states use base Noto _unspent tracking so they can be consumed on
+     *      updateLock, delegateLock, and spendLock. Only regular transaction outputs
+     *      are stored in the append-only commitment tree.
      */
-    function _processInput(bytes32 input) internal virtual override {
-        uint256 inputUint = uint256(input);
-        if (_existsAsUnlocked(inputUint)) {
-            return;
+    function _transitionLockState(
+        bytes32 lockId,
+        bytes32 oldLockState,
+        bytes32 newLockState
+    ) internal virtual override {
+        bytes32 currentLockState = _lockStates[lockId];
+        if (currentLockState != oldLockState) {
+            revert NotoInvalidLockState(lockId, oldLockState, currentLockState);
         }
-        super._processInput(input);
+        super._processInput(oldLockState);
+        super._processOutput(newLockState);
+        _lockStates[lockId] = newLockState;
     }
 
     /**
-     * @dev Append-only commitment tree instead of _unspent for public outputs.
+     * @dev Append-only commitment tree for regular (unlocked) outputs. Lock states
+     *      and locked contents are tracked via base Noto _unspent / _locked instead.
      */
     function _processOutput(bytes32 output) internal virtual override {
         uint256 outputUint = uint256(output);
