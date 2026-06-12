@@ -65,11 +65,13 @@ func (s *notoTestSuite) SetupSuite() {
 	contractSource := map[string][]byte{
 		"factory":         helpers.NotoFactoryJSON,
 		"noto_v0":         helpers.NotoV0JSON,
+		"SmtLib":          helpers.SmtLibJSON,
 		"noto_nullifiers": helpers.NotoNullifiersJSON,
 	}
 	deployOrder := []string{
 		"factory",
 		"noto_v0",
+		"SmtLib",
 		"noto_nullifiers",
 	}
 	configureV0 := func(deployed map[string]string, rpc rpcclient.Client) {

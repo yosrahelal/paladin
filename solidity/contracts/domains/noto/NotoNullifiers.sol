@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.20;
 
-import {NotoCommitmentTreeLib} from "./NotoCommitmentTreeLib.sol";
+import {SmtLib} from "@iden3/contracts/contracts/lib/SmtLib.sol";
 import {Noto} from "./Noto.sol";
 
-contract NotoNullifiers is Noto {
-    using NotoCommitmentTreeLib for NotoCommitmentTreeLib.Data;
+uint256 constant MAX_SMT_DEPTH = 64;
 
-    NotoCommitmentTreeLib.Data internal _commitmentsTree;
+contract NotoNullifiers is Noto {
+    using SmtLib for SmtLib.Data;
+
+    SmtLib.Data internal _commitmentsTree;
 
     uint64 public constant NotoVariantV2Nullifiers = 0x0003;
 
@@ -19,7 +21,7 @@ contract NotoNullifiers is Noto {
         address notary_
     ) public virtual override initializer {
         super.initialize(name_, symbol_, notary_);
-        _commitmentsTree.initialize();
+        _commitmentsTree.initialize(MAX_SMT_DEPTH);
     }
 
     function buildConfig(
@@ -153,10 +155,8 @@ contract NotoNullifiers is Noto {
      */
     function _existsAsUnlocked(uint256 utxo) internal view returns (bool) {
         uint256 nodeHash = _getLeafNodeHash(utxo, utxo);
-        NotoCommitmentTreeLib.Node memory node = _commitmentsTree.getNode(
-            nodeHash
-        );
-        return node.nodeType != NotoCommitmentTreeLib.NodeType.EMPTY;
+        SmtLib.Node memory node = _commitmentsTree.getNode(nodeHash);
+        return node.nodeType != SmtLib.NodeType.EMPTY;
     }
 
     function _getLeafNodeHash(
@@ -164,6 +164,7 @@ contract NotoNullifiers is Noto {
         uint256 value
     ) internal pure returns (uint256) {
         uint256[3] memory params = [index, value, uint256(1)];
-        return uint256(keccak256(abi.encode(params)));
+        bytes memory encoded = abi.encode(params);
+        return uint256(keccak256(encoded));
     }
 }

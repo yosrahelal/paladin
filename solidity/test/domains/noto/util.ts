@@ -146,13 +146,22 @@ export async function registerNotoNullifiersImplementation(
   notoFactory: NotoFactory
 ) {
   const [deployer] = await ethers.getSigners();
-  const NotoNullifiersFactory = await ethers.getContractFactory("NotoNullifiers");
+  const SmtLibFactory = await ethers.getContractFactory("SmtLib");
+  const smtLib = await SmtLibFactory.deploy();
+
+  const NotoNullifiersFactory = await ethers.getContractFactory("NotoNullifiers", {
+    libraries: {
+      SmtLib: smtLib.target,
+    },
+  });
   const notoNullifiersImpl = await NotoNullifiersFactory.deploy();
 
   const tx = await notoFactory
     .connect(deployer)
     .registerImplementation("nullifiers", notoNullifiersImpl.target);
   await tx.wait();
+
+  return { smtLib };
 }
 
 export function createLockOptions(spendTxId: string) {
