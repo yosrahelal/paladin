@@ -50,8 +50,7 @@ func (bi *blockIndexer) rpcGetBlockByNumber() rpcserver.RPCHandler {
 		number pldtypes.HexUint64,
 	) (*pldapi.IndexedBlock, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		block, err := bi.GetIndexedBlockByNumber(ctx, number.Uint64())
-		return block, err
+		return bi.GetIndexedBlockByNumber(ctx, number.Uint64())
 	})
 }
 
@@ -60,8 +59,7 @@ func (bi *blockIndexer) rpcGetTransactionByHash() rpcserver.RPCHandler {
 		hash pldtypes.Bytes32,
 	) (*pldapi.IndexedTransaction, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		transaction, err := bi.GetIndexedTransactionByHash(ctx, hash)
-		return transaction, err
+		return bi.GetIndexedTransactionByHash(ctx, hash)
 	})
 }
 
@@ -70,8 +68,7 @@ func (bi *blockIndexer) rpcGetTransactionByNonce() rpcserver.RPCHandler {
 		from pldtypes.EthAddress,
 		nonce pldtypes.HexUint64,
 	) (*pldapi.IndexedTransaction, error) {
-		transaction, err := bi.GetIndexedTransactionByNonce(ctx, from, nonce.Uint64())
-		return transaction, err
+		return bi.GetIndexedTransactionByNonce(ctx, from, nonce.Uint64())
 	})
 }
 
@@ -80,8 +77,7 @@ func (bi *blockIndexer) rpcGetBlockTransactionsByNumber() rpcserver.RPCHandler {
 		blockNumber pldtypes.HexUint64,
 	) ([]*pldapi.IndexedTransaction, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		transactions, err := bi.GetBlockTransactionsByNumber(ctx, int64(blockNumber.Uint64()))
-		return transactions, err
+		return bi.GetBlockTransactionsByNumber(ctx, int64(blockNumber.Uint64()))
 	})
 }
 
@@ -90,8 +86,7 @@ func (bi *blockIndexer) rpcGetTransactionEventsByHash() rpcserver.RPCHandler {
 		hash pldtypes.Bytes32,
 	) ([]*pldapi.IndexedEvent, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		events, err := bi.GetTransactionEventsByHash(ctx, hash)
-		return events, err
+		return bi.GetTransactionEventsByHash(ctx, hash)
 	})
 }
 
@@ -99,8 +94,7 @@ func (bi *blockIndexer) rpcGetConfirmedBlockHeight() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod0(func(ctx context.Context,
 	) (pldtypes.HexUint64, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		blockHeight, err := bi.GetConfirmedBlockHeight(ctx)
-		return blockHeight, err
+		return bi.GetConfirmedBlockHeight(ctx)
 	})
 }
 
@@ -109,8 +103,7 @@ func (bi *blockIndexer) rpcQueryIndexedBlocks() rpcserver.RPCHandler {
 		jq query.QueryJSON,
 	) ([]*pldapi.IndexedBlock, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		blocks, err := bi.QueryIndexedBlocks(ctx, &jq)
-		return blocks, err
+		return bi.QueryIndexedBlocks(ctx, &jq)
 	})
 }
 
@@ -119,8 +112,7 @@ func (bi *blockIndexer) rpcQueryIndexedTransactions() rpcserver.RPCHandler {
 		jq query.QueryJSON,
 	) ([]*pldapi.IndexedTransaction, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		transactions, err := bi.QueryIndexedTransactions(ctx, &jq)
-		return transactions, err
+		return bi.QueryIndexedTransactions(ctx, &jq)
 	})
 }
 
@@ -129,8 +121,7 @@ func (bi *blockIndexer) rpcQueryIndexedEvents() rpcserver.RPCHandler {
 		jq query.QueryJSON,
 	) ([]*pldapi.IndexedEvent, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		events, err := bi.QueryIndexedEvents(ctx, &jq)
-		return events, err
+		return bi.QueryIndexedEvents(ctx, &jq)
 	})
 }
 
@@ -141,7 +132,6 @@ func (bi *blockIndexer) rpcDecodeTransactionEvents() rpcserver.RPCHandler {
 		resultFormat pldtypes.JSONFormatOptions,
 	) ([]*pldapi.EventWithData, error) {
 		ctx = log.WithComponent(ctx, "blockindexer")
-		events, err := bi.DecodeTransactionEvents(ctx, hash, abi, resultFormat)
-		return events, err
+		return bi.DecodeTransactionEvents(ctx, hash, abi, resultFormat)
 	})
 }

@@ -61,8 +61,7 @@ func (tm *transportManager) rpcLocalTransportDetails() rpcserver.RPCHandler {
 		transportName string,
 	) (string, error) {
 		ctx = log.WithComponent(ctx, "transportmanager")
-		transportDetails, err := tm.getLocalTransportDetails(ctx, transportName)
-		return transportDetails, err
+		return tm.getLocalTransportDetails(ctx, transportName)
 	})
 }
 
@@ -83,15 +82,13 @@ func (tm *transportManager) rpcPeerInfo() rpcserver.RPCHandler {
 func (tm *transportManager) rpcQueryReliableMessages() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.ReliableMessage, error) {
 		ctx = log.WithComponent(ctx, "transportmanager")
-		reliableMessages, err := tm.QueryReliableMessages(ctx, tm.persistence.NOTX(), &jq)
-		return reliableMessages, err
+		return tm.QueryReliableMessages(ctx, tm.persistence.NOTX(), &jq)
 	})
 }
 
 func (tm *transportManager) rpcQueryReliableMessageAcks() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.ReliableMessageAck, error) {
 		ctx = log.WithComponent(ctx, "transportmanager")
-		reliableMessageAcks, err := tm.QueryReliableMessageAcks(ctx, tm.persistence.NOTX(), &jq)
-		return reliableMessageAcks, err
+		return tm.QueryReliableMessageAcks(ctx, tm.persistence.NOTX(), &jq)
 	})
 }

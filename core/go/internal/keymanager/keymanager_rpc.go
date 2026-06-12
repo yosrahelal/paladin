@@ -57,8 +57,7 @@ func (km *keyManager) rpcResolveKey() rpcserver.RPCHandler {
 		verifierType string,
 	) (*pldapi.KeyMappingAndVerifier, error) {
 		ctx = log.WithComponent(ctx, "keymanager")
-		mapping, err := km.ResolveKeyNewDatabaseTX(ctx, identifier, algorithm, verifierType)
-		return mapping, err
+		return km.ResolveKeyNewDatabaseTX(ctx, identifier, algorithm, verifierType)
 	})
 }
 
@@ -67,8 +66,7 @@ func (km *keyManager) rpcResolveEthAddress() rpcserver.RPCHandler {
 		identifier string,
 	) (*pldtypes.EthAddress, error) {
 		ctx = log.WithComponent(ctx, "keymanager")
-		ethAddress, err := km.ResolveEthAddressNewDatabaseTX(ctx, identifier)
-		return ethAddress, err
+		return km.ResolveEthAddressNewDatabaseTX(ctx, identifier)
 	})
 }
 
@@ -79,8 +77,7 @@ func (km *keyManager) rpcReverseKeyLookup() rpcserver.RPCHandler {
 		verifier string,
 	) (*pldapi.KeyMappingAndVerifier, error) {
 		ctx = log.WithComponent(ctx, "keymanager")
-		mapping, err := km.ReverseKeyLookup(ctx, km.p.NOTX(), algorithm, verifierType, verifier)
-		return mapping, err
+		return km.ReverseKeyLookup(ctx, km.p.NOTX(), algorithm, verifierType, verifier)
 	})
 }
 
@@ -89,8 +86,7 @@ func (km *keyManager) rpcQueryKeys() rpcserver.RPCHandler {
 		jq query.QueryJSON,
 	) ([]*pldapi.KeyQueryEntry, error) {
 		ctx = log.WithComponent(ctx, "keymanager")
-		keys, err := km.QueryKeys(ctx, km.p.DB(), &jq)
-		return keys, err
+		return km.QueryKeys(ctx, km.p.DB(), &jq)
 	})
 }
 

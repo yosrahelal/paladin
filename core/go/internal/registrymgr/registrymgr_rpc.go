@@ -59,11 +59,11 @@ func (rm *registryManager) rpcQueryEntries() rpcserver.RPCHandler {
 		jq query.QueryJSON,
 		activeFilter pldtypes.Enum[pldapi.ActiveFilter],
 	) ([]*pldapi.RegistryEntry, error) {
-		entries, err := withRegistry(ctx, rm, registryName,
+		return withRegistry(ctx, rm, registryName,
 			func(r components.Registry) ([]*pldapi.RegistryEntry, error) {
 				return r.QueryEntries(ctx, rm.p.NOTX(), activeFilter.V(), &jq)
-			})
-		return entries, err
+			},
+		)
 	})
 }
 
@@ -73,11 +73,11 @@ func (rm *registryManager) rpcQueryEntriesWithProps() rpcserver.RPCHandler {
 		jq query.QueryJSON,
 		activeFilter pldtypes.Enum[pldapi.ActiveFilter],
 	) ([]*pldapi.RegistryEntryWithProperties, error) {
-		entriesWithProps, err := withRegistry(ctx, rm, registryName,
+		return withRegistry(ctx, rm, registryName,
 			func(r components.Registry) ([]*pldapi.RegistryEntryWithProperties, error) {
 				return r.QueryEntriesWithProps(ctx, rm.p.NOTX(), activeFilter.V(), &jq)
-			})
-		return entriesWithProps, err
+			},
+		)
 	})
 }
 
@@ -87,10 +87,10 @@ func (rm *registryManager) rpcGetEntryProperties() rpcserver.RPCHandler {
 		entryID pldtypes.HexBytes,
 		activeFilter pldtypes.Enum[pldapi.ActiveFilter],
 	) ([]*pldapi.RegistryProperty, error) {
-		properties, err := withRegistry(ctx, rm, registryName,
+		return withRegistry(ctx, rm, registryName,
 			func(r components.Registry) ([]*pldapi.RegistryProperty, error) {
 				return r.GetEntryProperties(ctx, rm.p.NOTX(), activeFilter.V(), entryID)
-			})
-		return properties, err
+			},
+		)
 	})
 }
