@@ -9,7 +9,7 @@ import {
   deployNotoInstance,
   doDelegateLock,
   doLockWithNullifiers,
-  doMint,
+  doMintWithNullifiers,
   doPrepareUnlock,
   doTransferWithNullifiers,
   doUnlock,
@@ -60,13 +60,14 @@ describe("NotoNullifiers", function () {
       txo4 = newUTXO(20);
 
       // Make two UTXOs
-      await doMint(
+      const root = await smtNotary.root();
+      await doMintWithNullifiers(
         randomBytes32(),
         notary,
-        noto as unknown as Noto,
+        noto,
         [txo1.hash!, txo2.hash!],
+        root.bigInt().toString(10),
         randomBytes32(),
-        true
       );
       const hash1 = BigInt(txo1.hash!);
       const hash2 = BigInt(txo2.hash!);
@@ -75,8 +76,9 @@ describe("NotoNullifiers", function () {
     });
 
     it("Check for double-mint protection", async function () {
+      const root = await smtNotary.root();
       await expect(
-        doMint(randomBytes32(), notary, noto as unknown as Noto, [txo1.hash!], randomBytes32(), true)
+        doMintWithNullifiers(randomBytes32(), notary, noto, [txo1.hash!], root.bigInt().toString(10), randomBytes32())
       ).rejectedWith("NotoInvalidOutput");
     });
 
@@ -171,13 +173,14 @@ describe("NotoNullifiers", function () {
         txo2 = newUTXO(30);
 
         // Make two UTXOs
-        await doMint(
+        const root = await smtNotary.root();
+        await doMintWithNullifiers(
           randomBytes32(),
           notary,
-          noto as unknown as Noto,
+          noto,
           [txo1.hash!, txo2.hash!],
+          root.bigInt().toString(10),
           randomBytes32(),
-          true
         );
         await smtNotary.add(BigInt(txo1.hash!), BigInt(txo1.hash!));
         await smtNotary.add(BigInt(txo2.hash!), BigInt(txo2.hash!));
@@ -287,6 +290,7 @@ describe("NotoNullifiers", function () {
         );
         const cancelHash = await newUnlockHash(noto, unlockTxId, [locked2.hash!], [txo6.hash!], unlockData);
         const lockStateAfterPrepare = randomBytes32();
+        const root = await smtNotary.root();
         await doPrepareUnlock(
           randomBytes32(),
           notary,
@@ -299,7 +303,9 @@ describe("NotoNullifiers", function () {
           spendHash,
           cancelHash,
           unlockData,
+          root.bigInt().toString(10),
         );
+        await smtNotary.add(BigInt(lockStateAfterPrepare), BigInt(lockStateAfterPrepare));
 
         // Delegate the unlock
         const lockStateAfterDelegate = randomBytes32();
@@ -349,8 +355,12 @@ describe("NotoNullifiers", function () {
     });
 
     describe("Duplicate TXID reverts transfer", () => {
+      let smtNotary: Merkletree;
+
       before(async function () {
         ({ noto, notary } = await loadFixture(deployNotoFixture));
+        const storage1 = new InMemoryDB(str2Bytes(""), HashAlgorithm.Keccak256);
+        smtNotary = new Merkletree(storage1, true, 64);
       });
 
       it("should fail", async function () {
@@ -361,7 +371,12 @@ describe("NotoNullifiers", function () {
         const txId1 = randomBytes32();
 
         // Make two UTXOs - should succeed
-        await expect(doMint(txId1, notary, noto as unknown as Noto, [txo1.hash!, txo2.hash!], randomBytes32(), true)).to.be.fulfilled;
+        const mintRoot = await smtNotary.root();
+        await expect(
+          doMintWithNullifiers(txId1, notary, noto, [txo1.hash!, txo2.hash!], mintRoot.bigInt().toString(10), randomBytes32())
+        ).to.be.fulfilled;
+        await smtNotary.add(BigInt(txo1.hash!), BigInt(txo1.hash!));
+        await smtNotary.add(BigInt(txo2.hash!), BigInt(txo2.hash!));
 
         // Make two more UTXOs with the same TX ID - should fail
         const root = await smtNotary.root();
@@ -393,7 +408,10 @@ describe("NotoNullifiers", function () {
         txId1 = randomBytes32();
 
         // Make two UTXOs
-        await expect(doMint(txId1, notary, noto as unknown as Noto, [txo1.hash!, txo2.hash!], randomBytes32(), true)).to.be.fulfilled;
+        const mintRoot = await smtNotary.root();
+        await expect(
+          doMintWithNullifiers(txId1, notary, noto, [txo1.hash!, txo2.hash!], mintRoot.bigInt().toString(10), randomBytes32())
+        ).to.be.fulfilled;
         await smtNotary.add(BigInt(txo1.hash!), BigInt(txo1.hash!));
         await smtNotary.add(BigInt(txo2.hash!), BigInt(txo2.hash!));
       });
@@ -432,6 +450,8 @@ describe("NotoNullifiers", function () {
         );
         lockId = lr.lockId;
         lockStateAfterSuccessfulLock = lr.newLockState;
+        await smtNotary.add(BigInt(txo3.hash!), BigInt(txo3.hash!));
+        await smtNotary.add(BigInt(lockStateAfterSuccessfulLock), BigInt(lockStateAfterSuccessfulLock));
 
         // Unlock the UTXO using the same TX ID as the transfer - should fail
         txo4 = newUTXO(1);
@@ -472,6 +492,7 @@ describe("NotoNullifiers", function () {
           unlockData
         );
         const prepareNewState = randomBytes32();
+        const root = await smtNotary.root();
         await doPrepareUnlock(
           randomBytes32(),
           notary,
@@ -484,7 +505,9 @@ describe("NotoNullifiers", function () {
           spendHash,
           cancelHash,
           unlockData,
+          root.bigInt().toString(10),
         );
+        await smtNotary.add(BigInt(prepareNewState), BigInt(prepareNewState));
 
         // Delegate the lock using the same TX ID as the transfer - should fail
         await expect(

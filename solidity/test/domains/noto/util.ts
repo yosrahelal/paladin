@@ -262,6 +262,31 @@ export async function doTransferWithNullifiers(
   }
 }
 
+export async function doMintWithNullifiers(
+  txId: string,
+  notary: Signer,
+  noto: NotoNullifiers,
+  outputs: string[],
+  root: string,
+  data: string,
+) {
+  const proof = encodeToBytes(root, "0x");
+  const tx = await noto.connect(notary).mint(txId, outputs, proof, data);
+  const results = await tx.wait();
+  expect(results).to.exist;
+
+  for (const log of results?.logs || []) {
+    const event = noto.interface.parseLog(log);
+    expect(event).to.exist;
+    expect(event?.name).to.equal("Transfer");
+    expect(event?.args.outputs).to.deep.equal(outputs);
+    expect(event?.args.data).to.deep.equal(data);
+  }
+  for (const output of outputs) {
+    expect(await noto.isUnspent(output)).to.equal(false);
+  }
+}
+
 export async function doMint(
   txId: string,
   notary: Signer,
@@ -543,8 +568,10 @@ export async function doPrepareUnlock(
   spendHash: string,
   cancelHash: string,
   data: string,
+  root?: string,
 ) {
   const notaryAddr = await notary.getAddress();
+  const proof = root !== undefined ? encodeToBytes(root, "0x") : "0x";
 
   const encodedParams = encodeUpdateLockArgs({
     txId,
@@ -552,7 +579,7 @@ export async function doPrepareUnlock(
     oldLockState: oldLockStateId,
     newLockState: newLockStateId,
     options: { spendTxId },
-    proof: "0x",
+    proof,
   });
 
   const tx = await noto
@@ -576,7 +603,7 @@ export async function doPrepareUnlock(
   expect(event1?.args.contents).to.deep.equal(contents);
   expect(event1?.args.oldLockState).to.deep.equal(oldLockStateId);
   expect(event1?.args.newLockState).to.deep.equal(newLockStateId);
-  expect(event1?.args.proof).to.deep.equal("0x");
+  expect(event1?.args.proof).to.deep.equal(proof);
   expect(event1?.args.data).to.equal(data);
 }
 

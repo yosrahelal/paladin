@@ -9,7 +9,7 @@ uint256 constant MAX_SMT_DEPTH = 64;
 contract NotoNullifiers is Noto {
     using SmtLib for SmtLib.Data;
 
-    SmtLib.Data internal _commitmentsTree;
+    SmtLib.Data private _commitmentsTree;
 
     uint64 public constant NotoVariantV2Nullifiers = 0x0003;
 
@@ -40,13 +40,13 @@ contract NotoNullifiers is Noto {
             );
     }
 
-    function transfer(
+    function _transfer(
         bytes32 txId,
-        bytes32[] calldata inputs,
-        bytes32[] calldata outputs,
+        bytes32[] memory inputs,
+        bytes32[] memory outputs,
         bytes calldata proof,
         bytes calldata data
-    ) external virtual override onlyNotary txIdNotUsed(txId) {
+    ) internal virtual override {
         (uint256 root, bytes memory _signature) = abi.decode(
             proof,
             (uint256, bytes)
@@ -91,10 +91,11 @@ contract NotoNullifiers is Noto {
         bytes32 lockId,
         NotoLockInfo storage lock
     ) internal virtual override {
-        if (args.proof.length > 0) {
-            (uint256 root, ) = abi.decode(args.proof, (uint256, bytes));
-            _requireValidRoot(root);
+        if (args.proof.length == 0) {
+            revert NotoInvalidProof(args.proof);
         }
+        (uint256 root, ) = abi.decode(args.proof, (uint256, bytes));
+        _requireValidRoot(root);
         super._updateLock(
             args,
             spendCommitment,
@@ -105,8 +106,10 @@ contract NotoNullifiers is Noto {
     }
 
     /**
-     * @dev Lock state IDs and other outputs live in the commitment tree, not _unspent.
-     *      Base Noto spends lock states via _processInput; accept tree membership there.
+     * @dev For spending with nullifiers like transfer(), we have introduced _processNullifiers().
+     *      This _processInput() function is only used when processing lock states like spendLock().
+     *      Lock state IDs, like other regulard (unlocked) outputs, live in the commitment tree, not _unspent.
+     *      So we make sure
      */
     function _processInput(bytes32 input) internal virtual override {
         uint256 inputUint = uint256(input);
