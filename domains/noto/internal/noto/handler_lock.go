@@ -343,7 +343,7 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 				Data: data,
 			})
 		}
-	} else if tx.DomainConfig.UsesFlatLockABI() {
+	} else if tx.DomainConfig.IsV2() {
 		functionName = "createLock"
 		var createLockArgs []byte
 		createLockArgs, err = h.noto.encodeNotoCreateLockArgs(ctx, &types.NotoCreateLockArgs{

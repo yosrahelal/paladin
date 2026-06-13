@@ -20,14 +20,11 @@ import (
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 )
 
-const PAYLOAD_DOMAIN_NOTO_NULLIFIER = "domain:noto:nullifier"
-const VERIFIER_DOMAIN_NOTO_NULLIFIER = "domain:noto:nullifier:verifier"
-
 type NotoDomainReceipt struct {
-	States    ReceiptStates      `json:"states"`
-	Transfers []*ReceiptTransfer `json:"transfers,omitempty"`
-	LockInfo  *ReceiptLockInfo   `json:"lockInfo,omitempty"`
-	Data      pldtypes.HexBytes  `json:"data,omitempty"`
+	States    ReceiptStates        `json:"states"`
+	Transfers []*ReceiptTransfer   `json:"transfers,omitempty"`
+	LockInfo  *ReceiptLockInfo     `json:"lockInfo,omitempty"`
+	Data      pldtypes.HexBytes    `json:"data,omitempty"`
 	Sender    *pldtypes.EthAddress `json:"sender,omitempty"`
 }
 
@@ -66,8 +63,6 @@ type ReceiptTransfer struct {
 	To     *pldtypes.EthAddress `json:"to,omitempty"`
 	Amount *pldtypes.HexUint256 `json:"amount"`
 }
-
-
 
 type NotoCoinState struct {
 	ID              pldtypes.Bytes32    `json:"id"`
@@ -208,7 +203,7 @@ var NotoLockInfoABI_V1 = &abi.Parameter{
 type TransactionData struct {
 	Salt    pldtypes.Bytes32     `json:"salt"`
 	Data    pldtypes.HexBytes    `json:"data"`
-	Variant pldtypes.HexUint64   `json:"variant"` // Noto contract variant
+	Variant pldtypes.HexUint64   `json:"variant"`        // Noto contract variant
 	From    *pldtypes.EthAddress `json:"from,omitempty"` // Resolved Ethereum address of the transaction requester
 }
 

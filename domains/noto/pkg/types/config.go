@@ -16,8 +16,6 @@
 package types
 
 import (
-	"fmt"
-
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/domain"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -147,17 +145,12 @@ var NotoVariantV0 pldtypes.HexUint64 = 0x0000 // legacy
 // Backward-compatible aliases used across handlers and tests
 var (
 	NotoVariantNullifier = NotoVariantV2Nullifiers
-	NotoVariantDefault   = NotoVariantV1
+	NotoVariantDefault   = NotoVariantV2
 	NotoVariantLegacy    = NotoVariantV0
 )
 
 func (c *NotoParsedConfig) IsV2() bool {
 	return c.Variant == NotoVariantV2 || c.Variant == NotoVariantV2Nullifiers
-}
-
-// UsesFlatLockABI is true for modern Noto (standard or nullifiers): INoto / ILockableCapability parameter layout.
-func (c *NotoParsedConfig) UsesFlatLockABI() bool {
-	return !c.IsV0() && !c.IsV1()
 }
 
 func (c *NotoParsedConfig) UsesNullifiers() bool {
@@ -174,8 +167,4 @@ func (c *NotoParsedConfig) IsV1() bool {
 
 func (c *NotoParsedConfig) IsV0() bool {
 	return c.Variant == NotoVariantV0
-}
-
-func AlgoDomainNullifier(name string) string {
-	return fmt.Sprintf("domain:%s:nullifier", name)
 }

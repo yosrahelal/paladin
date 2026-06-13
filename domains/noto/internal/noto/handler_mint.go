@@ -186,6 +186,15 @@ func (h *mintHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 		return nil, err
 	}
 
+	payload := sender.Payload
+	if tx.DomainConfig.UsesNullifiers() {
+		encoded, encErr := h.noto.encodeRootAndSignature(ctx, tx.ContractAddress.String(), req.StateQueryContext, payload)
+		if encErr != nil {
+			return nil, encErr
+		}
+		payload = encoded
+	}
+
 	interfaceABI := h.noto.getInterfaceABI(tx.DomainConfig.Variant)
 	functionName := "mint"
 	var paramsJSON []byte
@@ -201,7 +210,7 @@ func (h *mintHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 		paramsJSON, err = json.Marshal(&NotoMintParams{
 			TxId:    req.Transaction.TransactionId,
 			Outputs: endorsableStateIDs(req.OutputStates, false),
-			Proof:   sender.Payload,
+			Proof:   payload,
 			Data:    data,
 		})
 	}

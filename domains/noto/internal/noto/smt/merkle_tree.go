@@ -25,6 +25,10 @@ import (
 	utxocore "github.com/LFDT-Paladin/smt/pkg/utxo/core"
 )
 
+// matching the onchain implementation's MAX_SMT_DEPTH, which has a
+// theoretic max of 256, but 64 was chosen so that the capacity is
+// large enough (up to 2^64 - 1 UTXOs). Larger depth requires more
+// storage and larger merkle proofs.
 const SMT_HEIGHT_UTXO = 64
 
 func NewSmt(ctx context.Context, storage pldsmt.StatesStorage, levels int) (core.SparseMerkleTree, error) {
