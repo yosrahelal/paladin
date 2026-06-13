@@ -62,24 +62,37 @@ func (s *notoTestSuite) SetupSuite() {
 	s.hdWalletSeed = testbed.HDWalletSeedScopedToTest()
 
 	log.L(ctx).Infof("Deploying Noto contracts")
+	// Deploy: noto (default impl), noto_v0, factory_impl
 	contractSource := map[string][]byte{
-		"factory":         helpers.NotoFactoryJSON,
+		"noto":            helpers.NotoJSON,
 		"noto_v0":         helpers.NotoV0JSON,
 		"SmtLib":          helpers.SmtLibJSON,
 		"noto_nullifiers": helpers.NotoNullifiersJSON,
+		"factory_impl":    helpers.NotoFactoryJSON,
 	}
 	deployOrder := []string{
-		"factory",
+		"noto",
+		"factory_impl",
 		"noto_v0",
 		"SmtLib",
 		"noto_nullifiers",
 	}
-	configureV0 := func(deployed map[string]string, rpc rpcclient.Client) {
+
+	// After deploying implementations, deploy proxy and register v0
+	deployProxyAndConfigure := func(deployed map[string]string, rpc rpcclient.Client) {
+		// Deploy factory proxy with initialize(notoImplAddress)
+		proxyAddr := deployFactoryProxy(ctx, s.T(), rpc, notaryName,
+			deployed["factory_impl"], helpers.NotoFactoryJSON,
+			fmt.Sprintf(`["%s"]`, deployed["noto"]))
+		deployed["factory"] = proxyAddr
+		log.L(ctx).Infof("Factory proxy deployed to %s", proxyAddr)
+
+		// Register noto_v0 implementation on the factory (via proxy)
 		result1 := pldclient.Wrap(rpc).ReceiptPollingInterval(200*time.Millisecond).
 			ForABI(ctx, helpers.NotoFactoryABI).
 			Public().
 			From(notaryName).
-			To(pldtypes.MustEthAddress(deployed["factory"])).
+			To(pldtypes.MustEthAddress(proxyAddr)).
 			Function("registerImplementation").
 			Inputs(pldtypes.RawJSON(fmt.Sprintf(`["noto_v0", "%s"]`, deployed["noto_v0"]))).
 			BuildTX().
@@ -99,7 +112,7 @@ func (s *notoTestSuite) SetupSuite() {
 			Wait(5 * time.Second)
 		require.NoError(s.T(), result2.Error())
 	}
-	contracts := deployContracts(ctx, s.T(), s.hdWalletSeed, notaryName, deployOrder, contractSource, configureV0)
+	contracts := deployContracts(ctx, s.T(), s.hdWalletSeed, notaryName, deployOrder, contractSource, deployProxyAndConfigure)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}

@@ -136,10 +136,26 @@ export function eip712Nullifier(coin: UTXO): string {
   return structHash;
 }
 
-export async function deployNotoFactory(): Promise<any> {
-  const NotoFactory = await ethers.getContractFactory("NotoFactory");
-  const notoFactory = await NotoFactory.deploy();
-  return notoFactory;
+export async function deployNotoFactory(): Promise<NotoFactory> {
+  // Deploy the default Noto implementation
+  const Noto = await ethers.getContractFactory("Noto");
+  const notoImpl = await Noto.deploy();
+
+  // Deploy the factory implementation
+  const NotoFactoryImpl = await ethers.getContractFactory("NotoFactory");
+  const notoFactoryImpl = await NotoFactoryImpl.deploy();
+
+  // Deploy the factory proxy with initialize calldata so Ownable is set
+  const ERC1967Proxy = await ethers.getContractFactory("ERC1967Proxy");
+  const initData = NotoFactoryImpl.interface.encodeFunctionData("initialize", [
+    await notoImpl.getAddress(),
+  ]);
+  const proxy = await ERC1967Proxy.deploy(
+    await notoFactoryImpl.getAddress(),
+    initData
+  );
+
+  return NotoFactoryImpl.attach(await proxy.getAddress()) as NotoFactory;
 }
 
 export async function registerNotoNullifiersImplementation(

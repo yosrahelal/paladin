@@ -18,6 +18,7 @@ package integrationtest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -70,14 +71,24 @@ func (s *pvpTestSuite) SetupSuite() {
 
 	log.L(ctx).Infof("Deploying factories")
 	contractSource := map[string][]byte{
-		"noto": helpers.NotoFactoryJSON,
-		"atom": helpers.AtomFactoryJSON,
+		"noto_impl": helpers.NotoJSON,
+		"noto":      helpers.NotoFactoryJSON,
+		"atom":      helpers.AtomFactoryJSON,
 	}
 	deployOrder := []string{
+		"noto_impl",
 		"noto",
 		"atom",
 	}
-	contracts := deployContracts(ctx, s.T(), s.hdWalletSeed, notary, deployOrder, contractSource)
+	// Deploy proxy for noto factory
+	deployNotoProxy := func(deployed map[string]string, rpc rpcclient.Client) {
+		proxyAddr := deployFactoryProxy(ctx, s.T(), rpc, notary,
+			deployed["noto"], helpers.NotoFactoryJSON,
+			fmt.Sprintf(`["%s"]`, deployed["noto_impl"]))
+		deployed["noto"] = proxyAddr
+		log.L(ctx).Infof("Noto factory proxy deployed to %s", proxyAddr)
+	}
+	contracts := deployContracts(ctx, s.T(), s.hdWalletSeed, notary, deployOrder, contractSource, deployNotoProxy)
 	for name, address := range contracts {
 		log.L(ctx).Infof("%s deployed to %s", name, address)
 	}

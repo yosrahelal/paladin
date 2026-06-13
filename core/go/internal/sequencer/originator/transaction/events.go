@@ -97,13 +97,13 @@ func (e *DelegatedEvent) GetCoordinator() string {
 
 type AssembleRequestReceivedEvent struct {
 	BaseEvent
-	RequestID               uuid.UUID
-	Coordinator             string
-	CoordinatorsBlockHeight int64
-	BlockHeightTolerance    int64
-	StateLocksJSON          []byte
-	PreAssembly             []byte
-	Expiry                  time.Time
+	RequestID              uuid.UUID
+	Coordinator            string
+	CoordinatorBlockHeight int64
+	BlockHeightTolerance   int64
+	StateLocksJSON         []byte
+	PreAssembly            []byte
+	Expiry                 time.Time
 }
 
 func (*AssembleRequestReceivedEvent) Type() EventType {
