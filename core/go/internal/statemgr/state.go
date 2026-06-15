@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -255,8 +255,9 @@ func (ss *stateManager) GetStatesByID(ctx context.Context, dbTX persistence.DBTX
 // Built in fields all start with "." as that prevents them
 // clashing with variable names in ABI structs ($ and _ are valid leading chars there)
 var baseStateFields = map[string]filters.FieldResolver{
-	".id":      filters.HexBytesField(`"states"."id"`),
-	".created": filters.TimestampField(`"states"."created"`),
+	".id":             filters.HexBytesField(`"states"."id"`),
+	".created":        filters.TimestampField(`"states"."created"`),
+	"contractAddress": filters.HexBytesField(`"states"."contract_address"`),
 }
 
 func addStateBaseLabels(labelValues filters.PassthroughValueSet, id pldtypes.HexBytes, createdAt pldtypes.Timestamp) filters.PassthroughValueSet {
