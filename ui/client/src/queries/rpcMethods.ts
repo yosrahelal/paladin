@@ -35,7 +35,7 @@ export const RpcMethods = {
   pgroup_queryGroups: 'pgroup_queryGroups',
   pstate_listSchemas: 'pstate_listSchemas',
   pstate_queryStates: 'pstate_queryStates',
-  pstate_transferState: 'pstate_transferState',
+  pstate_transferPrivateState: 'pstate_transferPrivateState',
   ptx_call: 'ptx_call',
   ptx_decodeCall: 'ptx_decodeCall',
   ptx_decodeEvent: 'ptx_decodeEvent',

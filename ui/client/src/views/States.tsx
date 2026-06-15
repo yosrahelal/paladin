@@ -29,6 +29,7 @@ import { Hash } from "../components/Hash";
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { IFilter, ISchemaComponent, IState } from "../interfaces";
 import { Filters } from "../components/Filters";
+import { StateActions } from "../components/StateActions";
 
 type Props = {
   sortAscending: boolean
@@ -325,6 +326,15 @@ export const States: React.FC<Props> = ({
                           whiteSpace: 'nowrap'
                         }}
                       >
+                        {t('actions')}
+                      </TableCell>
+                      <TableCell
+                        width={1}
+                        sx={{
+                          backgroundColor: (theme) => theme.palette.background.paper,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
                       </TableCell>
                     </TableRow>
                   </TableHead>
@@ -348,6 +358,9 @@ export const States: React.FC<Props> = ({
                             {getIndexedFieldContent(state, field)}
                           </TableCell>
                         )}
+                        <TableCell>
+                          <StateActions state={state} />
+                        </TableCell>
                         <TableCell align="right" sx={{ padding: '8px' }}>
                           <Tooltip title={t('open')} arrow>
                             <IconButton
