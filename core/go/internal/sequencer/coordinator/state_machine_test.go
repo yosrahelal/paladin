@@ -302,7 +302,7 @@ func TestCoordinator_WhenObserving_TransitionsToIdle_OnHeartbeatIntervalInactive
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatIntervalEvent{}))
 	// action_IncrementHeartbeatIntervalCounts bumps counter to 4; guard_InactiveGracePeriodExceeded = (4 > 3) = true
 	assert.Equal(t, State_Idle, c.GetCurrentState())
-	assert.Equal(t, 3, c.heartbeatIntervalsSinceLastReceive, "counter must be at grace-period threshold after increment")
+	assert.Equal(t, 4, c.heartbeatIntervalsSinceLastReceive, "counter must be past the grace-period threshold after increment")
 }
 
 func TestCoordinator_WhenObserving_HeartbeatInterval_WithinGrace_IncrementsCounterAndStaysObserving(t *testing.T) {
