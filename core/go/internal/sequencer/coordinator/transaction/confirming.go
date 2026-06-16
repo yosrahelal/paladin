@@ -126,6 +126,15 @@ func action_NotifyOriginatorOfNonRetryableRevert(ctx context.Context, t *coordin
 	)
 }
 
+func action_NotifyOriginatorOfChainedDependencyFailure(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
+	e := event.(*ChainedDependencyFailedEvent)
+	failureMessage := i18n.NewError(ctx, msgs.MsgTxMgrDependencyFailed, e.FailedTxID).Error()
+	return t.transportWriter.SendTransactionConfirmed(
+		ctx, t.pt.ID, t.originatorNode, &t.pt.Address, nil,
+		engine.TransactionConfirmed_OUTCOME_REVERTED, nil, failureMessage, false,
+	)
+}
+
 func action_FinalizeNonRetryableRevert(ctx context.Context, t *coordinatorTransaction, _ common.Event) error {
 	failureMessage := t.decodedRevertReason
 	log.L(ctx).Infof("finalizing transaction %s as reverted (revertCount=%d): %s", t.pt.ID.String(), t.revertCount, failureMessage)
@@ -212,7 +221,6 @@ func action_FinalizeOnChainedDependencyFailure(ctx context.Context, t *coordinat
 	)
 	return nil
 }
-
 
 func action_RevertTransactionInGrapher(ctx context.Context, t *coordinatorTransaction, _ common.Event) error {
 	log.L(ctx).Debugf("releasing transaction locks for %s (revert/failure path)", t.pt.ID.String())
