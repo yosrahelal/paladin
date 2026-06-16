@@ -90,6 +90,10 @@ func (b *TransactionBuilderForTesting) GetCoordinator() string {
 	return b.currentDelegate
 }
 
+func (b *TransactionBuilderForTesting) GetAssembleRequestID() uuid.UUID {
+	return b.assembleRequestID
+}
+
 func (b *TransactionBuilderForTesting) GetLatestFulfilledAssembleRequestID() uuid.UUID {
 	return b.latestFulfilledAssembleRequestID
 }

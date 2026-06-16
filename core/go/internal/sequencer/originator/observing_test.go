@@ -140,7 +140,7 @@ func Test_validator_HasDroppedTransactions_FalseWhenNoInFlightTransactions(t *te
 func Test_guard_InactiveGracePeriodExceeded_WhileObserving_TrueWhenCounterExceedsThreshold(t *testing.T) {
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
-		HeartbeatIntervalsSinceLastReceive(10).
+		HeartbeatIntervalsSinceLastReceive(11).
 		InactiveGracePeriod(10).
 		Build()
 	assert.True(t, guard_InactiveGracePeriodExceeded(ctx, o))
@@ -747,7 +747,7 @@ func Test_ProcessEvent_HeartbeatReceived_InactiveFallback_RedirectsAndProcessesH
 	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		CurrentActiveCoordinator("node1").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		HeartbeatIntervalsSinceLastReceive(10).
+		HeartbeatIntervalsSinceLastReceive(11).
 		InactiveGracePeriod(10).
 		Build()
 
