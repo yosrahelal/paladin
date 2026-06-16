@@ -747,7 +747,7 @@ func Test_ProcessEvent_HeartbeatReceived_InactiveFallback_RedirectsAndProcessesH
 	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
 		CurrentActiveCoordinator("node1").
 		CoordinatorPriorityList("node1", "node2", "node3").
-		HeartbeatIntervalsSinceLastReceive(10).
+		HeartbeatIntervalsSinceLastReceive(11).
 		InactiveGracePeriod(10).
 		Build()
 

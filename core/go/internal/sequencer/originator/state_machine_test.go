@@ -54,7 +54,7 @@ func TestStateMachine_Idle_OnTransitionTo_EndorserMode_ResetsToTopPriorityAndSet
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
 		CurrentActiveCoordinator("C").
 		CoordinatorPriorityList("A", "B", "C").
-		HeartbeatIntervalsSinceLastReceive(1).
+		HeartbeatIntervalsSinceLastReceive(2).
 		InactiveGracePeriod(2).
 		Build()
 
@@ -72,7 +72,7 @@ func TestStateMachine_Idle_OnTransitionTo_NoEndorserMode_NoChange(t *testing.T) 
 	ctx := context.Background()
 	o, _ := NewOriginatorBuilderForTesting(t, State_Observing).
 		CurrentActiveCoordinator("coordinator@node1").
-		HeartbeatIntervalsSinceLastReceive(1).
+		HeartbeatIntervalsSinceLastReceive(2).
 		InactiveGracePeriod(2).
 		FailoverIndex(3).
 		Build()
