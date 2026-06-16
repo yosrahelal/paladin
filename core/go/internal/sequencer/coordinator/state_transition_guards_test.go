@@ -256,3 +256,48 @@ func TestGuard_HasTransactionAssembling_MixOfAssemblingAndOtherStates(t *testing
 	result := guard_HasTransactionAssembling(ctx, c)
 	assert.True(t, result, "mix with Assembling should return true")
 }
+
+func TestGuard_ClosingGracePeriodExpired_FalseWhenLessThan(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
+		ClosingGracePeriod(5).
+		HeartbeatIntervalsSinceStateChange(3).
+		Build()
+	assert.False(t, guard_ClosingGracePeriodExpired(ctx, c))
+}
+
+func TestGuard_ClosingGracePeriodExpired_FalseWhenEqual(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
+		ClosingGracePeriod(5).
+		HeartbeatIntervalsSinceStateChange(5).
+		Build()
+	assert.False(t, guard_ClosingGracePeriodExpired(ctx, c))
+}
+
+func TestGuard_ClosingGracePeriodExpired_TrueWhenGreaterThan(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
+		ClosingGracePeriod(5).
+		HeartbeatIntervalsSinceStateChange(7).
+		Build()
+	assert.True(t, guard_ClosingGracePeriodExpired(ctx, c))
+}
+
+func TestGuard_ClosingGracePeriodExpired_MinimumGracePeriod(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
+		ClosingGracePeriod(1).
+		HeartbeatIntervalsSinceStateChange(2).
+		Build()
+	assert.True(t, guard_ClosingGracePeriodExpired(ctx, c))
+}
+
+func TestGuard_ClosingGracePeriodExpired_ZeroHeartbeatIntervals(t *testing.T) {
+	ctx := context.Background()
+	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
+		ClosingGracePeriod(5).
+		HeartbeatIntervalsSinceStateChange(0).
+		Build()
+	assert.False(t, guard_ClosingGracePeriodExpired(ctx, c))
+}

@@ -22,8 +22,8 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
-	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
+	engineProto "github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -72,6 +72,10 @@ func Test_StateConfirmed_TransitionsToFinalBasedOnFinalizingGracePeriod(t *testi
 		Build()
 
 	err := txn.HandleEvent(ctx, &common.HeartbeatIntervalEvent{})
+	require.NoError(t, err)
+	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
+
+	err = txn.HandleEvent(ctx, &common.HeartbeatIntervalEvent{})
 	require.NoError(t, err)
 	assert.Equal(t, State_Confirmed, txn.stateMachine.GetCurrentState())
 
@@ -815,10 +819,10 @@ func TestCoordinatorTransaction_Endorsement_Gathering_StaysInState_OnEndorseReve
 	}
 
 	event := &EndorseRevertEvent{
-		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
-		Party:                party1,
+		BaseCoordinatorEvent:   BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		Party:                  party1,
 		AttestationRequestName: "endorse-multisig",
-		RevertReason:         "assembly state is stale",
+		RevertReason:           "assembly state is stale",
 	}
 	err := txn.HandleEvent(ctx, event)
 	require.NoError(t, err)
@@ -1402,8 +1406,10 @@ func TestCoordinatorTransaction_Dispatched_ToPreAssemblyBlocked_OnConfirmedRever
 
 func TestCoordinatorTransaction_Reverted_ToFinal_OnHeartbeat_WhenFinalizingGracePeriodPassed(t *testing.T) {
 	ctx := context.Background()
+	// Start at count 1 so that after the heartbeat increments to 2, the guard 2 > 1 fires.
 	txn, _ := NewTransactionBuilderForTesting(t, State_Reverted).
 		FinalizingGracePeriod(1).
+		HeartbeatIntervalsSinceStateChange(1).
 		Build()
 
 	err := txn.HandleEvent(ctx, &common.HeartbeatIntervalEvent{})
@@ -1414,7 +1420,7 @@ func TestCoordinatorTransaction_Reverted_ToFinal_OnHeartbeat_WhenFinalizingGrace
 func TestCoordinatorTransaction_Confirmed_ToFinal_OnHeartbeatInterval_IfHasBeenIncludedInEnoughHeartbeats(t *testing.T) {
 	ctx := context.Background()
 	txn, _ := NewTransactionBuilderForTesting(t, State_Confirmed).
-		HeartbeatIntervalsSinceStateChange(4).
+		HeartbeatIntervalsSinceStateChange(5).
 		Build()
 
 	err := txn.HandleEvent(ctx, &common.HeartbeatIntervalEvent{})
