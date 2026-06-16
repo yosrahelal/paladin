@@ -74,6 +74,9 @@ func action_AssembleError(ctx context.Context, t *originatorTransaction, event c
 // transaction event loop unblocked while allowing the potentially slow AssembleAndSign
 // call to run concurrently.
 //
+// If a previous assembly goroutine is still in flight (from a superseded request), its
+// context is cancelled before the new goroutine is started.
+//
 // handleAssembleAndSign does not modify the private transaction or the latest assembly
 // request, making it safe to call in a separate goroutine. This is enforced via unit tests
 // in the engine integration component.
@@ -84,15 +87,22 @@ func action_AssembleAndSign(ctx context.Context, txn *originatorTransaction, _ c
 		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "No assemble request found")
 	}
 
+	// Cancel any previously in-flight assembly goroutine for a superseded request
+	if txn.cancelCurrentAssembly != nil {
+		txn.cancelCurrentAssembly()
+	}
+
 	req := *txn.latestAssembleRequest
 	preAssembly := txn.pt.PreAssembly
 	txID := txn.pt.ID
 
-	assembleCtx := ctx
-	cancel := func() {}
+	// Always create a cancellable context so a superseding request can abort this goroutine
+	assembleCtx, cancel := context.WithCancel(ctx)
 	if !req.expiry.IsZero() {
-		assembleCtx, cancel = context.WithDeadline(ctx, req.expiry)
+		assembleCtx, cancel = context.WithDeadline(assembleCtx, req.expiry)
 	}
+	txn.cancelCurrentAssembly = cancel
+
 	go func() {
 		defer cancel()
 		txn.handleAssembleAndSign(assembleCtx, txID, req, preAssembly)
@@ -225,6 +235,14 @@ func action_SendAssembleBlockHeightRejection(ctx context.Context, t *originatorT
 		e.CoordinatorBlockHeight,
 		receiverBlockHeight,
 	)
+}
+
+func validator_AssembleAndSignSuccessMatchesCurrentRequest(_ context.Context, t *originatorTransaction, event common.Event) (bool, error) {
+	e := event.(*AssembleAndSignSuccessEvent)
+	if t.latestAssembleRequest == nil {
+		return false, nil
+	}
+	return t.latestAssembleRequest.requestID == e.RequestID, nil
 }
 
 // action_SendAssembleRejectionNotCurrentDelegate sends an AssembleRejection indicating the
