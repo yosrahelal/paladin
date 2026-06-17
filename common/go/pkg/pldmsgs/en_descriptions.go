@@ -311,7 +311,6 @@ var (
 	PeerStatsLastSend            = pdm("PeerStats.lastSend", "Timestamp of the last send to this peer")
 	PeerStatsLastReceive         = pdm("PeerStats.lastReceive", "Timestamp of the last receive from this peer")
 	PeerStatsReliableHighestSent = pdm("PeerStats.reliableHighestSent", "Outbound reliable messages are assigned a sequence. This is the highest sequence sent to the peer since activation")
-	PeerStatsReliableAckBase     = pdm("PeerStats.reliableAckBase", "Outbound reliable messages are assigned a sequence. This is the lowest sequence that has not received an acknowledgement from the peer")
 
 	ReliableMessageSequence    = pdm("ReliableMessage.sequence", "Sequence number for the position of this message in the local database")
 	ReliableMessageID          = pdm("ReliableMessage.id", "UUID for this message. A separate message, with a separate ID, is allocated for each participant that will receive the message")
@@ -582,9 +581,10 @@ var (
 	RPCServerConfigWSWriteBufferSize = pdm("RPCServerConfigWS.writeBufferSize", "Write buffer size for WebSocket connections")
 
 	// RPCServerConfig field descriptions
-	RPCServerConfigHTTPField   = pdm("RPCServerConfig.http", "HTTP server configuration")
-	RPCServerConfigWSField     = pdm("RPCServerConfig.ws", "WebSocket server configuration")
-	RPCServerConfigAuthorizers = pdm("RPCServerConfig.authorizers", "Ordered array of authorizer plugin names to use")
+	RPCServerConfigHTTPField         = pdm("RPCServerConfig.http", "HTTP server configuration")
+	RPCServerConfigWSField           = pdm("RPCServerConfig.ws", "WebSocket server configuration")
+	RPCServerConfigAuthorizers       = pdm("RPCServerConfig.authorizers", "Ordered array of authorizer plugin names to use")
+	RPCServerConfigLegacyReturnCodes = pdm("RPCServerConfig.legacyReturnCodes", "Use legacy HTTP status codes for JSON/RPC responses")
 
 	// RPCAuthManagerConfig field descriptions
 	RPCAuthManagerConfigRPCAuthorizers = pdm("RPCAuthManagerConfig.rpcAuthorizers", "Map of RPC authorizer configurations")

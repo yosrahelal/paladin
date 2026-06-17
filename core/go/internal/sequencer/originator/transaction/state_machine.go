@@ -215,7 +215,8 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_AssembleAndSignSuccess: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_AssembleAndSignSuccess}},
+					Validator: validator_AssembleAndSignSuccessMatchesCurrentRequest,
+					Actions:   []ActionRule{{Action: action_AssembleAndSignSuccess}},
 					Transitions: []Transition{
 						{
 							To:      State_Endorsement_Gathering,

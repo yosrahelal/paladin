@@ -70,6 +70,7 @@ type originatorTransaction struct {
 	lastReceivedWillRetry            bool
 	refreshBlockHeight               func(context.Context)
 	getBlockHeight                   func() int64
+	cancelCurrentAssembly            context.CancelFunc
 }
 
 func NewTransaction(
