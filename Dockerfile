@@ -139,7 +139,6 @@ COPY ui/client ui/client
 COPY testinfra/go.mod testinfra/go.mod
 COPY operator/go.mod operator/go.mod
 COPY test/go.mod test/go.mod
-COPY scripts/gendocs/go.mod scripts/gendocs/go.mod
 RUN gradle --no-daemon --parallel assemble
 
 # Stage 3: Pull together runtime

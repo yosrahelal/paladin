@@ -6,7 +6,6 @@ use (
 	./common/go
 	./config
 	./core/go
-	./scripts/gendocs
 	./domains/integration-test
 	./domains/noto
 	./domains/zeto
