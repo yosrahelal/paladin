@@ -1,4 +1,4 @@
-// Copyright contributors to Paladin, and LFDT project
+// Copyright contributors to Paladin, an LFDT project
 //
 // Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
@@ -11,7 +11,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// gendocs generates Mermaid state machine diagrams from Go state machine source files.
+// Generates Mermaid state machine diagrams from distributed sequencer source files.
 //
 // State descriptions are loaded from en_states.go files co-located with each
 // state_machine.go via go/ast. Transitions are extracted from stateDefinitionsMap.
@@ -20,11 +20,8 @@
 //
 //	doc-site/docs/architecture/distributed_sequencer_state_machine.md
 //	doc-site/docs/architecture/distributed_sequencer_state_machine_transitions.md
-//
-// Run from anywhere within the repo:
-//
-//	cd scripts/gendocs && go run .
-package main
+
+package reference
 
 import (
 	"fmt"
@@ -41,15 +38,32 @@ import (
 const mermaidInit = "%%{init: {'themeVariables': {'background': 'transparent'}}}%%"
 
 type smFile struct {
-	name    string
-	relPath string
+	name          string
+	relPath       string
+	statesRelPath string
 }
 
 var smFiles = []smFile{
-	{"Coordinator", "core/go/internal/sequencer/coordinator/state_machine.go"},
-	{"Coordinator Transaction", "core/go/internal/sequencer/coordinator/transaction/state_machine.go"},
-	{"Originator", "core/go/internal/sequencer/originator/state_machine.go"},
-	{"Originator Transaction", "core/go/internal/sequencer/originator/transaction/state_machine.go"},
+	{
+		"Coordinator",
+		"core/go/internal/sequencer/coordinator/state_machine.go",
+		"core/go/internal/msgs/en_coordinator_states.go",
+	},
+	{
+		"Coordinator Transaction",
+		"core/go/internal/sequencer/coordinator/transaction/state_machine.go",
+		"core/go/internal/msgs/en_coordinator_transaction_states.go",
+	},
+	{
+		"Originator",
+		"core/go/internal/sequencer/originator/state_machine.go",
+		"core/go/internal/msgs/en_originator_states.go",
+	},
+	{
+		"Originator Transaction",
+		"core/go/internal/sequencer/originator/transaction/state_machine.go",
+		"core/go/internal/msgs/en_originator_transaction_states.go",
+	},
 }
 
 type transition struct {
@@ -66,51 +80,57 @@ type smData struct {
 	transitions []transition
 }
 
-func main() {
-	log.SetFlags(0)
-	repoRoot := findRepoRoot()
+// GenerateStateMachineDocs generates Mermaid state machine documentation from source and
+// writes it to doc-site/docs/architecture/.
+func GenerateStateMachineDocs() error {
+	repoRoot, err := findRepoRoot()
+	if err != nil {
+		return err
+	}
 
 	var allData []smData
 	for _, f := range smFiles {
 		path := filepath.Join(repoRoot, filepath.FromSlash(f.relPath))
-		data, err := parseFile(path, f.name)
+		statesPath := filepath.Join(repoRoot, filepath.FromSlash(f.statesRelPath))
+		data, err := parseFile(path, statesPath, f.name)
 		if err != nil {
-			log.Fatalf("ERROR: %v", err)
+			return err
 		}
-		log.Printf("Parsed %s: %d states, %d transitions",
-			f.name, len(data.stateOrder), len(data.transitions))
+		log.Printf("Parsed %s: %d states, %d transitions", f.name, len(data.stateOrder), len(data.transitions))
 		allData = append(allData, data)
 	}
 
 	docPath := filepath.Join(repoRoot, "doc-site/docs/architecture/distributed_sequencer_state_machine.md")
 	if err := os.WriteFile(docPath, []byte(generateDoc(allData)), 0644); err != nil {
-		log.Fatalf("ERROR writing %s: %v", docPath, err)
+		return fmt.Errorf("writing %s: %w", docPath, err)
 	}
 	log.Printf("Wrote %s", docPath)
 
 	transPath := filepath.Join(repoRoot, "doc-site/docs/architecture/distributed_sequencer_state_machine_transitions.md")
 	if err := os.WriteFile(transPath, []byte(generateTransitionsDoc(allData)), 0644); err != nil {
-		log.Fatalf("ERROR writing %s: %v", transPath, err)
+		return fmt.Errorf("writing %s: %w", transPath, err)
 	}
 	log.Printf("Wrote %s", transPath)
+
+	return nil
 }
 
-func findRepoRoot() string {
+func findRepoRoot() (string, error) {
 	dir, _ := os.Getwd()
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
+			return dir, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			log.Fatal("ERROR: could not find repo root (go.work not found); run from within the repo")
+			return "", fmt.Errorf("could not find repo root (go.work not found); run from within the repo")
 		}
 		dir = parent
 	}
 }
 
-// parseFile parses a state_machine.go and its co-located en_states.go.
-func parseFile(path, name string) (smData, error) {
+// parseFile parses a state_machine.go and its corresponding en_*_states.go from msgs/.
+func parseFile(path, statesPath, name string) (smData, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {
@@ -119,7 +139,6 @@ func parseFile(path, name string) (smData, error) {
 
 	stateOrder := parseConstStates(f)
 
-	statesPath := filepath.Join(filepath.Dir(path), "en_states.go")
 	stateDescs, err := parseEnStates(statesPath)
 	if err != nil {
 		return smData{}, fmt.Errorf("parsing %s: %w", statesPath, err)
