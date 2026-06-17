@@ -17,12 +17,25 @@
 package reference
 
 import (
+	"context"
+	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGenerateStateMachineDocs(t *testing.T) {
-	err := GenerateStateMachineDocs()
+	markdownMap, err := GenerateStateMachineDocs(context.Background())
 	require.NoError(t, err)
+	assert.NotNil(t, markdownMap)
+
+	for pageName, markdown := range markdownMap {
+		f, err := os.Create(pageName)
+		assert.NoError(t, err)
+		_, err = f.Write(markdown)
+		assert.NoError(t, err)
+		err = f.Close()
+		assert.NoError(t, err)
+	}
 }

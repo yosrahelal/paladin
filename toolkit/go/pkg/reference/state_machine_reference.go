@@ -24,12 +24,11 @@
 package reference
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"log"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -81,12 +80,9 @@ type smData struct {
 }
 
 // GenerateStateMachineDocs generates Mermaid state machine documentation from source and
-// writes it to doc-site/docs/architecture/.
-func GenerateStateMachineDocs() error {
-	repoRoot, err := findRepoRoot()
-	if err != nil {
-		return err
-	}
+// returns it as a map of output path to content.
+func GenerateStateMachineDocs(_ context.Context) (map[string][]byte, error) {
+	repoRoot := filepath.Join("..", "..", "..", "..")
 
 	var allData []smData
 	for _, f := range smFiles {
@@ -94,39 +90,16 @@ func GenerateStateMachineDocs() error {
 		statesPath := filepath.Join(repoRoot, filepath.FromSlash(f.statesRelPath))
 		data, err := parseFile(path, statesPath, f.name)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		log.Printf("Parsed %s: %d states, %d transitions", f.name, len(data.stateOrder), len(data.transitions))
 		allData = append(allData, data)
 	}
 
-	docPath := filepath.Join(repoRoot, "doc-site/docs/architecture/distributed_sequencer_state_machine.md")
-	if err := os.WriteFile(docPath, []byte(generateDoc(allData)), 0644); err != nil {
-		return fmt.Errorf("writing %s: %w", docPath, err)
-	}
-	log.Printf("Wrote %s", docPath)
-
-	transPath := filepath.Join(repoRoot, "doc-site/docs/architecture/distributed_sequencer_state_machine_transitions.md")
-	if err := os.WriteFile(transPath, []byte(generateTransitionsDoc(allData)), 0644); err != nil {
-		return fmt.Errorf("writing %s: %w", transPath, err)
-	}
-	log.Printf("Wrote %s", transPath)
-
-	return nil
-}
-
-func findRepoRoot() (string, error) {
-	dir, _ := os.Getwd()
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("could not find repo root (go.work not found); run from within the repo")
-		}
-		dir = parent
-	}
+	archPath := filepath.Join(repoRoot, "doc-site", "docs", "architecture")
+	return map[string][]byte{
+		filepath.Join(archPath, "distributed_sequencer_state_machine.md"):             []byte(generateDoc(allData)),
+		filepath.Join(archPath, "distributed_sequencer_state_machine_transitions.md"): []byte(generateTransitionsDoc(allData)),
+	}, nil
 }
 
 // parseFile parses a state_machine.go and its corresponding en_*_states.go from msgs/.
