@@ -527,6 +527,148 @@ func Test_validator_IsPrivateStateDataPendingForAssembly_Error_Propagates(t *tes
 	assert.ErrorIs(t, err, dbErr)
 }
 
+func Test_action_AssembleAndSign_NilCancelIsNoOp(t *testing.T) {
+	// Calling action_AssembleAndSign when cancelCurrentAssembly is nil (first call) must not
+	// panic and must start the goroutine normally.
+	ctx := t.Context()
+
+	done := make(chan struct{})
+	builder := NewTransactionBuilderForTesting(t, State_Assembling).
+		QueueEventsTo(func(_ context.Context, _ common.Event) { close(done) })
+	txn := builder.Build()
+
+	txn.cancelCurrentAssembly = nil // explicit nil to document intent
+
+	builder.fakeEngineIntegration.On(
+		"AssembleAndSign",
+		mock.Anything, txn.pt.ID, mock.Anything, mock.Anything, mock.Anything,
+	).Return(&components.TransactionPostAssembly{
+		AssemblyResult: prototk.AssembleTransactionResponse_OK,
+	}, nil)
+
+	err := action_AssembleAndSign(ctx, txn, nil)
+	require.NoError(t, err)
+
+	// cancelCurrentAssembly must be populated after the call
+	assert.NotNil(t, txn.cancelCurrentAssembly)
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for assemble goroutine")
+	}
+}
+
+func Test_action_AssembleAndSign_CancelsPreviousGoroutine(t *testing.T) {
+	// A second call to action_AssembleAndSign must cancel the first goroutine's context so
+	// that the stale goroutine exits without queuing an event. Only the second goroutine's
+	// success event should appear.
+	ctx := t.Context()
+
+	eventCh := make(chan common.Event, 2) // buffer 2 so a spurious second event is detectable
+	builder := NewTransactionBuilderForTesting(t, State_Assembling).
+		QueueEventsTo(func(_ context.Context, e common.Event) { eventCh <- e })
+	txn := builder.Build()
+
+	firstReqID := txn.latestAssembleRequest.requestID
+
+	// firstGoroutineDone is closed once the first goroutine's AssembleAndSign observes
+	// context cancellation and the mock call returns.
+	firstGoroutineDone := make(chan struct{})
+	blocked := make(chan struct{})
+
+	builder.fakeEngineIntegration.On(
+		"AssembleAndSign",
+		mock.Anything, txn.pt.ID, mock.Anything, mock.Anything, mock.Anything,
+	).Once().Run(func(args mock.Arguments) {
+		assembleCtx := args.Get(0).(context.Context)
+		close(blocked)
+		<-assembleCtx.Done() // block until action_AssembleAndSign cancels us
+		close(firstGoroutineDone)
+	}).Return(nil, context.Canceled)
+
+	secondReqID := uuid.New()
+
+	builder.fakeEngineIntegration.On(
+		"AssembleAndSign",
+		mock.Anything, txn.pt.ID, mock.Anything, mock.Anything, mock.Anything,
+	).Once().Return(&components.TransactionPostAssembly{
+		AssemblyResult: prototk.AssembleTransactionResponse_OK,
+	}, nil)
+
+	err := action_AssembleAndSign(ctx, txn, nil)
+	require.NoError(t, err)
+
+	// Wait until the first goroutine is actually blocked inside AssembleAndSign
+	<-blocked
+
+	// Spawn second goroutine with a new request ID — this must cancel the first
+	txn.latestAssembleRequest = &assembleRequestFromCoordinator{requestID: secondReqID}
+	err = action_AssembleAndSign(ctx, txn, nil)
+	require.NoError(t, err)
+
+	// Wait for first goroutine to observe cancellation (AssembleAndSign returned)
+	<-firstGoroutineDone
+
+	// The only event in the channel must be from the second goroutine
+	event := <-eventCh
+	successEvent, ok := event.(*AssembleAndSignSuccessEvent)
+	require.True(t, ok, "expected AssembleAndSignSuccessEvent from second goroutine, got %T", event)
+	assert.Equal(t, secondReqID, successEvent.RequestID)
+	assert.NotEqual(t, firstReqID, successEvent.RequestID, "event must not be from the cancelled first goroutine")
+
+	// No second event should have been queued
+	select {
+	case e := <-eventCh:
+		t.Fatalf("unexpected second event queued: %T", e)
+	default:
+	}
+}
+
+func Test_validator_AssembleAndSignSuccessMatchesCurrentRequest_Match(t *testing.T) {
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Assembling)
+	txn, _ := builder.BuildWithMocks()
+
+	requestID := txn.latestAssembleRequest.requestID
+	event := &AssembleAndSignSuccessEvent{
+		BaseEvent: BaseEvent{TransactionID: txn.pt.ID},
+		RequestID: requestID,
+	}
+	ok, err := validator_AssembleAndSignSuccessMatchesCurrentRequest(ctx, txn, event)
+	require.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func Test_validator_AssembleAndSignSuccessMatchesCurrentRequest_Mismatch(t *testing.T) {
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Assembling)
+	txn, _ := builder.BuildWithMocks()
+
+	event := &AssembleAndSignSuccessEvent{
+		BaseEvent: BaseEvent{TransactionID: txn.pt.ID},
+		RequestID: uuid.New(), // different ID
+	}
+	ok, err := validator_AssembleAndSignSuccessMatchesCurrentRequest(ctx, txn, event)
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func Test_validator_AssembleAndSignSuccessMatchesCurrentRequest_NilRequest(t *testing.T) {
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Assembling)
+	txn, _ := builder.BuildWithMocks()
+
+	txn.latestAssembleRequest = nil
+	event := &AssembleAndSignSuccessEvent{
+		BaseEvent: BaseEvent{TransactionID: txn.pt.ID},
+		RequestID: uuid.New(),
+	}
+	ok, err := validator_AssembleAndSignSuccessMatchesCurrentRequest(ctx, txn, event)
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
 func Test_action_RejectAssemblyPrivateStateDataPending_SendsRejection(t *testing.T) {
 	ctx := context.Background()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Delegated).BuildWithMocks()
