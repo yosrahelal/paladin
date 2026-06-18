@@ -35,6 +35,8 @@ func GetTestSuite(name conf.TestName, ctx context.Context, runner Runner) TestSu
 		return NewNotoRevertableHooksSuite(ctx, runner)
 	case conf.PerfTestNotoTransfer:
 		return NewNotoTransferSuite(ctx, runner)
+	case conf.PerfTestNotoPenteTracker:
+		return NewNotoPenteTrackerSuite(ctx, runner)
 	default:
 		return nil
 	}

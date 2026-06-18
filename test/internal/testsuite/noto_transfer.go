@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	nototypes "github.com/LFDT-Paladin/paladin/domains/noto/pkg/types"
+	nototypes "github.com/LFDT-Paladin/paladin/test/internal/contracts"
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"

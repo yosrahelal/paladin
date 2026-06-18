@@ -34,7 +34,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/test/internal/contracts"
 	"github.com/LFDT-Paladin/paladin/test/internal/util"
 
-	nototypes "github.com/LFDT-Paladin/paladin/domains/noto/pkg/types"
+	nototypes "github.com/LFDT-Paladin/paladin/test/internal/contracts"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	log "github.com/sirupsen/logrus"
 )
@@ -48,22 +48,7 @@ const notoRevertableHooksDefaultIncludeInvalidInputErrors = true
 const notoResolveAlgorithm = "ecdsa:secp256k1"
 const notoResolveVerifierType = "eth_address"
 
-var notoConstructorABI = abi.ABI{
-	{Type: abi.Constructor, Inputs: abi.ParameterArray{
-		{Name: "notary", Type: "string"},
-		{Name: "notaryMode", Type: "string"},
-		{Name: "options", Type: "tuple", Components: abi.ParameterArray{
-			{Name: "hooks", Type: "tuple", Components: abi.ParameterArray{
-				{Name: "publicAddress", Type: "string"},
-				{Name: "privateAddress", Type: "string"},
-				{Name: "privateGroup", Type: "tuple", Components: abi.ParameterArray{
-					{Name: "salt", Type: "bytes32"},
-					{Name: "members", Type: "string[]"},
-				}},
-			}},
-		}},
-	}},
-}
+var notoConstructorABI = contracts.NotoConstructorABI
 
 type notoRevertableHooksSuite struct {
 	ctx                  context.Context

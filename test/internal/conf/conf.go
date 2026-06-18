@@ -120,4 +120,6 @@ const (
 	PerfTestNotoRevertableHooks TestName = "noto_revertable_hooks"
 	// PerfTestNotoTransfer deploys Noto in basic notary mode and drives token transfers, rotating recipients across all configured nodes
 	PerfTestNotoTransfer TestName = "noto_transfer"
+	// PerfTestNotoPenteTracker deploys Noto with a Pente privacy group using NotoTrackerERC20 as the hook, then drives token transfers across all nodes
+	PerfTestNotoPenteTracker TestName = "noto_pente_tracker"
 )

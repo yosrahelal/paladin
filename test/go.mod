@@ -23,6 +23,7 @@ require (
 	github.com/hyperledger/firefly-common v1.5.6 // indirect
 	github.com/hyperledger/firefly-signer v1.1.21 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 )
 
 require (
