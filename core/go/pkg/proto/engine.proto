@@ -180,7 +180,19 @@ message AssembleRejection {
     int64 assembler_block_height = 6;
 }
 
-// Sent by an originator to reject a pre-dispatch request. The rejection_reason field indicates why.
+message PreDispatchRequest {
+    string id = 1;
+    string transaction_id = 2;
+    string contract_address = 3;
+    bytes post_assemble_hash = 4;
+}
+
+message PreDispatchResponse {
+    string id = 1;
+    string transaction_id = 2;
+    string contract_address = 3;
+}
+
 message PreDispatchRejection {
     string transaction_id = 1;
     string request_id = 2;
