@@ -659,17 +659,16 @@ func (tw *transportWriter) SendPreDispatchRequest(ctx context.Context, originato
 
 	log.L(ctx).Tracef("transport writer attempting to send pre-dispatch request to node %s", originatorNode)
 
-	// MRW TODO There should be a different proto message type instead of TransactionDispatched
-	dispatchConfirmationRequest := &engineProto.TransactionDispatched{
-		Id:               idempotencyKey.String(),
-		TransactionId:    transactionSpecification.TransactionId,
-		ContractAddress:  tw.contractAddress.HexString(),
+	dispatchConfirmationRequest := &engineProto.PreDispatchRequest{
+		Id:              idempotencyKey.String(),
+		TransactionId:   transactionSpecification.TransactionId,
+		ContractAddress: tw.contractAddress.HexString(),
 		PostAssembleHash: hash.Bytes(),
 	}
 
 	dispatchConfirmationRequestBytes, err := proto.Marshal(dispatchConfirmationRequest)
 	if err != nil {
-		log.L(ctx).Errorf("error marshalling dispatch confirmation request  message: %s", err)
+		log.L(ctx).Errorf("error marshalling pre-dispatch request message: %s", err)
 	}
 
 	if err = tw.send(ctx, &components.FireAndForgetMessageSend{
@@ -687,7 +686,7 @@ func (tw *transportWriter) SendPreDispatchResponse(ctx context.Context, transact
 
 	log.L(ctx).Tracef("transport writer attempting to send pre-dispatch response to node %s", transactionOriginatorNode)
 
-	dispatchResponseEvent := &engineProto.TransactionDispatched{
+	dispatchResponseEvent := &engineProto.PreDispatchResponse{
 		Id:              idempotencyKey.String(),
 		TransactionId:   transactionSpecification.TransactionId,
 		ContractAddress: tw.contractAddress.HexString(),
@@ -695,7 +694,7 @@ func (tw *transportWriter) SendPreDispatchResponse(ctx context.Context, transact
 
 	dispatchResponseEventBytes, err := proto.Marshal(dispatchResponseEvent)
 	if err != nil {
-		log.L(ctx).Errorf("error marshalling dispatch confirmation request  message: %s", err)
+		log.L(ctx).Errorf("error marshalling pre-dispatch response message: %s", err)
 	}
 
 	if err = tw.send(ctx, &components.FireAndForgetMessageSend{

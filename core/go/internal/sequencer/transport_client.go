@@ -314,7 +314,7 @@ func (sMgr *sequencerManager) handleCoordinatorHeartbeatNotification(ctx context
 }
 
 func (sMgr *sequencerManager) handlePreDispatchRequest(ctx context.Context, message *components.ReceivedMessage) {
-	preDispatchRequest := &engineProto.TransactionDispatched{}
+	preDispatchRequest := &engineProto.PreDispatchRequest{}
 
 	err := proto.Unmarshal(message.Payload, preDispatchRequest)
 	if err != nil {
@@ -353,7 +353,7 @@ func (sMgr *sequencerManager) handlePreDispatchRequest(ctx context.Context, mess
 }
 
 func (sMgr *sequencerManager) handlePreDispatchResponse(ctx context.Context, message *components.ReceivedMessage) {
-	preDispatchResponse := &engineProto.TransactionDispatched{}
+	preDispatchResponse := &engineProto.PreDispatchResponse{}
 
 	err := proto.Unmarshal(message.Payload, preDispatchResponse)
 	if err != nil {
