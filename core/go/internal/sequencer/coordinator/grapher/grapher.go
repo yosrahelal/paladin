@@ -440,7 +440,19 @@ func (g *grapher) ExportStatesAndLocks(ctx context.Context, node string) (Export
 	defer g.mu.RUnlock()
 
 	result := exportableStates{}
-	result.OutputState = g.stateVisibilityTracker.GetForNode(node)
+
+	// Exclude private state data for states that also have a spend lock — those states are
+	// already consumed ahead-of-chain by another transaction. Assemblers and incoming coordinators
+	// have no use for the private data since the state cannot be respent.
+	allStates := g.stateVisibilityTracker.GetForNode(node)
+	filtered := make([]*statevisibilitytracker.OutputState, 0, len(allStates))
+	for _, state := range allStates {
+		if _, hasSpendLock := g.spendLocksByStateID[state.ID.String()]; !hasSpendLock {
+			filtered = append(filtered, state)
+		}
+	}
+	result.OutputState = filtered
+
 	// All locks are returned unfiltered — lock data is on-chain metadata and needs no privacy protection.
 	result.LockedState = make([]*stateLock, 0, len(g.createLocksByStateID)+len(g.spendLocksByStateID)+len(g.readLocksByStateID))
 	for _, lock := range g.createLocksByStateID {
@@ -452,6 +464,6 @@ func (g *grapher) ExportStatesAndLocks(ctx context.Context, node string) (Export
 	for _, lock := range g.readLocksByStateID {
 		result.LockedState = append(result.LockedState, lock)
 	}
-	log.L(ctx).Debugf("ExportStatesAndLocks: %d output states, %d locks (node=%q)", len(result.OutputState), len(result.LockedState), node)
+	log.L(ctx).Debugf("ExportStatesAndLocks: %d output states (filtered from %d), %d locks (node=%q)", len(result.OutputState), len(allStates), len(result.LockedState), node)
 	return result, nil
 }

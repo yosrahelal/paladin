@@ -19,13 +19,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
-	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
@@ -55,23 +53,7 @@ func (s *ChainedDependenciesSuite) SetupTest() {
 	s.ctx = context.Background()
 	s.originator = "sender@senderNode"
 
-	s.builder = NewCoordinatorBuilderForTesting(s.T(), State_Idle)
-	mockDomain := componentsmocks.NewDomain(s.T())
-	mockDomain.On("FixedSigningIdentity").Return("")
-	s.builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	s.builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	})
-	s.builder.GetDomainAPI().On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(2).(*components.PrivateTransaction)
-		tx.PreparedPrivateTransaction = &pldapi.TransactionInput{}
-	}).Return(nil).Maybe()
-	s.builder.GetSequencerManager().On("BuildNullifiers", mock.Anything, mock.Anything).Return(nil, nil).Maybe()
-
-	config := s.builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	s.builder.OverrideSequencerConfig(config)
-	s.builder.CurrentActiveCoordinator("node1")
+	s.builder = NewCoordinatorBuilderForTesting(s.T(), State_Idle).CurrentActiveCoordinator("node1")
 
 	s.txBuilders = make(map[uuid.UUID]*testutil.PrivateTransactionBuilderForTesting)
 	s.txns = make(map[uuid.UUID]*components.PrivateTransaction)
@@ -84,6 +66,15 @@ func (s *ChainedDependenciesSuite) buildCoordinator() {
 	s.mocks.EngineIntegration.On("MapPotentialStates", mock.Anything, mock.Anything, mock.Anything).Return(([]*components.StateUpsert)(nil), nil).Maybe()
 	s.mocks.SyncPoints.On("PersistDispatchBatch", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	s.mocks.SyncPoints.On("QueueTransactionFinalize", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+	s.mocks.SequencerManager.On("BuildNullifiers", mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	s.mocks.Domain.On("FixedSigningIdentity").Return("")
+	s.mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
+	})
+	s.mocks.DomainAPI.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
+		tx.PreparedPrivateTransaction = &pldapi.TransactionInput{}
+	}).Return(nil).Maybe()
 }
 
 // ---------- helpers ----------
@@ -178,7 +169,7 @@ func (s *ChainedDependenciesSuite) injectRevert(txID uuid.UUID, retriable bool) 
 	if retriable {
 		msg = "retriable"
 	}
-	s.builder.GetDomainAPI().On("IsBaseLedgerRevertRetryable", mock.Anything, []byte(revertReason)).
+	s.mocks.DomainAPI.On("IsBaseLedgerRevertRetryable", mock.Anything, []byte(revertReason)).
 		Return(retriable, msg, nil).Maybe()
 
 	nonce := pldtypes.HexUint64(42)
@@ -297,6 +288,8 @@ func (s *ChainedDependenciesSuite) TestEvictionCascade() {
 	s.buildCoordinator()
 	a := s.newTx()
 	b := s.newTx(a)
+	// Both A and B are evicted and cleaned up; ResetTransactions is called once per eviction.
+	s.mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Times(2)
 
 	s.delegate(a, b)
 	s.assertInState(transaction.State_Assembling, a)
@@ -334,6 +327,8 @@ func (s *ChainedDependenciesSuite) TestLateArrivalAfterEvictedDepCleanedUp() {
 	s.builder.AssembleErrorRetryThreshold(0)
 	s.buildCoordinator()
 	a := s.newTx()
+	// A is evicted and cleaned up; ResetTransactions is called once.
+	s.mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	s.delegate(a)
 	s.assertInState(transaction.State_Assembling, a)
 

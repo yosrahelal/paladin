@@ -189,7 +189,8 @@ var stateDefinitionsMap = StateDefinitions{
 		},
 	},
 	State_Assembling: {
-		OnTransitionTo: []ActionRule{{Action: action_AssembleAndSign}},
+		OnTransitionTo:   []ActionRule{{Action: action_AssembleAndSign}},
+		OnTransitionFrom: []ActionRule{{Action: action_CancelCurrentAssembly}},
 		Events: map[EventType]EventHandlers{
 			Event_ConfirmedSuccess: {
 				Match: statemachine.MatchFirst,

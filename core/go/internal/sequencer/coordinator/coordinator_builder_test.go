@@ -43,9 +43,6 @@ import (
 type CoordinatorBuilderForTesting struct {
 	t                                        *testing.T
 	state                                    State
-	domainAPI                                *componentsmocks.DomainSmartContract
-	txManager                                *componentsmocks.TXManager
-	sequencerManager                         *componentsmocks.SequencerManager
 	contractAddress                          *pldtypes.EthAddress
 	coordinatorSelectionMode                 *prototk.ContractConfig_CoordinatorSelection
 	currentEffectiveBlockHeight              *uint64
@@ -76,7 +73,11 @@ type CoordinatorDependencyMocks struct {
 	TransportWriter     *sequencertransportmocks.TransportWriter
 	Clock               *sequencercommonmocks.Clock
 	AllComponents       *componentsmocks.AllComponents
+	Domain              *componentsmocks.Domain
 	DomainAPI           *componentsmocks.DomainSmartContract
+	DomainContext       *componentsmocks.DomainContext
+	TXManager           *componentsmocks.TXManager
+	SequencerManager    *componentsmocks.SequencerManager
 }
 
 // copySequencerDefaultsForTest returns a deep copy of SequencerDefaults so tests that mutate
@@ -158,18 +159,11 @@ func copySequencerDefaultsForTest() *pldconf.SequencerConfig {
 }
 
 func NewCoordinatorBuilderForTesting(t *testing.T, state State) *CoordinatorBuilderForTesting {
-
-	domainAPI := componentsmocks.NewDomainSmartContract(t)
-	txManager := componentsmocks.NewTXManager(t)
-	sequencerManager := componentsmocks.NewSequencerManager(t)
 	return &CoordinatorBuilderForTesting{
-		t:                t,
-		state:            state,
-		domainAPI:        domainAPI,
-		txManager:        txManager,
-		sequencerManager: sequencerManager,
-		metrics:          metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
-		sequencerConfig:  copySequencerDefaultsForTest(),
+		t:               t,
+		state:           state,
+		metrics:         metrics.InitMetrics(context.Background(), prometheus.NewRegistry()),
+		sequencerConfig: copySequencerDefaultsForTest(),
 	}
 }
 
@@ -195,18 +189,6 @@ func (b *CoordinatorBuilderForTesting) Transactions(transactions ...transaction.
 func (b *CoordinatorBuilderForTesting) PooledTransactions(transactions ...transaction.CoordinatorTransaction) *CoordinatorBuilderForTesting {
 	b.pooledTransactions = transactions
 	return b
-}
-
-func (b *CoordinatorBuilderForTesting) GetDomainAPI() *componentsmocks.DomainSmartContract {
-	return b.domainAPI
-}
-
-func (b *CoordinatorBuilderForTesting) GetTXManager() *componentsmocks.TXManager {
-	return b.txManager
-}
-
-func (b *CoordinatorBuilderForTesting) GetSequencerManager() *componentsmocks.SequencerManager {
-	return b.sequencerManager
 }
 
 func (b *CoordinatorBuilderForTesting) GetSequencerConfig() *pldconf.SequencerConfig {
@@ -324,8 +306,14 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 		SyncPoints:          syncpointsmocks.NewSyncPoints(b.t),
 		Clock:               sequencercommonmocks.NewClock(b.t),
 		AllComponents:       componentsmocks.NewAllComponents(b.t),
-		DomainAPI:           b.domainAPI,
+		Domain:              componentsmocks.NewDomain(b.t),
+		DomainAPI:           componentsmocks.NewDomainSmartContract(b.t),
+		DomainContext:       componentsmocks.NewDomainContext(b.t),
+		TXManager:           componentsmocks.NewTXManager(b.t),
+		SequencerManager:    componentsmocks.NewSequencerManager(b.t),
 	}
+
+	mocks.DomainAPI.On("Domain").Return(mocks.Domain).Maybe()
 
 	if b.useMockTransportWriter {
 		mockTransportWriter := sequencertransportmocks.NewTransportWriter(b.t)
@@ -347,7 +335,7 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 
 	transportManager := componentsmocks.NewTransportManager(b.t)
 	transportManager.On("LocalNodeName").Return(localNode).Maybe()
-	mocks.AllComponents.On("SequencerManager").Return(b.sequencerManager).Maybe()
+	mocks.AllComponents.On("SequencerManager").Return(mocks.SequencerManager).Maybe()
 	mocks.AllComponents.On("Persistence").Return(mp.P).Maybe()
 
 	if b.keyManagerResolveErr != nil {
@@ -371,8 +359,8 @@ func (b *CoordinatorBuilderForTesting) Build() (*coordinator, *CoordinatorDepend
 
 	coordinator := NewCoordinator(
 		b.contractAddress,
-		b.domainAPI,
-		nil,
+		mocks.DomainAPI,
+		mocks.DomainContext,
 		mocks.AllComponents,
 		nil,
 		nil,
