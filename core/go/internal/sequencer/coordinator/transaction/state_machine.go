@@ -28,10 +28,7 @@ import (
 
 type State = common.CoordinatorTransactionState
 
-// Note: inline comments on State_* constants are used in auto-generated documentation.
-// Keep them accurate and human-readable - see scripts/generate_state_machine_docs.py
 const (
-
 	State_Initial                 = common.CoordinatorTransactionState_Initial                 // Transaction state machine has been created
 	State_Pooled                  = common.CoordinatorTransactionState_Pooled                  // The transaction is waiting in the pool to be selected and sent for assembly to the its originator
 	State_PreAssembly_Blocked     = common.CoordinatorTransactionState_PreAssembly_Blocked     // The transaction cannot yet be put in the pool to be selected for assembly because a dependency must be assembled first
@@ -107,11 +104,14 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
 					Transitions: []Transition{
-						{
-							To:      State_Reverted,
-							If:      guard_HasRevertedChainedDependency,
-							Actions: []ActionRule{{Action: action_FinalizeOnRevertedChainedDependencyAtCreation}},
+					{
+						To:  State_Reverted,
+						If:  guard_HasRevertedChainedDependency,
+						Actions: []ActionRule{
+							{Action: action_FinalizeOnRevertedChainedDependencyAtCreation},
+							{Action: action_NotifyOriginatorOfChainedDependencyFailureAtCreation},
 						},
+					},
 						{
 							To: State_Evicted,
 							If: guard_HasEvictedChainedDependency,
@@ -175,7 +175,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ChainedDependencyFailed: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
+					Actions: []ActionRule{
+						{Action: action_FinalizeOnChainedDependencyFailure},
+						{Action: action_NotifyOriginatorOfChainedDependencyFailure},
+					},
 					Transitions: []Transition{{To: State_Reverted}},
 				}},
 			},
@@ -242,7 +245,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ChainedDependencyFailed: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
+					Actions: []ActionRule{
+						{Action: action_FinalizeOnChainedDependencyFailure},
+						{Action: action_NotifyOriginatorOfChainedDependencyFailure},
+					},
 					Transitions: []Transition{{To: State_Reverted}},
 				}},
 			},
@@ -411,7 +417,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ChainedDependencyFailed: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
+					Actions: []ActionRule{
+						{Action: action_FinalizeOnChainedDependencyFailure},
+						{Action: action_NotifyOriginatorOfChainedDependencyFailure},
+					},
 					Transitions: []Transition{{To: State_Reverted}},
 				}},
 			},
@@ -575,7 +584,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ChainedDependencyFailed: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
+					Actions: []ActionRule{
+						{Action: action_FinalizeOnChainedDependencyFailure},
+						{Action: action_NotifyOriginatorOfChainedDependencyFailure},
+					},
 					Transitions: []Transition{{To: State_Reverted}},
 				}},
 			},
@@ -643,7 +655,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ChainedDependencyFailed: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
+					Actions: []ActionRule{
+						{Action: action_FinalizeOnChainedDependencyFailure},
+						{Action: action_NotifyOriginatorOfChainedDependencyFailure},
+					},
 					Transitions: []Transition{{To: State_Reverted}},
 				}},
 			},
@@ -765,7 +780,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ChainedDependencyFailed: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
+					Actions: []ActionRule{
+						{Action: action_FinalizeOnChainedDependencyFailure},
+						{Action: action_NotifyOriginatorOfChainedDependencyFailure},
+					},
 					Transitions: []Transition{{To: State_Reverted}},
 				}},
 			},
@@ -836,7 +854,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ChainedDependencyFailed: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
+					Actions: []ActionRule{
+						{Action: action_FinalizeOnChainedDependencyFailure},
+						{Action: action_NotifyOriginatorOfChainedDependencyFailure},
+					},
 					Transitions: []Transition{{To: State_Reverted}},
 				}},
 			},
@@ -950,7 +971,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ChainedDependencyFailed: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions:     []ActionRule{{Action: action_FinalizeOnChainedDependencyFailure}},
+					Actions: []ActionRule{
+						{Action: action_FinalizeOnChainedDependencyFailure},
+						{Action: action_NotifyOriginatorOfChainedDependencyFailure},
+					},
 					Transitions: []Transition{{To: State_Reverted}},
 				}},
 			},

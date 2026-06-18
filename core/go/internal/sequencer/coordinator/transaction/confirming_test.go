@@ -104,6 +104,86 @@ func Test_action_NotifyOriginatorOfNonRetryableRevert(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func Test_action_NotifyOriginatorOfChainedDependencyFailure(t *testing.T) {
+	ctx := t.Context()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
+		UseMockTransportWriter().
+		Build()
+
+	depID := uuid.New()
+	event := &ChainedDependencyFailedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{
+			TransactionID: txn.pt.ID,
+		},
+		FailedTxID: depID,
+	}
+
+	expectedFailureMessage := i18n.NewError(ctx, msgs.MsgTxMgrDependencyFailed, depID).Error()
+	mocks.TransportWriter.EXPECT().
+		SendTransactionConfirmed(ctx, txn.pt.ID, txn.originatorNode, &txn.pt.Address,
+			(*pldtypes.HexUint64)(nil),
+			engine.TransactionConfirmed_OUTCOME_REVERTED,
+			pldtypes.HexBytes(nil),
+			expectedFailureMessage,
+			false,
+		).
+		Return(nil)
+
+	err := action_NotifyOriginatorOfChainedDependencyFailure(ctx, txn, event)
+	require.NoError(t, err)
+}
+
+func Test_action_NotifyOriginatorOfChainedDependencyFailureAtCreation(t *testing.T) {
+	ctx := t.Context()
+	grapher, depTracker := newTestGrapher()
+
+	depTx, _ := NewTransactionBuilderForTesting(t, State_Reverted).
+		Grapher(grapher).DependencyTracker(depTracker).
+		Build()
+
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Initial).
+		Grapher(grapher).DependencyTracker(depTracker).
+		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{depTx.pt.ID: depTx}).
+		UseMockTransportWriter().
+		Build()
+
+	depTracker.GetChainedDeps().AddPrerequisites(ctx, txn.pt.ID, depTx.pt.ID)
+
+	expectedFailureMessage := i18n.NewError(ctx, msgs.MsgTxMgrDependencyFailed, depTx.pt.ID).Error()
+	mocks.TransportWriter.EXPECT().
+		SendTransactionConfirmed(ctx, txn.pt.ID, txn.originatorNode, &txn.pt.Address,
+			(*pldtypes.HexUint64)(nil),
+			engine.TransactionConfirmed_OUTCOME_REVERTED,
+			pldtypes.HexBytes(nil),
+			expectedFailureMessage,
+			false,
+		).
+		Return(nil)
+
+	err := action_NotifyOriginatorOfChainedDependencyFailureAtCreation(ctx, txn, nil)
+	require.NoError(t, err)
+}
+
+func Test_action_NotifyOriginatorOfChainedDependencyFailureAtCreation_NoRevertedDependency(t *testing.T) {
+	ctx := t.Context()
+	grapher, depTracker := newTestGrapher()
+
+	depTx, _ := NewTransactionBuilderForTesting(t, State_Dispatched).
+		Grapher(grapher).DependencyTracker(depTracker).
+		Build()
+
+	txn, _ := NewTransactionBuilderForTesting(t, State_Initial).
+		Grapher(grapher).DependencyTracker(depTracker).
+		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{depTx.pt.ID: depTx}).
+		Build()
+
+	depTracker.GetChainedDeps().AddPrerequisites(ctx, txn.pt.ID, depTx.pt.ID)
+
+	// No SendTransactionConfirmed call expected — mock would fail if called unexpectedly.
+	err := action_NotifyOriginatorOfChainedDependencyFailureAtCreation(ctx, txn, nil)
+	require.NoError(t, err)
+}
+
 func Test_action_RecordConfirmationRevert_SetsRevertReason(t *testing.T) {
 	ctx := t.Context()
 	hash := pldtypes.RandBytes32()

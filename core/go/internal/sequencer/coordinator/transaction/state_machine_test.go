@@ -19,7 +19,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
+	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/dependencytracker"
 	"github.com/LFDT-Paladin/paladin/core/mocks/graphermocks"
@@ -101,11 +103,23 @@ func Test_ChainedDependencyFailed_AllStates_TransitionToReverted(t *testing.T) {
 
 	for _, fromState := range states {
 		t.Run(fromState.String(), func(t *testing.T) {
-			txn, mocks := NewTransactionBuilderForTesting(t, fromState).Build()
+			txn, mocks := NewTransactionBuilderForTesting(t, fromState).
+				UseMockTransportWriter().
+				Build()
 
 			mocks.SyncPoints.On("QueueTransactionFinalize",
 				mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 			).Return()
+
+			expectedFailureMessage := i18n.NewError(ctx, msgs.MsgTxMgrDependencyFailed, depID).Error()
+			mocks.TransportWriter.EXPECT().
+				SendTransactionConfirmed(mock.Anything, txn.pt.ID, txn.originatorNode, &txn.pt.Address,
+					(*pldtypes.HexUint64)(nil),
+					engineProto.TransactionConfirmed_OUTCOME_REVERTED,
+					pldtypes.HexBytes(nil),
+					expectedFailureMessage,
+					false,
+				).Return(nil)
 
 			err := txn.HandleEvent(ctx, &ChainedDependencyFailedEvent{
 				BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
@@ -279,10 +293,21 @@ func TestCoordinatorTransaction_Initial_ToReverted_OnDelegated_IfHasRevertedChai
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Initial).
 		ChainedDependencies(depID).
 		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{depID: depTx}).
+		UseMockTransportWriter().
 		Build()
 	mocks.SyncPoints.On("QueueTransactionFinalize",
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 	).Return()
+
+	expectedFailureMessage := i18n.NewError(ctx, msgs.MsgTxMgrDependencyFailed, depID).Error()
+	mocks.TransportWriter.EXPECT().
+		SendTransactionConfirmed(mock.Anything, txn.pt.ID, txn.originatorNode, &txn.pt.Address,
+			(*pldtypes.HexUint64)(nil),
+			engineProto.TransactionConfirmed_OUTCOME_REVERTED,
+			pldtypes.HexBytes(nil),
+			expectedFailureMessage,
+			false,
+		).Return(nil)
 
 	err := txn.HandleEvent(ctx, &DelegatedEvent{
 		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},

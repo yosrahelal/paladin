@@ -374,6 +374,7 @@ func TestOriginatorTransaction_Assembling_ToEndorsement_Gathering_OnAssembleAndS
 		BaseEvent: BaseEvent{
 			TransactionID: txn.GetID(),
 		},
+		RequestID: builder.GetAssembleRequestID(),
 		PostAssembly: &components.TransactionPostAssembly{
 			AssemblyResult: prototk.AssembleTransactionResponse_OK,
 			//TODO use a builder to create a more realistically populated PostAssembly
@@ -383,6 +384,30 @@ func TestOriginatorTransaction_Assembling_ToEndorsement_Gathering_OnAssembleAndS
 
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleSuccessResponse(), "assemble success response was not sent back to coordinator")
 	assert.Equal(t, State_Endorsement_Gathering, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
+
+func TestOriginatorTransaction_Assembling_StaysInAssembling_OnAssembleAndSignSuccess_StaleRequestID(t *testing.T) {
+	// When an AssembleAndSignSuccessEvent arrives with a request ID that does not match the
+	// current outstanding assemble request, the validator must reject it so the state machine
+	// stays in State_Assembling and no assemble response is sent to the coordinator.
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Assembling)
+	txn, mocks := builder.BuildWithMocks()
+
+	staleRequestID := uuid.New() // different from builder.GetAssembleRequestID()
+	assert.NotEqual(t, builder.GetAssembleRequestID(), staleRequestID)
+
+	err := txn.HandleEvent(ctx, &AssembleAndSignSuccessEvent{
+		BaseEvent: BaseEvent{TransactionID: txn.GetID()},
+		RequestID: staleRequestID,
+		PostAssembly: &components.TransactionPostAssembly{
+			AssemblyResult: prototk.AssembleTransactionResponse_OK,
+		},
+	})
+	assert.NoError(t, err)
+
+	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "stale success event must not advance state; current state is %s", txn.GetCurrentState().String())
+	assert.False(t, mocks.SentMessageRecorder.HasSentAssembleSuccessResponse(), "assemble success response must not be sent for a stale request ID")
 }
 
 func TestOriginatorTransaction_Assembling_ToReverted_OnAssembleRevert(t *testing.T) {
@@ -492,6 +517,45 @@ func TestOriginatorTransaction_Assembling_StaysInState_OnAssembleRequestReceived
 	})
 	assert.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "assemble rejection was not sent to coordinator")
+	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
+}
+
+func TestOriginatorTransaction_Assembling_StaysInAssembling_OnAssembleRequestReceived_NewRequest_CancelsPreviousGoroutine(t *testing.T) {
+	// When a new AssembleRequestReceived arrives while already in State_Assembling, the state
+	// machine must call the previously stored cancel function (to abort the stale goroutine)
+	// and store a new cancel function for the freshly spawned goroutine.
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Assembling)
+	txn, mocks := builder.BuildWithMocks()
+
+	// Install a cancel function that signals us when it is called
+	previousCancelCalled := make(chan struct{})
+	txn.cancelCurrentAssembly = func() { close(previousCancelCalled) }
+
+	// The new goroutine spawned by action_AssembleAndSign will call AssembleAndSign.
+	// Allow any number of calls (goroutine is async) and return quickly.
+	mocks.EngineIntegration.On(
+		"AssembleAndSign",
+		mock.Anything, txn.GetID(), mock.Anything, mock.Anything, mock.Anything,
+	).Maybe().Return(nil, context.Canceled)
+
+	newRequestID := uuid.New()
+	err := txn.HandleEvent(ctx, &AssembleRequestReceivedEvent{
+		BaseEvent:              BaseEvent{TransactionID: txn.GetID()},
+		RequestID:              newRequestID,
+		Coordinator:            txn.currentDelegate,
+		CoordinatorBlockHeight: 0,
+		BlockHeightTolerance:   0,
+	})
+	assert.NoError(t, err)
+
+	// action_AssembleAndSign is synchronous within HandleEvent, so the old cancel was called
+	// before HandleEvent returned — this receive completes immediately.
+	<-previousCancelCalled
+
+	// A new cancel for the fresh goroutine must be stored
+	assert.NotNil(t, txn.cancelCurrentAssembly)
+	// No state transition — we remain assembling (just with a new request)
 	assert.Equal(t, State_Assembling, txn.GetCurrentState(), "current state is %s", txn.GetCurrentState().String())
 }
 

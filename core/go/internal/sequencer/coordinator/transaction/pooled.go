@@ -22,6 +22,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/syncpoints"
+	"github.com/LFDT-Paladin/paladin/core/pkg/proto/engine"
 	"github.com/google/uuid"
 )
 
@@ -178,6 +179,20 @@ func action_FinalizeOnRevertedChainedDependencyAtCreation(ctx context.Context, t
 				},
 			)
 			return nil
+		}
+	}
+	return nil
+}
+
+func action_NotifyOriginatorOfChainedDependencyFailureAtCreation(ctx context.Context, t *coordinatorTransaction, _ common.Event) error {
+	for _, depID := range t.dependencyTracker.GetChainedDeps().GetPrerequisites(ctx, t.pt.ID) {
+		state, ok := t.getCoordinatorTransactionState(ctx, depID)
+		if ok && state == State_Reverted {
+			failureMessage := i18n.NewError(ctx, msgs.MsgTxMgrDependencyFailed, depID).Error()
+			return t.transportWriter.SendTransactionConfirmed(
+				ctx, t.pt.ID, t.originatorNode, &t.pt.Address, nil,
+				engine.TransactionConfirmed_OUTCOME_REVERTED, nil, failureMessage, false,
+			)
 		}
 	}
 	return nil
