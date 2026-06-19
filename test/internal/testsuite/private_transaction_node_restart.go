@@ -22,21 +22,95 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
-	"github.com/LFDT-Paladin/paladin/test/internal/conf"
-	"github.com/LFDT-Paladin/paladin/test/internal/contracts"
-	"github.com/LFDT-Paladin/paladin/test/internal/util"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/query"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/retry"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/rpcclient"
+	"github.com/LFDT-Paladin/paladin/test/internal/conf"
+	"github.com/LFDT-Paladin/paladin/test/internal/contracts"
+	"github.com/LFDT-Paladin/paladin/test/internal/util"
+	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	log "github.com/sirupsen/logrus"
 )
+
+// mergedSubscription fans notifications from multiple per-node subscriptions into a
+// single channel. Successful pente transactions arrive from all N nodes (the block
+// indexer on every node sees the on-chain event), while reverted transactions produce
+// a receipt only on the originator node. By subscribing to all nodes we see both
+// cases. Duplicates for successful transactions are handled naturally by the
+// workerIDMap.LoadAndDelete call in the perf runner's batchEventLoop.
+type mergedSubscription struct {
+	id            uuid.UUID
+	subs          []rpcclient.Subscription
+	notifications chan rpcclient.RPCSubscriptionNotification
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
+}
+
+func newMergedSubscription(ctx context.Context, subs []rpcclient.Subscription) *mergedSubscription {
+	mergedCtx, cancel := context.WithCancel(ctx)
+	m := &mergedSubscription{
+		id:            uuid.New(),
+		subs:          subs,
+		notifications: make(chan rpcclient.RPCSubscriptionNotification),
+		ctx:           mergedCtx,
+		cancel:        cancel,
+	}
+	for _, s := range subs {
+		m.wg.Add(1)
+		go m.forward(s)
+	}
+	// Close the merged channel once every forwarder has exited.
+	go func() {
+		m.wg.Wait()
+		close(m.notifications)
+	}()
+	return m
+}
+
+func (m *mergedSubscription) forward(s rpcclient.Subscription) {
+	defer m.wg.Done()
+	for {
+		select {
+		case n, ok := <-s.Notifications():
+			if !ok {
+				return
+			}
+			select {
+			case m.notifications <- n:
+			case <-m.ctx.Done():
+				return
+			}
+		case <-m.ctx.Done():
+			return
+		}
+	}
+}
+
+func (m *mergedSubscription) LocalID() uuid.UUID { return m.id }
+
+func (m *mergedSubscription) Notifications() chan rpcclient.RPCSubscriptionNotification {
+	return m.notifications
+}
+
+func (m *mergedSubscription) Unsubscribe(ctx context.Context) rpcclient.ErrorRPC {
+	m.cancel() // stop forwarder goroutines
+	var lastErr rpcclient.ErrorRPC
+	for _, s := range m.subs {
+		if err := s.Unsubscribe(ctx); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
 
 type privateTransactionNodeRestartSuite struct {
 	ctx             context.Context
@@ -44,6 +118,7 @@ type privateTransactionNodeRestartSuite struct {
 	privacyGroupID  *pldtypes.HexBytes
 	contractAddress *pldtypes.EthAddress
 	sub             rpcclient.Subscription
+	submittedTxIDs  []*sync.Map // one entry per node, indexed by position in GetNodes()
 }
 
 const privateTxRetryAttempts = 5
@@ -59,6 +134,11 @@ func (s *privateTransactionNodeRestartSuite) Setup() error {
 	nodes := s.runner.GetNodes()
 	if len(nodes) == 0 {
 		return fmt.Errorf("no nodes configured")
+	}
+
+	s.submittedTxIDs = make([]*sync.Map, len(nodes))
+	for i := range nodes {
+		s.submittedTxIDs[i] = &sync.Map{}
 	}
 
 	simpleStorage, err := contracts.LoadSimpleStorageContract()
@@ -161,34 +241,40 @@ func (s *privateTransactionNodeRestartSuite) Setup() error {
 	}
 	s.contractAddress = addr
 
-	// Create receipt listener (stays in Setup per plan)
-	var latestSequence *uint64
-	qb := query.NewQueryBuilder().Equal("domain", "pente").Sort("-sequence").Limit(1)
-	receipts, err := nodes[0].HTTPClient.PTX().QueryTransactionReceipts(s.ctx, qb.Query())
-	if err == nil && len(receipts) > 0 {
-		seq := receipts[0].Sequence
-		latestSequence = &seq
-		log.Infof("Found latest sequence: %d, will start listener from sequence above this", seq)
-	} else {
-		log.Info("No existing receipts found, starting listener from beginning")
-	}
-
-	_, _ = nodes[0].HTTPClient.PTX().DeleteReceiptListener(s.ctx, "penteperflistener")
-
+	// Create a receipt listener on every node so we capture both successful receipts
+	// (written by all nodes via the block-indexer event stream) and reverted receipts
+	// (written only by the originator node). The per-node sequenceAbove values are
+	// sampled independently because each node has its own sequence counter.
 	txType := pldapi.TransactionTypePrivate.Enum()
-	_, err = nodes[0].HTTPClient.PTX().CreateReceiptListener(s.ctx, &pldapi.TransactionReceiptListener{
-		Name: "penteperflistener",
-		Filters: pldapi.TransactionReceiptFilters{
-			Type:          &txType,
-			Domain:        "pente",
-			SequenceAbove: latestSequence,
-		},
-		Options: pldapi.TransactionReceiptListenerOptions{
-			DomainReceipts: true,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create receipt listener: %w", err)
+	qb := query.NewQueryBuilder().Equal("domain", "pente").Sort("-sequence").Limit(1)
+
+	for _, node := range nodes {
+		var latestSequence *uint64
+		receipts, qErr := node.HTTPClient.PTX().QueryTransactionReceipts(s.ctx, qb.Query())
+		if qErr == nil && len(receipts) > 0 {
+			seq := receipts[0].Sequence
+			latestSequence = &seq
+			log.Infof("Node %s: found latest pente sequence %d, starting listener above this", node.Config.Name, seq)
+		} else {
+			log.Infof("Node %s: no existing pente receipts found, starting listener from beginning", node.Config.Name)
+		}
+
+		_, _ = node.HTTPClient.PTX().DeleteReceiptListener(s.ctx, "penteperflistener")
+
+		_, err = node.HTTPClient.PTX().CreateReceiptListener(s.ctx, &pldapi.TransactionReceiptListener{
+			Name: "penteperflistener",
+			Filters: pldapi.TransactionReceiptFilters{
+				Type:          &txType,
+				Domain:        "pente",
+				SequenceAbove: latestSequence,
+			},
+			Options: pldapi.TransactionReceiptListenerOptions{
+				DomainReceipts: true,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create receipt listener on node %s: %w", node.Config.Name, err)
+		}
 	}
 
 	return nil
@@ -199,12 +285,24 @@ func (s *privateTransactionNodeRestartSuite) Subscribe() (rpcclient.Subscription
 	if len(nodes) == 0 {
 		return nil, fmt.Errorf("no nodes configured")
 	}
-	sub, err := nodes[0].WSClient.PTX().SubscribeReceipts(s.ctx, "penteperflistener")
-	if err != nil {
-		return nil, fmt.Errorf("failed to subscribe to pente receipts: %w", err)
+
+	subs := make([]rpcclient.Subscription, 0, len(nodes))
+	for _, node := range nodes {
+		sub, err := node.WSClient.PTX().SubscribeReceipts(s.ctx, "penteperflistener")
+		if err != nil {
+			// Unsubscribe any already-opened subscriptions before returning the error.
+			for _, opened := range subs {
+				_ = opened.Unsubscribe(s.ctx)
+			}
+			return nil, fmt.Errorf("failed to subscribe to pente receipts on node %s: %w", node.Config.Name, err)
+		}
+		log.Infof("Subscribed to penteperflistener on node %s", node.Config.Name)
+		subs = append(subs, sub)
 	}
-	s.sub = sub
-	return sub, nil
+
+	merged := newMergedSubscription(s.ctx, subs)
+	s.sub = merged
+	return merged, nil
 }
 
 func (s *privateTransactionNodeRestartSuite) Unsubscribe() {
@@ -219,22 +317,50 @@ func (s *privateTransactionNodeRestartSuite) Unsubscribe() {
 }
 
 func (s *privateTransactionNodeRestartSuite) Cleanup() {
-	nodes := s.runner.GetNodes()
-	if len(nodes) > 0 {
-		_, err := nodes[0].HTTPClient.PTX().DeleteReceiptListener(s.ctx, "penteperflistener")
+	for _, node := range s.runner.GetNodes() {
+		_, err := node.HTTPClient.PTX().DeleteReceiptListener(s.ctx, "penteperflistener")
 		if err != nil {
-			log.Debugf("Failed to delete receipt listener penteperflistener: %v", err)
+			log.Debugf("Node %s: failed to delete receipt listener penteperflistener: %v", node.Config.Name, err)
 		} else {
-			log.Infof("Successfully deleted receipt listener: penteperflistener")
+			log.Infof("Node %s: successfully deleted receipt listener penteperflistener", node.Config.Name)
 		}
 	}
 }
 
 func (s *privateTransactionNodeRestartSuite) NewWorker(startTime int64, workerID int) TestCase {
-	return newPrivateTransactionNodeRestartTestWorker(s.ctx, startTime, workerID, s.privacyGroupID, s.contractAddress, s.runner)
+	return newPrivateTransactionNodeRestartTestWorker(s.ctx, startTime, workerID, s.privacyGroupID, s.contractAddress, s.runner, s.submittedTxIDs)
 }
 
 func (s *privateTransactionNodeRestartSuite) PostRun() error {
+	nodes := s.runner.GetNodes()
+	var failures []string
+
+	for i, node := range nodes {
+		s.submittedTxIDs[i].Range(func(key, _ any) bool {
+			txID := uuid.MustParse(key.(string))
+
+			r, err := node.HTTPClient.PTX().GetTransactionReceipt(s.ctx, txID)
+			if err != nil {
+				failures = append(failures, fmt.Sprintf("tx %s: error querying receipt on node %s: %v",
+					txID, node.Config.Name, err))
+				return true
+			}
+			if r == nil {
+				failures = append(failures, fmt.Sprintf("tx %s: no receipt found on node %s",
+					txID, node.Config.Name))
+				return true
+			}
+			if !r.Success {
+				failures = append(failures, fmt.Sprintf("tx %s failed on node %s: %s",
+					txID, node.Config.Name, r.FailureMessage))
+			}
+			return true
+		})
+	}
+
+	if len(failures) > 0 {
+		return fmt.Errorf("%d transaction(s) failed:\n%s", len(failures), strings.Join(failures, "\n"))
+	}
 	return nil
 }
 
@@ -244,9 +370,10 @@ type privateTransactionNodeRestart struct {
 	contractAddress *pldtypes.EthAddress
 	runner          Runner
 	random          *rand.Rand
+	submittedTxIDs  []*sync.Map // indexed by node position, shared with suite for PostRun
 }
 
-func newPrivateTransactionNodeRestartTestWorker(ctx context.Context, startTime int64, workerID int, privacyGroupID *pldtypes.HexBytes, contractAddress *pldtypes.EthAddress, runner Runner) TestCase {
+func newPrivateTransactionNodeRestartTestWorker(ctx context.Context, startTime int64, workerID int, privacyGroupID *pldtypes.HexBytes, contractAddress *pldtypes.EthAddress, runner Runner, submittedTxIDs []*sync.Map) TestCase {
 	return &privateTransactionNodeRestart{
 		testBase: testBase{
 			ctx:       ctx,
@@ -257,6 +384,7 @@ func newPrivateTransactionNodeRestartTestWorker(ctx context.Context, startTime i
 		contractAddress: contractAddress,
 		runner:          runner,
 		random:          rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID))),
+		submittedTxIDs:  submittedTxIDs,
 	}
 }
 
@@ -330,6 +458,7 @@ func (tc *privateTransactionNodeRestart) RunOnce(iterationCount int) (string, er
 		return "", fmt.Errorf("failed to send pente transaction to node %d after %d attempts: %w", nodeIndex, privateTxRetryAttempts, err)
 	}
 
+	tc.submittedTxIDs[nodeIndex].Store(txID, struct{}{})
 	log.Debugf("Worker %d sent pente transaction %s to node %d", tc.workerID, txID, nodeIndex)
 	return txID, nil
 }
