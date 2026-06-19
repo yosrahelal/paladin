@@ -850,7 +850,7 @@ func TestHandlePreDispatchRequest_Success(t *testing.T) {
 	txIDBytes := [16]byte(txID)
 	txIDHex := "0x" + fmt.Sprintf("%032x", txIDBytes)
 
-	preDispatchRequest := &engineProto.TransactionDispatched{
+	preDispatchRequest := &engineProto.PreDispatchRequest{
 		Id:               requestID.String(),
 		TransactionId:    txIDHex,
 		ContractAddress:  contractAddr.String(),
@@ -891,7 +891,7 @@ func TestHandlePreDispatchResponse_Success(t *testing.T) {
 	txIDBytes := [16]byte(txID)
 	txIDHex := "0x" + fmt.Sprintf("%032x", txIDBytes)
 
-	preDispatchResponse := &engineProto.TransactionDispatched{
+	preDispatchResponse := &engineProto.PreDispatchResponse{
 		Id:              requestID.String(),
 		TransactionId:   txIDHex,
 		ContractAddress: contractAddr.String(),

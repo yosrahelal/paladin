@@ -1963,7 +1963,7 @@ func TestSendPreDispatchRequest_Success(t *testing.T) {
 		if msg.Component.String() != "TRANSACTION_ENGINE" {
 			return false
 		}
-		var dispatchRequest engineProto.TransactionDispatched
+		var dispatchRequest engineProto.PreDispatchRequest
 		err := proto.Unmarshal(msg.Payload, &dispatchRequest)
 		if err != nil {
 			return false
@@ -2057,7 +2057,7 @@ func TestSendPreDispatchRequest_Loopback(t *testing.T) {
 		assert.Equal(t, MessageType_PreDispatchRequest, msg.MessageType)
 		assert.Equal(t, originatorNode, msg.Node)
 		// Verify payload
-		var dispatchRequest engineProto.TransactionDispatched
+		var dispatchRequest engineProto.PreDispatchRequest
 		err := proto.Unmarshal(msg.Payload, &dispatchRequest)
 		require.NoError(t, err)
 		assert.Equal(t, idempotencyKey.String(), dispatchRequest.Id)
@@ -2095,7 +2095,7 @@ func TestSendPreDispatchResponse_Success(t *testing.T) {
 		if msg.Component.String() != "TRANSACTION_ENGINE" {
 			return false
 		}
-		var dispatchResponse engineProto.TransactionDispatched
+		var dispatchResponse engineProto.PreDispatchResponse
 		err := proto.Unmarshal(msg.Payload, &dispatchResponse)
 		if err != nil {
 			return false
@@ -2182,7 +2182,7 @@ func TestSendPreDispatchResponse_Loopback(t *testing.T) {
 		assert.Equal(t, MessageType_PreDispatchResponse, msg.MessageType)
 		assert.Equal(t, transactionOriginatorNode, msg.Node)
 		// Verify payload
-		var dispatchResponse engineProto.TransactionDispatched
+		var dispatchResponse engineProto.PreDispatchResponse
 		err := proto.Unmarshal(msg.Payload, &dispatchResponse)
 		require.NoError(t, err)
 		assert.Equal(t, idempotencyKey.String(), dispatchResponse.Id)
