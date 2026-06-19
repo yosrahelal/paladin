@@ -156,6 +156,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.CompletionTimeout = instance.CompletionTimeout
 	runnerConfig.NoWaitSubmission = instance.NoWaitSubmission
 	runnerConfig.NodeKillConfig = instance.NodeKillConfig
+	runnerConfig.Diagnostics = instance.Diagnostics
 	runnerConfig.Nodes = perfConfig.Nodes
 
 	setDefaults(runnerConfig)

@@ -34,8 +34,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/test/internal/contracts"
 	"github.com/LFDT-Paladin/paladin/test/internal/util"
 
-	nototypes "github.com/LFDT-Paladin/paladin/domains/noto/pkg/types"
-	"github.com/google/uuid"
+	nototypes "github.com/LFDT-Paladin/paladin/test/internal/contracts"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
 	log "github.com/sirupsen/logrus"
 )
@@ -49,22 +48,7 @@ const notoRevertableHooksDefaultIncludeInvalidInputErrors = true
 const notoResolveAlgorithm = "ecdsa:secp256k1"
 const notoResolveVerifierType = "eth_address"
 
-var notoConstructorABI = abi.ABI{
-	{Type: abi.Constructor, Inputs: abi.ParameterArray{
-		{Name: "notary", Type: "string"},
-		{Name: "notaryMode", Type: "string"},
-		{Name: "options", Type: "tuple", Components: abi.ParameterArray{
-			{Name: "hooks", Type: "tuple", Components: abi.ParameterArray{
-				{Name: "publicAddress", Type: "string"},
-				{Name: "privateAddress", Type: "string"},
-				{Name: "privateGroup", Type: "tuple", Components: abi.ParameterArray{
-					{Name: "salt", Type: "bytes32"},
-					{Name: "members", Type: "string[]"},
-				}},
-			}},
-		}},
-	}},
-}
+var notoConstructorABI = contracts.NotoConstructorABI
 
 type notoRevertableHooksSuite struct {
 	ctx                  context.Context
@@ -599,81 +583,77 @@ func (s *notoRevertableHooksSuite) PostRun() error {
 		return dispatches
 	}
 
-	assertTx := func(txID string, shouldSucceed bool, expectedReason string, expectedReasonHex string, label string) error {
-		parsedID, err := uuid.Parse(txID)
-		if err != nil {
-			return fmt.Errorf("%s tx %s has invalid UUID: %w", label, txID, err)
-		}
-
-		receipt, err := submitterClient.PTX().GetTransactionReceiptFull(s.ctx, parsedID)
-		if err != nil || receipt == nil {
-			return fmt.Errorf("%s tx %s failed to fetch receipt: %w", label, txID, err)
-		}
-		if !receipt.Success && strings.Contains(receipt.FailureMessage, penteInputNotAvailableReason) {
-			if _, seen := penteInputNotAvailableSet[txID]; !seen {
-				penteInputNotAvailableSet[txID] = struct{}{}
-				penteInputNotAvailableTxIDs = append(penteInputNotAvailableTxIDs, txID)
-			}
-			return nil
-		}
-		if !receipt.Success && strings.HasPrefix(receipt.FailureMessage, dependencyFailedReason) {
-			if _, seen := dependencyFailedSet[txID]; !seen {
-				dependencyFailedSet[txID] = struct{}{}
-				dependencyFailedTxIDs = append(dependencyFailedTxIDs, txID)
-			}
-			return nil
-		}
-		if shouldSucceed {
-			if !receipt.Success {
-				return fmt.Errorf("%s tx %s expected success but failed: %s", label, txID, receipt.FailureMessage)
-			}
-			return nil
-		}
-		if receipt.Success {
-			return fmt.Errorf("%s tx %s expected failure but succeeded", label, txID)
-		}
-		if !strings.Contains(receipt.FailureMessage, expectedReasonHex) &&
-			!strings.Contains(receipt.FailureMessage, expectedReason) {
-			return fmt.Errorf("%s tx %s failed with unexpected reason: %s", label, txID, receipt.FailureMessage)
-		}
-		return nil
-	}
-
-	assertBatched := func(txIDs []string, shouldSucceed bool, expectedReason string, expectedReasonHex string, label string) error {
+	// assertGroup fetches a page of transactions via QueryTransactionsFull so that receipt
+	// outcome and (optionally) sequencer dispatch count can be validated in a single RPC call
+	// per page. Pass a non-nil expectedDispatches to also assert the dispatch count.
+	assertGroup := func(txIDs []string, shouldSucceed bool, expectedReason, expectedReasonHex string, expectedDispatches *int, label string) error {
 		pageSize := s.postRunPageSize
 		for i := 0; i < len(txIDs); i += pageSize {
 			end := i + pageSize
 			if end > len(txIDs) {
 				end = len(txIDs)
 			}
-			for _, txID := range txIDs[i:end] {
-				if err := assertTx(txID, shouldSucceed, expectedReason, expectedReasonHex, label); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
+			page := txIDs[i:end]
 
-	assertDispatches := func(txIDs []string, expectedDispatches int, label string) error {
-		pageSize := s.postRunPageSize
-		for i := 0; i < len(txIDs); i += pageSize {
-			end := i + pageSize
-			if end > len(txIDs) {
-				end = len(txIDs)
+			ids := make([]any, len(page))
+			for j, id := range page {
+				ids[j] = id
 			}
-			for _, txID := range txIDs[i:end] {
-				parsedID, err := uuid.Parse(txID)
-				if err != nil {
-					return fmt.Errorf("%s tx %s has invalid UUID: %w", label, txID, err)
+			txsFull, err := submitterClient.PTX().QueryTransactionsFull(
+				s.ctx,
+				query.NewQueryBuilder().In("id", ids).Limit(len(page)).Query(),
+			)
+			if err != nil {
+				return fmt.Errorf("%s failed to query transactions for page %d: %w", label, i/pageSize, err)
+			}
+			txByID := make(map[string]*pldapi.TransactionFull, len(txsFull))
+			for _, tx := range txsFull {
+				if tx.Transaction != nil {
+					txByID[tx.Transaction.ID.String()] = tx
 				}
-				txFull, err := submitterClient.PTX().GetTransactionFull(s.ctx, parsedID)
-				if err != nil || txFull == nil {
-					return fmt.Errorf("%s tx %s failed to fetch full transaction: %w", label, txID, err)
+			}
+
+			for _, txID := range page {
+				tx := txByID[txID]
+				if tx == nil {
+					return fmt.Errorf("%s tx %s not found in query results", label, txID)
 				}
-				dispatches := countDispatches(txFull.SequencerActivity)
-				if dispatches != expectedDispatches {
-					return fmt.Errorf("%s tx %s had %d dispatches in sequencer activity, expected %d", label, txID, dispatches, expectedDispatches)
+				receipt := tx.Receipt
+				if receipt == nil {
+					return fmt.Errorf("%s tx %s has no receipt", label, txID)
+				}
+				if !receipt.Success && strings.Contains(receipt.FailureMessage, penteInputNotAvailableReason) {
+					if _, seen := penteInputNotAvailableSet[txID]; !seen {
+						penteInputNotAvailableSet[txID] = struct{}{}
+						penteInputNotAvailableTxIDs = append(penteInputNotAvailableTxIDs, txID)
+					}
+					continue
+				}
+				if !receipt.Success && strings.HasPrefix(receipt.FailureMessage, dependencyFailedReason) {
+					if _, seen := dependencyFailedSet[txID]; !seen {
+						dependencyFailedSet[txID] = struct{}{}
+						dependencyFailedTxIDs = append(dependencyFailedTxIDs, txID)
+					}
+					continue
+				}
+				if shouldSucceed {
+					if !receipt.Success {
+						return fmt.Errorf("%s tx %s expected success but failed: %s", label, txID, receipt.FailureMessage)
+					}
+				} else {
+					if receipt.Success {
+						return fmt.Errorf("%s tx %s expected failure but succeeded", label, txID)
+					}
+					if !strings.Contains(receipt.FailureMessage, expectedReasonHex) &&
+						!strings.Contains(receipt.FailureMessage, expectedReason) {
+						return fmt.Errorf("%s tx %s failed with unexpected reason: %s", label, txID, receipt.FailureMessage)
+					}
+				}
+				if expectedDispatches != nil {
+					dispatches := countDispatches(tx.SequencerActivity)
+					if dispatches != *expectedDispatches {
+						return fmt.Errorf("%s tx %s had %d dispatches in sequencer activity, expected %d", label, txID, dispatches, *expectedDispatches)
+					}
 				}
 			}
 		}
@@ -688,11 +668,11 @@ func (s *notoRevertableHooksSuite) PostRun() error {
 		failures = append(failures, err.Error())
 	}
 
-	recordFailure(assertBatched(failTxIDs, false, failRevertReason, failRevertReasonHex, "FAIL"))
-	recordFailure(assertBatched(invalidInputTxIDs, false, "", notoInvalidInputSelector, "INVALID_INPUT"))
-	recordFailure(assertDispatches(invalidInputTxIDs, 4, "INVALID_INPUT"))
-	recordFailure(assertBatched(revertTxIDs, false, revertRevertReason, revertRevertReasonHex, "REVERT"))
-	recordFailure(assertBatched(successTxIDs, true, "", "", "SUCCESS"))
+	invalidInputDispatches := 4
+	recordFailure(assertGroup(failTxIDs, false, failRevertReason, failRevertReasonHex, nil, "FAIL"))
+	recordFailure(assertGroup(invalidInputTxIDs, false, "", notoInvalidInputSelector, &invalidInputDispatches, "INVALID_INPUT"))
+	recordFailure(assertGroup(revertTxIDs, false, revertRevertReason, revertRevertReasonHex, nil, "REVERT"))
+	recordFailure(assertGroup(successTxIDs, true, "", "", nil, "SUCCESS"))
 
 	// A small number of transactions can exhaust their retry limit after repeatedly being queued
 	// behind a chained dependency that fails. This is not possible to eliminate entirely, so it
