@@ -23,6 +23,7 @@ require (
 	github.com/hyperledger/firefly-common v1.5.6 // indirect
 	github.com/hyperledger/firefly-signer v1.1.21 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 )
 
 require (
@@ -53,7 +54,6 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
