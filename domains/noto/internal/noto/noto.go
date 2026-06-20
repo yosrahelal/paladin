@@ -521,9 +521,10 @@ func (n *Noto) ConfigureDomain(ctx context.Context, req *prototk.ConfigureDomain
 	n.fixedSigningIdentity = req.FixedSigningIdentity
 
 	algoName := types.AlgoDomainNullifier(n.name)
-	signingAlgos := map[string]int32{
-		algoName: 32,
-	}
+	// using the "Sign" lifecycle method to generate the nullifier,
+	// we don't need a key length or a specific algorithm. just a placeholder entry.
+	signingAlgos := map[string]int32{}
+	signingAlgos[algoName] = 32
 
 	return &prototk.ConfigureDomainResponse{
 		DomainConfig: &prototk.DomainConfig{
@@ -1081,7 +1082,7 @@ func (n *Noto) encodeTransactionData(ctx context.Context, domainConfig *types.No
 	if domainConfig.IsV0() {
 		return n.encodeTransactionDataV0(ctx, transaction, infoStates)
 	}
-	return n.encodeTransactionDataV1(ctx, infoStates, domainConfig.UsesNullifiers())
+	return n.encodeTransactionDataV1(ctx, infoStates)
 }
 
 func (n *Noto) encodeTransactionDataV0(ctx context.Context, transaction *prototk.TransactionSpecification, infoStates []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
@@ -1117,7 +1118,7 @@ func (n *Noto) encodeTransactionDataV0(ctx context.Context, transaction *prototk
 	return data, nil
 }
 
-func (n *Noto) encodeTransactionDataV1(ctx context.Context, infoStates []*prototk.EndorsableState, useNullifiers bool) (pldtypes.HexBytes, error) {
+func (n *Noto) encodeTransactionDataV1(ctx context.Context, infoStates []*prototk.EndorsableState) (pldtypes.HexBytes, error) {
 	var err error
 	stateIDs := make([]pldtypes.Bytes32, len(infoStates))
 	for i, state := range infoStates {
@@ -1236,8 +1237,6 @@ func (n *Noto) Sign(ctx context.Context, req *prototk.SignRequest) (*prototk.Sig
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, msgs.MsgNullifierGenerationFailed)
 		}
-		log.L(ctx).Infof("generated nullifier (string): %s\n", hashBytes.String())
-		log.L(ctx).Infof("generated nullifier (bytes): %x\n", hashBytes.Bytes())
 		return &prototk.SignResponse{
 			Payload: hashBytes.Bytes(),
 		}, nil

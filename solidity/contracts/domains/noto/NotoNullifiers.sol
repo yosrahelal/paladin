@@ -11,7 +11,9 @@ contract NotoNullifiers is Noto {
 
     SmtLib.Data private _commitmentsTree;
 
-    uint64 public constant NotoVariantV2Nullifiers = 0x0003;
+    // see domains/noto/pkg/types/config.go for the convention
+    // on the variant field
+    uint64 public constant NotoVariantV2Nullifiers = 0x0102;
 
     mapping(bytes32 => bool) private _nullifiers;
 
@@ -40,6 +42,12 @@ contract NotoNullifiers is Noto {
             );
     }
 
+    function _decodeProof(
+        bytes memory proof
+    ) internal pure returns (uint256 root, bytes memory signature) {
+        return abi.decode(proof, (uint256, bytes));
+    }
+
     function _transfer(
         bytes32 txId,
         bytes32[] memory inputs,
@@ -47,10 +55,7 @@ contract NotoNullifiers is Noto {
         bytes calldata proof,
         bytes calldata data
     ) internal virtual override {
-        (uint256 root, bytes memory _signature) = abi.decode(
-            proof,
-            (uint256, bytes)
-        );
+        (uint256 root, bytes memory _signature) = _decodeProof(proof);
         _requireValidRoot(root);
         _processNullifiers(inputs);
         _processOutputs(outputs);
@@ -66,7 +71,7 @@ contract NotoNullifiers is Noto {
     ) internal virtual override {
         useTxId(args.txId);
 
-        (uint256 root, ) = abi.decode(args.proof, (uint256, bytes));
+        (uint256 root, ) = _decodeProof(args.proof);
         _requireValidRoot(root);
 
         _processNullifiers(args.inputs);
@@ -94,7 +99,7 @@ contract NotoNullifiers is Noto {
         if (args.proof.length == 0) {
             revert NotoInvalidProof(args.proof);
         }
-        (uint256 root, ) = abi.decode(args.proof, (uint256, bytes));
+        (uint256 root, ) = _decodeProof(args.proof);
         _requireValidRoot(root);
         super._updateLock(
             args,
@@ -115,13 +120,13 @@ contract NotoNullifiers is Noto {
         bytes32 oldLockState,
         bytes32 newLockState
     ) internal virtual override {
-        bytes32 currentLockState = _lockStates[lockId];
+        bytes32 currentLockState = getLockState(lockId);
         if (currentLockState != oldLockState) {
             revert NotoInvalidLockState(lockId, oldLockState, currentLockState);
         }
         super._processInput(oldLockState);
         super._processOutput(newLockState);
-        _lockStates[lockId] = newLockState;
+        _setLockState(lockId, newLockState);
     }
 
     /**

@@ -179,31 +179,33 @@ func (h *burnCommon) baseLedgerInvokeBurn(ctx context.Context, tx *types.ParsedT
 	functionName := "transfer"
 	var paramsJSON []byte
 
-	payload := sender.Payload
+	proof := sender.Payload
 	if useNullifier {
-		encoded, encErr := h.noto.encodeRootAndSignature(ctx, tx.ContractAddress.String(), req.StateQueryContext, payload)
+		encoded, encErr := h.noto.encodeRootAndSignature(ctx, tx.ContractAddress.String(), req.StateQueryContext, proof)
 		if encErr != nil {
 			return nil, encErr
 		}
-		payload = encoded
+		proof = encoded
 	}
 
 	if tx.DomainConfig.IsV0() {
 		paramsJSON, err = json.Marshal(&NotoTransfer_V0_Params{
 			TxId:      req.Transaction.TransactionId,
-			Inputs:    endorsableStateIDs(req.InputStates, false),
-			Outputs:   endorsableStateIDs(req.OutputStates, false),
+			Inputs:    endorsableStateIDs(ctx, req.InputStates, false),
+			Outputs:   endorsableStateIDs(ctx, req.OutputStates, false),
 			Signature: sender.Payload,
 			Data:      data,
 		})
-	} else {
+	} else if tx.DomainConfig.IsV1() || tx.DomainConfig.IsV2() {
 		paramsJSON, err = json.Marshal(&NotoTransferParams{
 			TxId:    req.Transaction.TransactionId,
-			Inputs:  endorsableStateIDs(req.InputStates, tx.DomainConfig.UsesNullifiers()),
-			Outputs: endorsableStateIDs(req.OutputStates, false),
-			Proof:   payload,
+			Inputs:  endorsableStateIDs(ctx, req.InputStates, useNullifier),
+			Outputs: endorsableStateIDs(ctx, req.OutputStates, false),
+			Proof:   proof,
 			Data:    data,
 		})
+	} else {
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 	if err != nil {
 		return nil, err

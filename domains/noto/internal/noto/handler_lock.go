@@ -269,7 +269,7 @@ func (h *lockHandler) Endorse(ctx context.Context, tx *types.ParsedTransaction, 
 }
 
 func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTransaction, lockID pldtypes.Bytes32, req *prototk.PrepareTransactionRequest) (*TransactionWrapper, error) {
-	useNullifiers := tx.DomainConfig.UsesNullifiers()
+	useNullifiers := tx.DomainConfig.IsNullifierVariant()
 	inputs := req.InputStates
 	outputs, lockedOutputs := h.noto.splitStates(req.OutputStates)
 
@@ -306,9 +306,9 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 		functionName = "lock"
 		paramsJSON, err = json.Marshal(&NotoLock_V0_Params{
 			TxId:          req.Transaction.TransactionId,
-			Inputs:        endorsableStateIDs(inputs, false),
-			Outputs:       endorsableStateIDs(outputs, false),
-			LockedOutputs: endorsableStateIDs(lockedOutputs, false),
+			Inputs:        endorsableStateIDs(ctx, inputs, false),
+			Outputs:       endorsableStateIDs(ctx, outputs, false),
+			LockedOutputs: endorsableStateIDs(ctx, lockedOutputs, false),
 			Signature:     lockSignature.Payload,
 			Data:          data,
 		})
@@ -317,9 +317,9 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 		var createLockArgs []byte
 		createLockArgs, err = h.noto.encodeNotoCreateLockArgsV1(ctx, &types.NotoCreateLockArgs_V1{
 			TxId:         req.Transaction.TransactionId,
-			Inputs:       endorsableStateIDs(inputs, false),
-			Outputs:      endorsableStateIDs(outputs, false),
-			Contents:     endorsableStateIDs(lockedOutputs, false),
+			Inputs:       endorsableStateIDs(ctx, inputs, false),
+			Outputs:      endorsableStateIDs(ctx, outputs, false),
+			Contents:     endorsableStateIDs(ctx, lockedOutputs, false),
 			NewLockState: lt.newLockStateID,
 			Proof:        lockSignature.Payload,
 		})
@@ -348,9 +348,9 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 		var createLockArgs []byte
 		createLockArgs, err = h.noto.encodeNotoCreateLockArgs(ctx, &types.NotoCreateLockArgs{
 			TxId:         req.Transaction.TransactionId,
-			Inputs:       endorsableStateIDs(inputs, useNullifiers),
-			Outputs:      endorsableStateIDs(outputs, false),
-			Contents:     endorsableStateIDs(lockedOutputs, false),
+			Inputs:       endorsableStateIDs(ctx, inputs, useNullifiers),
+			Outputs:      endorsableStateIDs(ctx, outputs, false),
+			Contents:     endorsableStateIDs(ctx, lockedOutputs, false),
 			NewLockState: lt.newLockStateID,
 			Options: &types.NotoLockOptions{
 				SpendTxId: lt.newLockInfo.SpendTxId,
@@ -366,6 +366,8 @@ func (h *lockHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 			CancelCommitment: pldtypes.Bytes32{},
 			Data:             data,
 		})
+	} else {
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 	if err != nil {
 		return nil, err

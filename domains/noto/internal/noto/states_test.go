@@ -26,6 +26,7 @@ import (
 )
 
 func TestEndorsableStateIDs(t *testing.T) {
+	ctx := t.Context()
 	owner1 := pldtypes.MustEthAddress("0xbb2b99dde4ca2d4c99f149d13cd55a9edada69eb")
 	inputStates := []*prototk.EndorsableState{
 		{
@@ -38,7 +39,7 @@ func TestEndorsableStateIDs(t *testing.T) {
 		},
 	}
 
-	ids := endorsableStateIDs(inputStates, true)
+	ids := endorsableStateIDs(ctx, inputStates, true)
 	require.Len(t, ids, 1)
 	assert.Equal(t, "ada5013122d395ba3c54772283fb069b10426056ef8ca54750cb9bb552a59e7d", ids[0])
 }

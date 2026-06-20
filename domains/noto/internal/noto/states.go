@@ -585,7 +585,7 @@ func encodedStateIDs(states []*pldapi.StateEncoded) []string {
 	return inputs
 }
 
-func endorsableStateIDs(states []*prototk.EndorsableState, useNullifier bool) []string {
+func endorsableStateIDs(ctx context.Context, states []*prototk.EndorsableState, useNullifier bool) []string {
 	inputs := make([]string, len(states))
 	for i, state := range states {
 		if !useNullifier {
@@ -599,6 +599,7 @@ func endorsableStateIDs(states []*prototk.EndorsableState, useNullifier bool) []
 				hashBytes, err = calculateNullifier(&coin)
 			}
 			if err != nil {
+				log.L(ctx).Errorf("error calculating nullifier for state %s: %v", state.Id, err)
 				return nil
 			}
 			inputs[i] = hashBytes.HexString()

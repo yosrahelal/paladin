@@ -52,7 +52,7 @@ func (h *transferCommon) initTransfer(ctx context.Context, tx *types.ParsedTrans
 }
 
 func (h *transferCommon) assembleTransfer(ctx context.Context, tx *types.ParsedTransaction, req *prototk.AssembleTransactionRequest, from, to string, amount *pldtypes.HexUint256, data pldtypes.HexBytes) (*prototk.AssembleTransactionResponse, error) {
-	useNullifiers := tx.DomainConfig.UsesNullifiers()
+	useNullifiers := tx.DomainConfig.IsNullifierVariant()
 
 	ids, err := resolveIdentities(ctx, h.noto, tx, req, from, to)
 	if err != nil {
@@ -172,7 +172,7 @@ func (h *transferCommon) endorseTransfer(ctx context.Context, tx *types.ParsedTr
 }
 
 func (h *transferCommon) baseLedgerInvokeTransfer(ctx context.Context, tx *types.ParsedTransaction, req *prototk.PrepareTransactionRequest, withApproval bool, useNullifier bool) (*TransactionWrapper, error) {
-	useNullifiers := tx.DomainConfig.UsesNullifiers()
+	useNullifiers := tx.DomainConfig.IsNullifierVariant()
 	// Include the signature from the sender
 	// This is not verified on the base ledger, but can be verified by anyone with the unmasked state data
 	signature := domain.FindAttestation("sender", req.AttestationResult)
@@ -201,19 +201,21 @@ func (h *transferCommon) baseLedgerInvokeTransfer(ctx context.Context, tx *types
 	if tx.DomainConfig.IsV0() {
 		paramsJSON, err = json.Marshal(&NotoTransfer_V0_Params{
 			TxId:      req.Transaction.TransactionId,
-			Inputs:    endorsableStateIDs(req.InputStates, false),
-			Outputs:   endorsableStateIDs(req.OutputStates, false),
+			Inputs:    endorsableStateIDs(ctx, req.InputStates, false),
+			Outputs:   endorsableStateIDs(ctx, req.OutputStates, false),
 			Signature: signature.Payload,
 			Data:      data,
 		})
-	} else {
+	} else if tx.DomainConfig.IsV1() || tx.DomainConfig.IsV2() {
 		paramsJSON, err = json.Marshal(&NotoTransferParams{
 			TxId:    req.Transaction.TransactionId,
-			Inputs:  endorsableStateIDs(req.InputStates, useNullifiers),
-			Outputs: endorsableStateIDs(req.OutputStates, false),
+			Inputs:  endorsableStateIDs(ctx, req.InputStates, useNullifiers),
+			Outputs: endorsableStateIDs(ctx, req.OutputStates, false),
 			Proof:   payload,
 			Data:    data,
 		})
+	} else {
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 	if err != nil {
 		return nil, err

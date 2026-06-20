@@ -342,12 +342,10 @@ func (s *notoTestSuite) testNoto(version string, variant string) {
 }
 
 func (s *notoTestSuite) TestNotoLockV1() {
-	s.T().Skip()
 	s.testNotoLock("v1", "")
 }
 
 func (s *notoTestSuite) TestNotoLockV0() {
-	s.T().Skip()
 	s.testNotoLock("v0", "")
 }
 

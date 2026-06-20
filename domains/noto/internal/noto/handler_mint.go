@@ -85,11 +85,14 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 		return nil, err
 	}
 	if useNullifiers {
-		// for our own states, while we create them, we add the corresponding nullifier to the new state,
+		// for new output states, while we create them, we add the corresponding nullifier to the new state,
 		// which will be persisted in the state DB. This allows us to track which states have been spent,
 		// because the spending transactions will include the nullifier IDs, rather than the state IDs, in
-		// the receipt
+		// the receipt.
 		for _, newState := range outputStates.states {
+			// Here the new output state could be for the minter (notaryID) or the receiver (toID).
+			// regardless of the owner, the notary always knows about the nullifier. So we always
+			// add the nullifier spec for the notary.
 			newState.NullifierSpecs = []*prototk.NullifierSpec{
 				{
 					Party:        notaryID.identifier,
@@ -98,6 +101,9 @@ func (h *mintHandler) Assemble(ctx context.Context, tx *types.ParsedTransaction,
 					PayloadType:  types.PAYLOAD_DOMAIN_NOTO_NULLIFIER,
 				},
 			}
+			// In addition, Paladin also puts the responsibility to generate the nullifier for the states
+			// to be owned by the receiver, on the minter. So if the receiver is not the notary, we add
+			// another nullifier spec with the distribution to the receiver.
 			if toID.identifier != notaryID.identifier {
 				newState.NullifierSpecs = append(newState.NullifierSpecs, &prototk.NullifierSpec{
 					Party:        toID.identifier,
@@ -187,7 +193,7 @@ func (h *mintHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 	}
 
 	payload := sender.Payload
-	if tx.DomainConfig.UsesNullifiers() {
+	if tx.DomainConfig.IsNullifierVariant() {
 		encoded, encErr := h.noto.encodeRootAndSignature(ctx, tx.ContractAddress.String(), req.StateQueryContext, payload)
 		if encErr != nil {
 			return nil, encErr
@@ -202,17 +208,19 @@ func (h *mintHandler) baseLedgerInvoke(ctx context.Context, tx *types.ParsedTran
 	if tx.DomainConfig.IsV0() {
 		paramsJSON, err = json.Marshal(&NotoMint_V0_Params{
 			TxId:      req.Transaction.TransactionId,
-			Outputs:   endorsableStateIDs(req.OutputStates, false),
+			Outputs:   endorsableStateIDs(ctx, req.OutputStates, false),
 			Signature: sender.Payload,
 			Data:      data,
 		})
-	} else {
+	} else if tx.DomainConfig.IsV1() || tx.DomainConfig.IsV2() {
 		paramsJSON, err = json.Marshal(&NotoMintParams{
 			TxId:    req.Transaction.TransactionId,
-			Outputs: endorsableStateIDs(req.OutputStates, false),
+			Outputs: endorsableStateIDs(ctx, req.OutputStates, false),
 			Proof:   payload,
 			Data:    data,
 		})
+	} else {
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 	if err != nil {
 		return nil, err

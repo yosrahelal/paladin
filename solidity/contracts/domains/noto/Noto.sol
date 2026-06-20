@@ -51,15 +51,15 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
             "Unlock(bytes32 txId,bytes32[] lockedInputs,bytes32[] outputs,bytes data)"
         );
 
-    string internal _name;
-    string internal _symbol;
+    string private _name;
+    string private _symbol;
     address public notary;
 
     mapping(bytes32 => bool) private _unspent;
     mapping(bytes32 => bytes32) private _locked; // state ID => lock ID
     mapping(bytes32 => NotoLockInfo) private _locks; // lock ID => lock details
     mapping(bytes32 => bool) private _txIds; // track used transaction IDs
-    mapping(bytes32 => bytes32) internal _lockStates; // track the current lockState ID for any active lock
+    mapping(bytes32 => bytes32) private _lockStates; // track the current lockState ID for any active lock
     mapping(bytes32 => bytes32) private _lockTxIds; // tx ID => lock ID (for prepared transactions)
 
     function requireNotary(address addr) internal view {
@@ -256,7 +256,7 @@ contract Noto is EIP712Upgradeable, UUPSUpgradeable, INoto, INotoErrors {
      */
     function getLockState(
         bytes32 lockId
-    ) external view returns (bytes32 lockState) {
+    ) public view returns (bytes32 lockState) {
         return _lockStates[lockId];
     }
 

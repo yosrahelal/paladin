@@ -272,7 +272,7 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 
 	if tx.DomainConfig.IsV0() {
 		var unlockHash ethtypes.HexBytes0xPrefix
-		unlockHash, err = h.noto.unlockHashFromIDs_V0(ctx, tx.ContractAddress, endorsableStateIDs(lockedInputs, false), endorsableStateIDs(lockedOutputs, false), endorsableStateIDs(spendOutputs, false), inParams.Data)
+		unlockHash, err = h.noto.unlockHashFromIDs_V0(ctx, tx.ContractAddress, endorsableStateIDs(ctx, lockedInputs, false), endorsableStateIDs(ctx, lockedOutputs, false), endorsableStateIDs(ctx, spendOutputs, false), inParams.Data)
 		if err != nil {
 			return nil, err
 		}
@@ -283,15 +283,17 @@ func (h *prepareUnlockHandler) baseLedgerInvoke(ctx context.Context, tx *types.P
 		if err == nil {
 			functionName = "prepareUnlock"
 			paramsJSON, err = json.Marshal(&NotoPrepareUnlock_V0_Params{
-				LockedInputs: endorsableStateIDs(lockedInputs, false),
+				LockedInputs: endorsableStateIDs(ctx, lockedInputs, false),
 				UnlockHash:   unlockHash.String(),
 				Signature:    sender.Payload,
 				Data:         txData,
 			})
 		}
-	} else {
+	} else if tx.DomainConfig.IsV1() || tx.DomainConfig.IsV2() {
 		functionName = "updateLock"
 		paramsJSON, err = h.buildPrepareUnlockParams(ctx, tx, lockTransition, sender.Payload, lockedInputs, spendOutputs, cancelOutputs, req.InfoStates)
+	} else {
+		return nil, i18n.NewError(ctx, msgs.MsgUnknownDomainVariant, tx.DomainConfig.Variant)
 	}
 	if err != nil {
 		return nil, err
