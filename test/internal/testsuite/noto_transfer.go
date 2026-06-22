@@ -258,6 +258,9 @@ func (s *notoTransferSuite) OnReceiptBatch(ids []string) {
 	log.Infof("notoTransferSuite: rolling check batch=%d failures=%d", len(ids), len(batchFailures))
 
 	if len(batchFailures) > 0 {
+		for _, f := range batchFailures {
+			log.Errorf("notoTransferSuite: rolling check failure: %s", f)
+		}
 		s.resultsMu.Lock()
 		s.failures = append(s.failures, batchFailures...)
 		s.resultsMu.Unlock()
