@@ -185,13 +185,13 @@ func (h *transferCommon) baseLedgerInvokeTransfer(ctx context.Context, tx *types
 		return nil, err
 	}
 
-	payload := signature.Payload
+	proof := signature.Payload
 	if useNullifier {
-		encoded, encErr := h.noto.encodeRootAndSignature(ctx, tx.ContractAddress.String(), req.StateQueryContext, payload)
+		encoded, encErr := h.noto.encodeRootAndSignature(ctx, tx.ContractAddress.String(), req.StateQueryContext, proof)
 		if encErr != nil {
 			return nil, encErr
 		}
-		payload = encoded
+		proof = encoded
 	}
 
 	interfaceABI := h.noto.getInterfaceABI(tx.DomainConfig.Variant)
@@ -211,7 +211,7 @@ func (h *transferCommon) baseLedgerInvokeTransfer(ctx context.Context, tx *types
 			TxId:    req.Transaction.TransactionId,
 			Inputs:  endorsableStateIDs(ctx, req.InputStates, useNullifiers),
 			Outputs: endorsableStateIDs(ctx, req.OutputStates, false),
-			Proof:   payload,
+			Proof:   proof,
 			Data:    data,
 		})
 	} else {
