@@ -258,8 +258,8 @@ func (c *coordinator) newCoordinatorTransaction(ctx context.Context, originator 
 		c.getCoordinatorTransactionState,
 		func(ctx context.Context, nodes ...string) { c.updateEndorserCandidates(ctx, nodes...) },
 		c.engineIntegration,
-		c.refreshBlockHeight,                         
-		func() int64 { return c.currentBlockHeight }, 
+		c.refreshBlockHeight,
+		func() int64 { return c.currentBlockHeight },
 		c.blockHeightTolerance,
 		c.syncPoints,
 		c.components,
@@ -553,6 +553,10 @@ func (c *coordinator) cleanUpTransaction(ctx context.Context, txID uuid.UUID) {
 		c.metrics.DecCoordinatingTransactions()
 		c.grapher.ForgetTransactionAndLocks(ctx, txID)
 		c.dependencyTracker.Delete(ctx, txID)
+		// TODO: this is a workaround until https://github.com/LFDT-Paladin/paladin/issues/1247 is resolved.
+		// The domain context is still holding onto the transaction locks even though it is no longer
+		// responsible for them when running in a long-lived mode just for flushing private state data.
+		c.dCtx.ResetTransactions(txID)
 		log.L(ctx).Debugf("transaction %s cleaned up", txID.String())
 	}
 }

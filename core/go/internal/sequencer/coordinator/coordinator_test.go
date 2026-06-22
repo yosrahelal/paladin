@@ -48,26 +48,24 @@ func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 	// At each stage, we inspect the state of the coordinator by checking the snapshot it produces on heartbeat messages
 
 	originator := "sender@senderNode"
-	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	})
-	builder.GetDomainAPI().On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		tx := args.Get(2).(*components.PrivateTransaction)
-		tx.PreparedPrivateTransaction = &pldapi.TransactionInput{}
-	}).Return(nil).Once()
-	builder.GetSequencerManager().On("BuildNullifiers", mock.Anything, mock.Anything).Return(nil, nil).Once()
+	builder := NewCoordinatorBuilderForTesting(t, State_Idle).CurrentActiveCoordinator("node1")
 	config := builder.GetSequencerConfig()
 	config.MaxDispatchAhead = confutil.P(-1) // Stop the dispatcher loop from progressing states - we're manually updating state throughout the test
 	builder.OverrideSequencerConfig(config)
-	builder.CurrentActiveCoordinator("node1")
 	c, mocks := builder.Build()
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
 	mocks.EngineIntegration.On("WriteStatesForTransaction", mock.Anything, mock.Anything).Return(nil)
 	mocks.EngineIntegration.On("MapPotentialStates", mock.Anything, mock.Anything, mock.Anything).Return(([]*components.StateUpsert)(nil), nil)
+	mocks.SequencerManager.On("BuildNullifiers", mock.Anything, mock.Anything).Return(nil, nil).Once()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
+	})
+	mocks.DomainAPI.On("PrepareTransaction", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		tx := args.Get(2).(*components.PrivateTransaction)
+		tx.PreparedPrivateTransaction = &pldapi.TransactionInput{}
+	}).Return(nil).Once()
+
 	ctx, cancel := context.WithCancel(t.Context())
 	require.NoError(t, c.Start(ctx))
 	defer func() {
@@ -263,13 +261,11 @@ func TestCoordinator_MaxInflightTransactions(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	config := builder.GetSequencerConfig()
 	config.MaxInflightTransactions = confutil.P(5)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+	c, mocks := builder.Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	c, _ := builder.Build()
 
 	// Start by simulating the originator and delegate a transaction to the coordinator
 	for i := range 100 {

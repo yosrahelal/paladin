@@ -25,7 +25,6 @@ import (
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/common"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/coordinator/transaction"
 	"github.com/LFDT-Paladin/paladin/core/internal/sequencer/testutil"
-	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/coordinatortransactionmocks"
 	"github.com/LFDT-Paladin/paladin/toolkit/pkg/prototk"
 	"github.com/google/uuid"
@@ -64,16 +63,11 @@ func Test_addToDelegatedTransactions_AddsTransactionInPreDispatchFlowState(t *te
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+	c, mocks := builder.Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
 	txn := transactionBuilder.BuildSparse()
 
@@ -94,16 +88,11 @@ func Test_addToDelegatedTransactions_AddsTransactionInPooledFlowState(t *testing
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+	c, mocks := builder.Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
 	txn := transactionBuilder.BuildSparse()
 
@@ -121,16 +110,11 @@ func Test_addToDelegatedTransactions_DuplicateTransaction_SkipsAndReturnsNoError
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+	c, mocks := builder.Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
 	transactionBuilder := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1)
 	txn := transactionBuilder.BuildSparse()
 
@@ -259,7 +243,8 @@ func Test_action_CleanUpTransaction_RemovesFromMap(t *testing.T) {
 	txID := uuid.New()
 	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	txn.EXPECT().GetID().Return(txID)
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	err := action_CleanUpTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
 		ToState:       transaction.State_Final,
@@ -273,7 +258,8 @@ func Test_action_CleanUpTransaction_RemovesFromPool(t *testing.T) {
 	txID := uuid.New()
 	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	txn.EXPECT().GetID().Return(txID)
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	c.addTransactionToBackOfPool(txn)
 	require.Len(t, c.pooledTransactions, 1)
 	err := action_CleanUpTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
@@ -322,7 +308,8 @@ func Test_action_CleanUpTransaction_GrapherForgetError_LogsButReturnsNil(t *test
 	txn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	txn.EXPECT().GetID().Return(txID)
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txn).Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	err := action_CleanUpTransaction(t.Context(), c, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
 		ToState:       transaction.State_Final,
@@ -442,15 +429,12 @@ func Test_addToDelegatedTransactions_WhenMaxInflightReached_ReturnsError(t *test
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	config := builder.GetSequencerConfig()
 	config.MaxInflightTransactions = confutil.P(1)
-	config.MaxDispatchAhead = confutil.P(-1)
 	builder.OverrideSequencerConfig(config)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+	c, mocks := builder.Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	c, _ := builder.Build()
 	txn1 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 	txn2 := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 
@@ -506,17 +490,14 @@ func Test_addToDelegatedTransactions_MaxInflightThree_SlidingWindowKeepsOrder(t 
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	})
 	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
 	config.MaxInflightTransactions = confutil.P(3)
 	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
+	c, mocks := builder.Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
+		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
+	})
 	txns := make([]*components.PrivateTransaction, 10)
 	for i := range txns {
 		txns[i] = testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
@@ -550,16 +531,11 @@ func Test_addToDelegatedTransactions_HandleEventError_ContinuesAndReturnsNoError
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+	c, mocks := builder.Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 	txn.PreAssembly = nil // Triggers error in action_InitializeForNewAssembly when transitioning to Pooled
 
@@ -573,16 +549,11 @@ func Test_addToDelegatedTransactions_SendDelegationResponseError_ReturnsError(t 
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+	c, mocks := builder.WithMockTransportWriter().Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
-	c, mocks := builder.WithMockTransportWriter().Build()
 	mocks.TransportWriter.On("SendDelegationResponse", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("send ack failed"))
 
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
@@ -655,16 +626,11 @@ func Test_addToDelegatedTransactions_PreviousTransactionInPreAssemblyState_Estab
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+	c, mocks := builder.Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
 	// Create a mock previous transaction in State_Pooled
 	mockPreviousTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	previousTxnID := uuid.New()
@@ -690,16 +656,11 @@ func Test_addToDelegatedTransactions_PreviousTransactionInPreAssemblyState_DoesN
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+	c, mocks := builder.Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
 	// Create a mock previous transaction in State_Pooled.
 	mockPreviousTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	previousTxnID := uuid.New()
@@ -724,15 +685,6 @@ func Test_addToDelegatedTransactions_MockTransactionHandleEventReturnsError(t *t
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("").Maybe()
-	builder.GetDomainAPI().On("Domain").Return(mockDomain).Maybe()
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	}).Maybe()
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
 	c, _ := builder.Build()
 	txn := testutil.NewPrivateTransactionBuilderForTesting().Address(builder.GetContractAddress()).Originator(originator).NumberOfRequiredEndorsers(1).BuildSparse()
 
@@ -761,15 +713,6 @@ func Test_addToDelegatedTransactions_SubsequentTransactionGetsPreviousTransactio
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("").Maybe()
-	builder.GetDomainAPI().On("Domain").Return(mockDomain).Maybe()
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	}).Maybe()
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
 
 	firstTxnError := fmt.Errorf("first transaction handle event failed")
 	mockTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
@@ -808,15 +751,6 @@ func Test_addToDelegatedTransactions_ErrorStopsSubsequentTransactionsBeingAccept
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("").Maybe()
-	builder.GetDomainAPI().On("Domain").Return(mockDomain).Maybe()
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	}).Maybe()
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
 
 	fifthErr := fmt.Errorf("fifth transaction HandleEvent failed")
 	c, mocks := builder.WithMockTransportWriter().Build()
@@ -873,15 +807,6 @@ func Test_addToDelegatedTransactions_FifthFailsThenFullRetry_PreservesFirstFourA
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("").Maybe()
-	builder.GetDomainAPI().On("Domain").Return(mockDomain).Maybe()
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
-		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
-	}).Maybe()
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
 
 	fifthErr := fmt.Errorf("fifth transaction HandleEvent failed")
 
@@ -1011,16 +936,11 @@ func Test_addToDelegatedTransactions_PreviousTransactionNotInPreAssemblyState_No
 	ctx := t.Context()
 	originator := "sender@senderNode"
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
-	mockDomain := componentsmocks.NewDomain(t)
-	mockDomain.On("FixedSigningIdentity").Return("")
-	builder.GetDomainAPI().On("Domain").Return(mockDomain)
-	builder.GetDomainAPI().On("ContractConfig").Return(&prototk.ContractConfig{
+	c, mocks := builder.Build()
+	mocks.Domain.On("FixedSigningIdentity").Return("")
+	mocks.DomainAPI.On("ContractConfig").Return(&prototk.ContractConfig{
 		CoordinatorSelection: prototk.ContractConfig_COORDINATOR_SENDER,
 	})
-	config := builder.GetSequencerConfig()
-	config.MaxDispatchAhead = confutil.P(-1)
-	builder.OverrideSequencerConfig(config)
-	c, _ := builder.Build()
 	// Create a mock previous transaction in State_Assembling (not a pre-assembly state)
 	mockPreviousTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	previousTxnID := uuid.New()
@@ -1049,7 +969,8 @@ func Test_action_CleanUpTransactionsNotYetDispatched_DrainsPendingDispatchQueueI
 	txPooled.EXPECT().GetID().Return(idPooled)
 	txPooled.EXPECT().GetCurrentState().Return(transaction.State_Pooled)
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txPooled).Build()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txPooled).Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 
 	// Pre-populate the dispatch queue with a transaction reference to exercise the drain path.
 	c.dispatchQueue <- txPooled
@@ -1077,7 +998,9 @@ func Test_action_CleanUpTransactionsNotYetDispatched_RemovesNonDispatchedTransac
 	txConfirmed.EXPECT().GetID().Return(idConfirmed)
 	txConfirmed.EXPECT().GetCurrentState().Return(transaction.State_Confirmed)
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txPooled, txAssembling, txConfirmed).Build()
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Idle).Transactions(txPooled, txAssembling, txConfirmed).Build()
+	// cleanUpTransaction is called once for each non-dispatched, non-confirmed transaction (Pooled + Assembling).
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Times(2)
 
 	err := action_CleanUpTransactionsNotYetDispatched(ctx, c, nil)
 	require.NoError(t, err)
