@@ -839,8 +839,10 @@ func (pr *perfRunner) runLoop(tc testsuite.TestCase, workerID int, actionsPerLoo
 				actionCount := actionsCompleted
 				pendingActions++
 				go func() {
-					transactionID, err := tc.RunOnce(actionCount)
-					log.Debugf("%d --> %s action %d sent after %f seconds", workerID, testName, actionCount, time.Since(startTime).Seconds())
+				transactionID, err := tc.RunOnce(actionCount)
+				if err == nil {
+					log.Infof("%d --> %s action %d submitted transaction %s after %f seconds", workerID, testName, actionCount, transactionID, time.Since(startTime).Seconds())
+				}
 					actionResponses <- &ActionResponse{
 						transactionID: transactionID,
 						err:           err,

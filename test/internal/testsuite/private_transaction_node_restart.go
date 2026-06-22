@@ -545,6 +545,5 @@ func (tc *privateTransactionNodeRestart) RunOnce(iterationCount int) (string, er
 
 	tc.submittedTxIDs[nodeIndex].Store(txID, struct{}{})
 	tc.txIDToNode.Store(txID, nodeIndex)
-	log.Debugf("Worker %d sent pente transaction %s to node %d", tc.workerID, txID, nodeIndex)
 	return txID, nil
 }
