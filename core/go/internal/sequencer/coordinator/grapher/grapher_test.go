@@ -847,6 +847,65 @@ func TestImportStatesAndLocks_ExistingOutputStatePreserved(t *testing.T) {
 	assert.Empty(t, node2States, "node2 must not see the state — import was skipped")
 }
 
+func TestExportStatesAndLocks_SpendLockSuppressesPrivateStateData(t *testing.T) {
+	ctx := t.Context()
+	g := testGrapherUnlocked(t)
+	minterTx := uuid.New()
+	spenderTx := uuid.New()
+	createdBy := uuid.New()
+	stateID := pldtypes.MustParseHexBytes("0x" + strings.Repeat("a9", 32))
+	schema := pldtypes.MustParseBytes32("0x" + strings.Repeat("b9", 32))
+	state := &components.FullState{ID: stateID, Schema: schema, Data: pldtypes.RawJSON(`{"v":42}`)}
+
+	// Minter assembles: create lock + private state data visible to "node1".
+	require.NoError(t, g.AddMinter(ctx, []*components.FullState{state}, minterTx))
+	g.stateVisibilityTracker.ImportIfAbsent(stateID.String(), &statevisibilitytracker.OutputState{
+		StateUpsert:  components.StateUpsert{ID: stateID, Schema: schema, Data: state.Data},
+		AllowedNodes: []string{"node1"},
+	})
+	g.LockMintsOnCreate(ctx,
+		[]*components.StateUpsert{{ID: stateID, CreatedBy: &createdBy}},
+		[]*components.FullState{{ID: stateID}},
+		minterTx,
+	)
+
+	// Before the spend lock: state data must be visible to node1.
+	data, err := g.ExportStatesAndLocks(ctx, "node1")
+	require.NoError(t, err)
+	require.Len(t, data.OutputState, 1, "state must be visible before spend lock is added")
+	assert.True(t, data.OutputState[0].ID.Equals(stateID))
+
+	// Spender assembles: spend lock added for the same state.
+	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{}, []*components.FullState{state}, spenderTx)
+
+	// After spend lock: private state data must be suppressed for node1 — state is consumed.
+	data, err = g.ExportStatesAndLocks(ctx, "node1")
+	require.NoError(t, err)
+	assert.Empty(t, data.OutputState, "state data must be suppressed while a spend lock exists")
+
+	// Spend lock itself must still be exported so assemblers know the state is locked.
+	var foundSpend, foundCreate bool
+	for _, lock := range data.LockedState {
+		if lock.State.Equals(stateID) {
+			switch lock.Type.V() {
+			case pldapi.StateLockTypeSpend:
+				foundSpend = true
+			case pldapi.StateLockTypeCreate:
+				foundCreate = true
+			}
+		}
+	}
+	assert.True(t, foundSpend, "spend lock must still appear in LockedState")
+	assert.True(t, foundCreate, "create lock must still appear in LockedState")
+
+	// Spender reverts: spend lock removed → state data becomes visible again.
+	g.ForgetTransactionAndLocks(ctx, spenderTx)
+	data, err = g.ExportStatesAndLocks(ctx, "node1")
+	require.NoError(t, err)
+	require.Len(t, data.OutputState, 1, "state must become visible again after spend lock is removed")
+	assert.True(t, data.OutputState[0].ID.Equals(stateID))
+}
+
 func TestAddMinter_DuplicateStateIDWithinOneCall_ReturnsError(t *testing.T) {
 	ctx := t.Context()
 	txID := uuid.New()

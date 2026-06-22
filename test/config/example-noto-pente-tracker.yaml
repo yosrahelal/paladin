@@ -16,6 +16,6 @@ instances:
     maxSubmissionsPerSecond: 10
     completionTimeout: 5m
     maxActions: 500
-    length: 5m
+    length: 2m
 logLevel: info
 logEvents: false

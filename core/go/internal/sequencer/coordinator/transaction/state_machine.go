@@ -104,14 +104,14 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
 					Transitions: []Transition{
-					{
-						To:  State_Reverted,
-						If:  guard_HasRevertedChainedDependency,
-						Actions: []ActionRule{
-							{Action: action_FinalizeOnRevertedChainedDependencyAtCreation},
-							{Action: action_NotifyOriginatorOfChainedDependencyFailureAtCreation},
+						{
+							To: State_Reverted,
+							If: guard_HasRevertedChainedDependency,
+							Actions: []ActionRule{
+								{Action: action_FinalizeOnRevertedChainedDependencyAtCreation},
+								{Action: action_NotifyOriginatorOfChainedDependencyFailureAtCreation},
+							},
 						},
-					},
 						{
 							To: State_Evicted,
 							If: guard_HasEvictedChainedDependency,
@@ -156,6 +156,25 @@ var stateDefinitionsMap = StateDefinitions{
 							If: statemachine.GuardNot(guard_HasUnassembledDependencies),
 						},
 					},
+				}},
+			},
+			// A chained dependency has reset or been confirmed reverted while this transaction
+			// is still waiting to be assembled
+			Event_DependencyReset: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsChainedDependency,
+					Actions:   []ActionRule{{Action: action_MarkChainedDependencyUnassembled}},
+					// No state transition — already in the correct waiting state.
+				}},
+			},
+			Event_DependencyConfirmedReverted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Validator: validator_IsChainedDependency,
+					Actions:   []ActionRule{{Action: action_MarkChainedDependencyUnassembled}},
+					// No state transition — ChainedDependencyFailed will follow for non-retryable
+					// reverts and handle the cascade finalization via the existing handler below.
 				}},
 			},
 			// The pre-assemble predecessor reached a terminal state — sever the FIFO link

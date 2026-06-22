@@ -112,13 +112,27 @@ func (m *mergedSubscription) Unsubscribe(ctx context.Context) rpcclient.ErrorRPC
 	return lastErr
 }
 
+// nodeAndTxID carries a completed txID together with the index of the node it was submitted to.
+type nodeAndTxID struct {
+	txID      string
+	nodeIndex int
+}
+
 type privateTransactionNodeRestartSuite struct {
 	ctx             context.Context
 	runner          Runner
 	privacyGroupID  *pldtypes.HexBytes
 	contractAddress *pldtypes.EthAddress
 	sub             rpcclient.Subscription
-	submittedTxIDs  []*sync.Map // one entry per node, indexed by position in GetNodes()
+	// submittedTxIDs holds txID→struct{} per node. Entries are deleted when
+	// OnReceiptBatch processes them; remaining entries at PostRun time are
+	// transactions that never received a completion (e.g. in-flight at test end).
+	submittedTxIDs []*sync.Map // one entry per node, indexed by position in GetNodes()
+	// txIDToNode provides O(1) reverse lookup: txID → nodeIndex.
+	txIDToNode sync.Map
+
+	resultsMu sync.Mutex
+	failures  []string
 }
 
 const privateTxRetryAttempts = 5
@@ -305,6 +319,61 @@ func (s *privateTransactionNodeRestartSuite) Subscribe() (rpcclient.Subscription
 	return merged, nil
 }
 
+// OnReceiptBatch is called by the runner every N completions. It resolves the originating
+// node for each txID, validates the receipt, and records failures. Concurrent calls are
+// safe via resultsMu and sync.Map.
+func (s *privateTransactionNodeRestartSuite) OnReceiptBatch(txIDs []string) {
+	entries := make([]nodeAndTxID, 0, len(txIDs))
+	for _, id := range txIDs {
+		v, ok := s.txIDToNode.LoadAndDelete(id)
+		if !ok {
+			continue
+		}
+		nodeIndex := v.(int)
+		s.submittedTxIDs[nodeIndex].Delete(id)
+		entries = append(entries, nodeAndTxID{txID: id, nodeIndex: nodeIndex})
+	}
+	if len(entries) > 0 {
+		s.checkBatch(entries)
+	}
+}
+
+func (s *privateTransactionNodeRestartSuite) checkBatch(entries []nodeAndTxID) {
+	nodes := s.runner.GetNodes()
+	var batchFailures []string
+	for _, entry := range entries {
+		if entry.nodeIndex < 0 || entry.nodeIndex >= len(nodes) {
+			batchFailures = append(batchFailures, fmt.Sprintf("tx %s: invalid node index %d", entry.txID, entry.nodeIndex))
+			continue
+		}
+		txID := uuid.MustParse(entry.txID)
+		node := nodes[entry.nodeIndex]
+		r, err := node.HTTPClient.PTX().GetTransactionReceipt(s.ctx, txID)
+		if err != nil {
+			batchFailures = append(batchFailures, fmt.Sprintf("tx %s: error querying receipt on node %s: %v",
+				entry.txID, node.Config.Name, err))
+			continue
+		}
+		if r == nil {
+			batchFailures = append(batchFailures, fmt.Sprintf("tx %s: no receipt found on node %s",
+				entry.txID, node.Config.Name))
+			continue
+		}
+		if !r.Success {
+			batchFailures = append(batchFailures, fmt.Sprintf("tx %s failed on node %s: %s",
+				entry.txID, node.Config.Name, r.FailureMessage))
+		}
+	}
+
+	log.Infof("privateTransactionNodeRestartSuite: rolling check batch=%d failures=%d", len(entries), len(batchFailures))
+
+	if len(batchFailures) > 0 {
+		s.resultsMu.Lock()
+		s.failures = append(s.failures, batchFailures...)
+		s.resultsMu.Unlock()
+	}
+}
+
 func (s *privateTransactionNodeRestartSuite) Unsubscribe() {
 	if s.sub != nil {
 		if err := s.sub.Unsubscribe(s.ctx); err != nil {
@@ -328,38 +397,52 @@ func (s *privateTransactionNodeRestartSuite) Cleanup() {
 }
 
 func (s *privateTransactionNodeRestartSuite) NewWorker(startTime int64, workerID int) TestCase {
-	return newPrivateTransactionNodeRestartTestWorker(s.ctx, startTime, workerID, s.privacyGroupID, s.contractAddress, s.runner, s.submittedTxIDs)
+	return newPrivateTransactionNodeRestartTestWorker(s.ctx, startTime, workerID, s.privacyGroupID, s.contractAddress, s.runner, s.submittedTxIDs, &s.txIDToNode)
 }
 
 func (s *privateTransactionNodeRestartSuite) PostRun() error {
+	// Check any txIDs that were submitted but never received a completion notification —
+	// e.g. transactions still in-flight when the node kill/restart test ended.
 	nodes := s.runner.GetNodes()
-	var failures []string
-
-	for i, node := range nodes {
-		s.submittedTxIDs[i].Range(func(key, _ any) bool {
+	for i, nodeMap := range s.submittedTxIDs {
+		if i >= len(nodes) {
+			break
+		}
+		node := nodes[i]
+		nodeMap.Range(func(key, _ any) bool {
 			txID := uuid.MustParse(key.(string))
-
 			r, err := node.HTTPClient.PTX().GetTransactionReceipt(s.ctx, txID)
 			if err != nil {
-				failures = append(failures, fmt.Sprintf("tx %s: error querying receipt on node %s: %v",
+				s.resultsMu.Lock()
+				s.failures = append(s.failures, fmt.Sprintf("tx %s: error querying receipt on node %s: %v",
 					txID, node.Config.Name, err))
+				s.resultsMu.Unlock()
 				return true
 			}
 			if r == nil {
-				failures = append(failures, fmt.Sprintf("tx %s: no receipt found on node %s",
+				s.resultsMu.Lock()
+				s.failures = append(s.failures, fmt.Sprintf("tx %s: no receipt found on node %s",
 					txID, node.Config.Name))
+				s.resultsMu.Unlock()
 				return true
 			}
 			if !r.Success {
-				failures = append(failures, fmt.Sprintf("tx %s failed on node %s: %s",
+				s.resultsMu.Lock()
+				s.failures = append(s.failures, fmt.Sprintf("tx %s failed on node %s: %s",
 					txID, node.Config.Name, r.FailureMessage))
+				s.resultsMu.Unlock()
 			}
 			return true
 		})
 	}
 
-	if len(failures) > 0 {
-		return fmt.Errorf("%d transaction(s) failed:\n%s", len(failures), strings.Join(failures, "\n"))
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+
+	log.Infof("privateTransactionNodeRestartSuite: post-run complete, total failures=%d", len(s.failures))
+
+	if len(s.failures) > 0 {
+		return fmt.Errorf("%d transaction(s) failed:\n%s", len(s.failures), strings.Join(s.failures, "\n"))
 	}
 	return nil
 }
@@ -370,10 +453,11 @@ type privateTransactionNodeRestart struct {
 	contractAddress *pldtypes.EthAddress
 	runner          Runner
 	random          *rand.Rand
-	submittedTxIDs  []*sync.Map // indexed by node position, shared with suite for PostRun
+	submittedTxIDs  []*sync.Map // indexed by node position, shared with suite
+	txIDToNode      *sync.Map   // shared with suite for O(1) reverse lookup
 }
 
-func newPrivateTransactionNodeRestartTestWorker(ctx context.Context, startTime int64, workerID int, privacyGroupID *pldtypes.HexBytes, contractAddress *pldtypes.EthAddress, runner Runner, submittedTxIDs []*sync.Map) TestCase {
+func newPrivateTransactionNodeRestartTestWorker(ctx context.Context, startTime int64, workerID int, privacyGroupID *pldtypes.HexBytes, contractAddress *pldtypes.EthAddress, runner Runner, submittedTxIDs []*sync.Map, txIDToNode *sync.Map) TestCase {
 	return &privateTransactionNodeRestart{
 		testBase: testBase{
 			ctx:       ctx,
@@ -385,6 +469,7 @@ func newPrivateTransactionNodeRestartTestWorker(ctx context.Context, startTime i
 		runner:          runner,
 		random:          rand.New(rand.NewSource(time.Now().UnixNano() + int64(workerID))),
 		submittedTxIDs:  submittedTxIDs,
+		txIDToNode:      txIDToNode,
 	}
 }
 
@@ -459,6 +544,6 @@ func (tc *privateTransactionNodeRestart) RunOnce(iterationCount int) (string, er
 	}
 
 	tc.submittedTxIDs[nodeIndex].Store(txID, struct{}{})
-	log.Debugf("Worker %d sent pente transaction %s to node %d", tc.workerID, txID, nodeIndex)
+	tc.txIDToNode.Store(txID, nodeIndex)
 	return txID, nil
 }

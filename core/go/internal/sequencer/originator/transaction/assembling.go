@@ -69,6 +69,14 @@ func action_AssembleError(ctx context.Context, t *originatorTransaction, event c
 	return nil
 }
 
+func action_CancelCurrentAssembly(_ context.Context, txn *originatorTransaction, _ common.Event) error {
+	if txn.cancelCurrentAssembly != nil {
+		txn.cancelCurrentAssembly()
+		txn.cancelCurrentAssembly = nil
+	}
+	return nil
+}
+
 // action_AssembleAndSign spawns a background goroutine to perform the domain-level
 // assembly work and queue the result event back to the originator. This keeps the
 // transaction event loop unblocked while allowing the potentially slow AssembleAndSign

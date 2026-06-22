@@ -35,6 +35,7 @@ type RunnerConfig struct {
 	MaxSubmissionsPerSecond int
 	CompletionTimeout       time.Duration
 	NoWaitSubmission        bool
+	RollingCheckBatchSize   int
 	NodeKillConfig          *NodeKillConfig
 	Diagnostics             *DiagnosticsConfig
 	Nodes                   []NodeConfig
@@ -51,14 +52,15 @@ type PerformanceTestConfig struct {
 }
 
 type InstanceConfig struct {
-	Name                    string          `json:"name" yaml:"name"`
-	Test                    TestCaseConfig  `json:"test" yaml:"test"`
-	Length                  time.Duration   `json:"length" yaml:"length"`
-	MaxActions              int64           `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
-	RampLength              time.Duration   `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
-	MaxSubmissionsPerSecond int             `json:"maxSubmissionsPerSecond" yaml:"maxSubmissionsPerSecond"`
-	CompletionTimeout       time.Duration   `json:"completionTimeout,omitempty" yaml:"completionTimeout,omitempty"`
+	Name                    string             `json:"name" yaml:"name"`
+	Test                    TestCaseConfig     `json:"test" yaml:"test"`
+	Length                  time.Duration      `json:"length" yaml:"length"`
+	MaxActions              int64              `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
+	RampLength              time.Duration      `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
+	MaxSubmissionsPerSecond int                `json:"maxSubmissionsPerSecond" yaml:"maxSubmissionsPerSecond"`
+	CompletionTimeout       time.Duration      `json:"completionTimeout,omitempty" yaml:"completionTimeout,omitempty"`
 	NoWaitSubmission        bool               `json:"noWaitSubmission,omitempty" yaml:"noWaitSubmission,omitempty"`
+	RollingCheckBatchSize   int                `json:"rollingCheckBatchSize,omitempty" yaml:"rollingCheckBatchSize,omitempty"`
 	NodeKillConfig          *NodeKillConfig    `json:"nodeKillConfig,omitempty" yaml:"nodeKillConfig,omitempty"`
 	Diagnostics             *DiagnosticsConfig `json:"diagnostics,omitempty" yaml:"diagnostics,omitempty"`
 }
@@ -86,7 +88,7 @@ type NodeConfig struct {
 	HTTPEndpoint     string                  `json:"httpEndpoint" yaml:"httpEndpoint"`
 	WSEndpoint       string                  `json:"wsEndpoint" yaml:"wsEndpoint"`
 	MetricsEndpoint  string                  `json:"metricsEndpoint,omitempty" yaml:"metricsEndpoint,omitempty"`
-	DebugPortForward *DebugPortForwardConfig  `json:"debugPortForward,omitempty" yaml:"debugPortForward,omitempty"`
+	DebugPortForward *DebugPortForwardConfig `json:"debugPortForward,omitempty" yaml:"debugPortForward,omitempty"`
 }
 
 // DiagnosticsConfig enables periodic collection of Paladin node metrics.

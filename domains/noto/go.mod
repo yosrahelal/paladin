@@ -21,6 +21,7 @@ require (
 	github.com/dchest/blake512 v1.0.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/hyperledger/firefly-common v1.5.9 // indirect
 	github.com/iden3/go-iden3-crypto v0.0.17 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
