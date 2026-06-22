@@ -138,6 +138,7 @@ func Test_DependencyConfirmedReverted_ChainedDependency_AllStates(t *testing.T) 
 		fromState State
 		toState   State
 	}{
+		{State_PreAssembly_Blocked, State_PreAssembly_Blocked},
 		{State_Pooled, State_PreAssembly_Blocked},
 		{State_Assembling, State_PreAssembly_Blocked},
 		{State_Endorsement_Gathering, State_PreAssembly_Blocked},
@@ -174,6 +175,7 @@ func Test_DependencyReset_ChainedDependency_AllStates(t *testing.T) {
 		fromState State
 		toState   State
 	}{
+		{State_PreAssembly_Blocked, State_PreAssembly_Blocked},
 		{State_Pooled, State_PreAssembly_Blocked},
 		{State_Assembling, State_PreAssembly_Blocked},
 		{State_Endorsement_Gathering, State_PreAssembly_Blocked},
@@ -401,6 +403,47 @@ func TestCoordinatorTransaction_PreAssemblyBlocked_ToPooled_OnPreAssembleDepende
 	require.NoError(t, err)
 	assert.Equal(t, State_Pooled, txn.GetCurrentState())
 }
+
+func TestCoordinatorTransaction_PreAssemblyBlocked_StaysBlocked_OnPreAssembleDependencyTerminated_WhenChainedDepWasReset(t *testing.T) {
+	// A chained dependency that was marked "assembled" in a previous cycle must be
+	// reset to "unassembled" when a DependencyReset arrives in State_PreAssembly_Blocked.
+	ctx := context.Background()
+	depTracker := dependencytracker.NewDependencyTracker()
+	chainedDepID := uuid.New()
+	predecessorID := uuid.New()
+
+	txn, _ := NewTransactionBuilderForTesting(t, State_PreAssembly_Blocked).
+		ChainedDependencies(chainedDepID).
+		DependencyTracker(depTracker).
+		Build()
+	depTracker.GetPreassemblyDeps().AddPrerequisite(ctx, txn.pt.ID, predecessorID)
+
+	// Simulate the chained dependency having been selected for assembly in a previous cycle:
+	// AddPrerequisites records the dependency link
+	depTracker.GetChainedDeps().AddPrerequisites(ctx, txn.pt.ID, chainedDepID)
+	depTracker.GetChainedDeps().DeleteUnassembledDependencies(ctx, txn.pt.ID, chainedDepID)
+	assert.Empty(t, depTracker.GetChainedDeps().GetUnassembledDependencies(ctx, txn.pt.ID))
+
+	// The chained dep resets (e.g. confirmed-reverted and retrying). The handler must
+	// re-mark it as unassembled and leave the transaction in PreAssembly_Blocked.
+	err := txn.HandleEvent(ctx, &DependencyResetEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+		SourceTransactionID:  chainedDepID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_PreAssembly_Blocked, txn.GetCurrentState())
+	assert.Contains(t, depTracker.GetChainedDeps().GetUnassembledDependencies(ctx, txn.pt.ID), chainedDepID)
+
+	// The FIFO pre-assembly prereq terminates. Because the chained dep is unassembled,
+	// guard_HasUnassembledDependencies still returns true and the transaction must NOT
+	// advance to Pooled.
+	err = txn.HandleEvent(ctx, &PreAssembleDependencyTerminatedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.GetID()},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, State_PreAssembly_Blocked, txn.GetCurrentState())
+}
+
 func TestCoordinatorTransaction_Pooled_ToAssembling_OnSelected(t *testing.T) {
 	ctx := context.Background()
 
