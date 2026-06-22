@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	nototypes "github.com/LFDT-Paladin/paladin/test/internal/contracts"
@@ -39,7 +38,6 @@ import (
 )
 
 const notoTransferDefaultListenerName = "nototransferlistener"
-const notoTransferDefaultPostRunPageSize = 500
 const notoTransferDefaultInitialMintAmount = int64(1000000)
 const notoTransferDefaultNotoCount = 1
 
@@ -60,23 +58,21 @@ type notoInstance struct {
 }
 
 type notoTransferSuite struct {
-	ctx             context.Context
-	runner          Runner
-	notos           []notoInstance // one entry per deployed Noto instance
-	notoCount       int
-	recipients      []string // one per configured node: "recipient@<nodeName>"
-	listenerName    string
-	postRunPageSize int
+	ctx               context.Context
+	runner            Runner
+	notos             []notoInstance // one entry per deployed Noto instance
+	notoCount         int
+	recipients        []string // one per configured node: "recipient@<nodeName>"
+	listenerName      string
 	initialMintAmount int64
-	trackMu         sync.Mutex
-	txIDs           []string
-	sub             rpcclient.Subscription
-	submissions     atomic.Int64
+	sub               rpcclient.Subscription
+
+	resultsMu sync.Mutex
+	failures  []string
 }
 
 type notoTransferOptions struct {
 	ListenerName      *string `json:"listenerName"`
-	PostRunPageSize   *int    `json:"postRunPageSize"`
 	InitialMintAmount *int64  `json:"initialMintAmount"`
 	NotoCount         *int    `json:"notoCount"`
 }
@@ -97,16 +93,9 @@ func (s *notoTransferSuite) parseOptions(options map[string]any) error {
 		}
 	}
 	s.listenerName = confutil.StringNotEmpty(input.ListenerName, notoTransferDefaultListenerName)
-	s.postRunPageSize = confutil.IntMin(input.PostRunPageSize, 1, notoTransferDefaultPostRunPageSize)
 	s.initialMintAmount = confutil.Int64Min(input.InitialMintAmount, 1, notoTransferDefaultInitialMintAmount)
 	s.notoCount = confutil.IntMin(input.NotoCount, 1, notoTransferDefaultNotoCount)
 	return nil
-}
-
-func (s *notoTransferSuite) trackTransaction(txID string) {
-	s.trackMu.Lock()
-	defer s.trackMu.Unlock()
-	s.txIDs = append(s.txIDs, txID)
 }
 
 func (s *notoTransferSuite) Setup() error {
@@ -243,6 +232,38 @@ func (s *notoTransferSuite) Subscribe() (rpcclient.Subscription, error) {
 	return sub, nil
 }
 
+// OnReceiptBatch is called by the runner every N completions. It validates each txID
+// and records any failures. Concurrent calls are safe via resultsMu.
+func (s *notoTransferSuite) OnReceiptBatch(ids []string) {
+	nodes := s.runner.GetNodes()
+	client := nodes[0].HTTPClient
+
+	var batchFailures []string
+	for _, txID := range ids {
+		parsedID, err := uuid.Parse(txID)
+		if err != nil {
+			batchFailures = append(batchFailures, fmt.Sprintf("tx %s has invalid UUID: %v", txID, err))
+			continue
+		}
+		receipt, err := client.PTX().GetTransactionReceiptFull(s.ctx, parsedID)
+		if err != nil || receipt == nil {
+			batchFailures = append(batchFailures, fmt.Sprintf("tx %s failed to fetch receipt: %v", txID, err))
+			continue
+		}
+		if !receipt.Success {
+			batchFailures = append(batchFailures, fmt.Sprintf("tx %s expected success but failed: %s", txID, receipt.FailureMessage))
+		}
+	}
+
+	log.Infof("notoTransferSuite: rolling check batch=%d failures=%d", len(ids), len(batchFailures))
+
+	if len(batchFailures) > 0 {
+		s.resultsMu.Lock()
+		s.failures = append(s.failures, batchFailures...)
+		s.resultsMu.Unlock()
+	}
+}
+
 func (s *notoTransferSuite) Unsubscribe() {
 	if s.sub != nil {
 		if err := s.sub.Unsubscribe(s.ctx); err != nil {
@@ -281,46 +302,13 @@ func (s *notoTransferSuite) NewWorker(startTime int64, workerID int) TestCase {
 }
 
 func (s *notoTransferSuite) PostRun() error {
-	nodes := s.runner.GetNodes()
-	client := nodes[0].HTTPClient
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
 
-	s.trackMu.Lock()
-	txIDs := append([]string{}, s.txIDs...)
-	s.trackMu.Unlock()
+	log.Infof("notoTransferSuite: post-run complete, total failures=%d", len(s.failures))
 
-	totalSubmissions := int(s.submissions.Load())
-	if len(txIDs) != totalSubmissions {
-		return fmt.Errorf("tracked tx count %d does not match submissions %d", len(txIDs), totalSubmissions)
-	}
-
-	failures := make([]string, 0)
-	pageSize := s.postRunPageSize
-	for i := 0; i < len(txIDs); i += pageSize {
-		end := i + pageSize
-		if end > len(txIDs) {
-			end = len(txIDs)
-		}
-		for _, txID := range txIDs[i:end] {
-			parsedID, err := uuid.Parse(txID)
-			if err != nil {
-				failures = append(failures, fmt.Sprintf("tx %s has invalid UUID: %v", txID, err))
-				continue
-			}
-			receipt, err := client.PTX().GetTransactionReceiptFull(s.ctx, parsedID)
-			if err != nil || receipt == nil {
-				failures = append(failures, fmt.Sprintf("tx %s failed to fetch receipt: %v", txID, err))
-				continue
-			}
-			if !receipt.Success {
-				failures = append(failures, fmt.Sprintf("tx %s expected success but failed: %s", txID, receipt.FailureMessage))
-			}
-		}
-	}
-
-	log.Infof("Post-run analysis complete: submissions=%d tracked=%d failures=%d", totalSubmissions, len(txIDs), len(failures))
-
-	if len(failures) > 0 {
-		return fmt.Errorf("post-run validation failures (%d): %s", len(failures), strings.Join(failures, "; "))
+	if len(s.failures) > 0 {
+		return fmt.Errorf("rolling check failures (%d): %s", len(s.failures), strings.Join(s.failures, "; "))
 	}
 	return nil
 }
@@ -366,8 +354,6 @@ func (tc *notoTransferWorker) RunOnce(iterationCount int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to send noto transfer transaction: %w", err)
 	}
-	tc.suite.trackTransaction(txID.String())
-	tc.suite.submissions.Add(1)
 
 	return txID.String(), nil
 }

@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/LFDT-Paladin/paladin/config/pkg/confutil"
@@ -40,7 +39,6 @@ import (
 )
 
 const notoPenteTrackerDefaultListenerName = "notopentetrackerlistener"
-const notoPenteTrackerDefaultPostRunPageSize = 500
 const notoPenteTrackerDefaultInitialMintAmount = int64(1000000)
 
 type notoPenteTrackerSuite struct {
@@ -50,17 +48,15 @@ type notoPenteTrackerSuite struct {
 	notary              string
 	members             []string
 	listenerName        string
-	postRunPageSize     int
 	initialMintAmount   int64
-	trackMu             sync.Mutex
-	txIDs               []string
 	sub                 rpcclient.Subscription
-	submissions         atomic.Int64
+
+	resultsMu sync.Mutex
+	failures  []string
 }
 
 type notoPenteTrackerOptions struct {
 	ListenerName      *string `json:"listenerName"`
-	PostRunPageSize   *int    `json:"postRunPageSize"`
 	InitialMintAmount *int64  `json:"initialMintAmount"`
 }
 
@@ -80,15 +76,8 @@ func (s *notoPenteTrackerSuite) parseOptions(options map[string]any) error {
 		}
 	}
 	s.listenerName = confutil.StringNotEmpty(input.ListenerName, notoPenteTrackerDefaultListenerName)
-	s.postRunPageSize = confutil.IntMin(input.PostRunPageSize, 1, notoPenteTrackerDefaultPostRunPageSize)
 	s.initialMintAmount = confutil.Int64Min(input.InitialMintAmount, 1, notoPenteTrackerDefaultInitialMintAmount)
 	return nil
-}
-
-func (s *notoPenteTrackerSuite) trackTransaction(txID string) {
-	s.trackMu.Lock()
-	defer s.trackMu.Unlock()
-	s.txIDs = append(s.txIDs, txID)
 }
 
 func (s *notoPenteTrackerSuite) Setup() error {
@@ -303,6 +292,42 @@ func (s *notoPenteTrackerSuite) Subscribe() (rpcclient.Subscription, error) {
 	return sub, nil
 }
 
+// OnReceiptBatch is called by the runner every N completions. It queries the receipts
+// for the batch and records any failures. Concurrent calls are safe via resultsMu.
+func (s *notoPenteTrackerSuite) OnReceiptBatch(ids []string) {
+	nodes := s.runner.GetNodes()
+	client := nodes[0].HTTPClient
+
+	queryIDs := make([]any, len(ids))
+	for i, id := range ids {
+		queryIDs[i] = id
+	}
+	qb := query.NewQueryBuilder().In("id", queryIDs).Limit(len(ids))
+	pageReceipts, err := client.PTX().QueryTransactionReceipts(s.ctx, qb.Query())
+
+	var batchFailures []string
+	if err != nil {
+		batchFailures = append(batchFailures, fmt.Sprintf("failed to query receipts for batch of %d: %v", len(ids), err))
+	} else {
+		if len(pageReceipts) != len(ids) {
+			batchFailures = append(batchFailures, fmt.Sprintf("queried %d IDs but got %d receipts", len(ids), len(pageReceipts)))
+		}
+		for _, receipt := range pageReceipts {
+			if !receipt.Success {
+				batchFailures = append(batchFailures, fmt.Sprintf("tx %s expected success but failed: %s", receipt.ID, receipt.FailureMessage))
+			}
+		}
+	}
+
+	log.Infof("notoPenteTrackerSuite: rolling check batch=%d failures=%d", len(ids), len(batchFailures))
+
+	if len(batchFailures) > 0 {
+		s.resultsMu.Lock()
+		s.failures = append(s.failures, batchFailures...)
+		s.resultsMu.Unlock()
+	}
+}
+
 func (s *notoPenteTrackerSuite) Unsubscribe() {
 	if s.sub != nil {
 		if err := s.sub.Unsubscribe(s.ctx); err != nil {
@@ -341,51 +366,13 @@ func (s *notoPenteTrackerSuite) NewWorker(startTime int64, workerID int) TestCas
 }
 
 func (s *notoPenteTrackerSuite) PostRun() error {
-	nodes := s.runner.GetNodes()
-	client := nodes[0].HTTPClient
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
 
-	s.trackMu.Lock()
-	txIDs := append([]string{}, s.txIDs...)
-	s.trackMu.Unlock()
+	log.Infof("notoPenteTrackerSuite: post-run complete, total failures=%d", len(s.failures))
 
-	totalSubmissions := int(s.submissions.Load())
-	if len(txIDs) != totalSubmissions {
-		return fmt.Errorf("tracked tx count %d does not match submissions %d", len(txIDs), totalSubmissions)
-	}
-
-	failures := make([]string, 0)
-	pageSize := s.postRunPageSize
-	for i := 0; i < len(txIDs); i += pageSize {
-		end := i + pageSize
-		if end > len(txIDs) {
-			end = len(txIDs)
-		}
-		page := txIDs[i:end]
-		ids := make([]any, len(page))
-		for j, id := range page {
-			ids[j] = id
-		}
-		qb := query.NewQueryBuilder().In("id", ids).Limit(len(page))
-		pageReceipts, err := client.PTX().QueryTransactionReceipts(s.ctx, qb.Query())
-		if err != nil {
-			failures = append(failures, fmt.Sprintf("failed to query receipts for page %d-%d: %v", i, end, err))
-			continue
-		}
-		if len(pageReceipts) != len(page) {
-			failures = append(failures, fmt.Sprintf("page %d-%d: queried %d IDs but got %d receipts", i, end, len(page), len(pageReceipts)))
-			continue
-		}
-		for _, receipt := range pageReceipts {
-			if !receipt.Success {
-				failures = append(failures, fmt.Sprintf("tx %s expected success but failed: %s", receipt.ID, receipt.FailureMessage))
-			}
-		}
-	}
-
-	log.Infof("Post-run analysis complete: submissions=%d tracked=%d failures=%d", totalSubmissions, len(txIDs), len(failures))
-
-	if len(failures) > 0 {
-		return fmt.Errorf("post-run validation failures (%d): %s", len(failures), strings.Join(failures, "; "))
+	if len(s.failures) > 0 {
+		return fmt.Errorf("rolling check failures (%d): %s", len(s.failures), strings.Join(s.failures, "; "))
 	}
 	return nil
 }
@@ -432,8 +419,6 @@ func (tc *notoPenteTrackerWorker) RunOnce(iterationCount int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to send noto transfer transaction: %w", err)
 	}
-	tc.suite.trackTransaction(txID.String())
-	tc.suite.submissions.Add(1)
 
 	return txID.String(), nil
 }
