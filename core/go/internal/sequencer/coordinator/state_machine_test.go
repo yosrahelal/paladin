@@ -797,11 +797,12 @@ func TestCoordinator_WhenElect_TransactionStateTransition_ToFinal_CleansUpAndSta
 	txID := uuid.New()
 	txFinal.EXPECT().GetID().Return(txID).Maybe()
 	txFinal.EXPECT().GetCurrentState().Return(transaction.State_Final).Maybe()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Elect).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
 		Transactions(txFinal).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 1, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
@@ -1070,11 +1071,12 @@ func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_ConfirmedTransactionsI
 	confirmedTx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 	confirmedTx.EXPECT().GetSnapshot(mock.Anything).Return(&common.SnapshotPooledTransaction{ID: confirmedTxID}, nil, nil).Maybe()
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Prepared).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
 		PooledTransactions(confirmedTx).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 
 	event := &common.HeartbeatReceivedEvent{
 		FromNode: "node2",
@@ -1278,11 +1280,12 @@ func TestCoordinator_WhenPrepared_TransactionStateTransition_ToFinal_CleansUpAnd
 	txID := uuid.New()
 	txFinal.EXPECT().GetID().Return(txID).Maybe()
 	txFinal.EXPECT().GetCurrentState().Return(transaction.State_Final).Maybe()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Prepared).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
 		Transactions(txFinal).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 1, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
@@ -1527,7 +1530,7 @@ func TestCoordinator_WhenActive_HigherPriorityHeartbeat_WithUnconfirmedDispatche
 	pooledTx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 	dispatchedTx, _ := newDispatchedTxMock(t)
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node3"). // node3 is lower priority than node1
 		CurrentActiveCoordinator("node3").
 		EndorserCandidates("node1", "node2", "node3").
@@ -1536,6 +1539,7 @@ func TestCoordinator_WhenActive_HigherPriorityHeartbeat_WithUnconfirmedDispatche
 		Transactions(dispatchedTx).
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 2, len(c.transactionsByID), "pooled and dispatched txns must be registered before event")
 	// node1 sends an Active heartbeat while node3 is coordinating → preemption
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
@@ -1556,7 +1560,7 @@ func TestCoordinator_WhenActive_HigherPriorityHeartbeat_CleansUpPooledAndTransit
 	pooledTx.EXPECT().GetID().Return(pooledTxID).Maybe()
 	pooledTx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node3"). // node3 is lower priority than node1
 		CurrentActiveCoordinator("node3").
 		EndorserCandidates("node1", "node2", "node3").
@@ -1564,6 +1568,7 @@ func TestCoordinator_WhenActive_HigherPriorityHeartbeat_CleansUpPooledAndTransit
 		PooledTransactions(pooledTx).
 		CoordinatorPriorityList("node1", "node2", "node3").
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 1, len(c.transactionsByID), "pooled tx must be registered before event")
 	// node1 sends an Active heartbeat while node3 is coordinating → preemption
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.HeartbeatReceivedEvent{
@@ -1745,11 +1750,12 @@ func TestCoordinator_WhenActive_TransactionStateTransition_ToFinal_CleansUpAndSt
 	txID := uuid.New()
 	txFinal.EXPECT().GetID().Return(txID).Maybe()
 	txFinal.EXPECT().GetCurrentState().Return(transaction.State_Final).Maybe()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
 		Transactions(txFinal).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 1, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
@@ -1765,11 +1771,12 @@ func TestCoordinator_WhenActive_TransactionStateTransition_ToEvicted_CleansUpAnd
 	txID := uuid.New()
 	txEvicted.EXPECT().GetID().Return(txID).Maybe()
 	txEvicted.EXPECT().GetCurrentState().Return(transaction.State_Evicted).Maybe()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Active).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
 		Transactions(txEvicted).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 1, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
@@ -2118,11 +2125,12 @@ func TestCoordinator_WhenActiveFLush_TransactionsDelegated_BlockHeightToleranceE
 func TestCoordinator_WhenActiveFLushCompletesAndStillCurrentCoordinator_TransitionsToActive(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, txID := newDispatchedTxMock(t)
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
 		Transactions(txDispatched).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	event := &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
 		FromState:     transaction.State_Dispatched,
@@ -2183,11 +2191,12 @@ func TestCoordinator_WhenActiveFLush_TransactionStateTransition_ToEvicted_Cleans
 	ctx := t.Context()
 	txDispatched1, txDispatched1ID := newDispatchedTxMock(t)
 	txDispatched2, _ := newDispatchedTxMock(t)
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
 		Transactions(txDispatched1, txDispatched2).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 2, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txDispatched1ID,
@@ -2202,11 +2211,12 @@ func TestCoordinator_WhenActiveFLush_TransactionStateTransition_ToFinal_WithMore
 	ctx := t.Context()
 	txDispatched1, txDispatched1ID := newDispatchedTxMock(t)
 	txDispatched2, _ := newDispatchedTxMock(t)
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active_Flush).
 		NodeName("node1").
 		CurrentActiveCoordinator("node1").
 		Transactions(txDispatched1, txDispatched2).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 2, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txDispatched1ID,
@@ -2474,11 +2484,12 @@ func TestCoordinator_WhenClosingFlush_TransactionsDelegated_BlockHeightTolerance
 func TestCoordinator_WhenClosingFlushCompletesAndNotCurrentCoordinator_TransitionsToClosing(t *testing.T) {
 	ctx := t.Context()
 	txDispatched, txID := newDispatchedTxMock(t)
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2"). // another node is now current
 		Transactions(txDispatched).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	event := &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
 		FromState:     transaction.State_Dispatched,
@@ -2492,11 +2503,12 @@ func TestCoordinator_WhenClosingFlush_TransactionStateTransition_DispatchedToRet
 	ctx := t.Context()
 	txDispatched1, txDispatched1ID := newDispatchedTxMock(t)
 	txDispatched2, _ := newDispatchedTxMock(t)
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
 		Transactions(txDispatched1, txDispatched2).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 2, len(c.transactionsByID))
 	// From=Dispatched, To=Pooled is retryable (not Confirmed/Reverted) → action_CleanUpTransaction fires.
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
@@ -2513,11 +2525,12 @@ func TestCoordinator_WhenClosingFlush_TransactionStateTransition_ToFinal_WithMor
 	ctx := t.Context()
 	txDispatched1, txDispatched1ID := newDispatchedTxMock(t)
 	txDispatched2, _ := newDispatchedTxMock(t)
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing_Flush).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
 		Transactions(txDispatched1, txDispatched2).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 2, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txDispatched1ID,
@@ -2538,6 +2551,7 @@ func TestCoordinator_WhenClosingFlushCompletesAndNotCurrentCoordinator_EnteringC
 		CoordinatorSelectionMode(prototk.ContractConfig_COORDINATOR_ENDORSER).
 		Transactions(txDispatched).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	// Finalising the last dispatched transaction triggers guard_FlushComplete = true
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
@@ -2859,11 +2873,12 @@ func TestCoordinator_WhenClosing_TransactionStateTransition_ToFinal_CleansUpAndS
 	txID := uuid.New()
 	txFinal.EXPECT().GetID().Return(txID).Maybe()
 	txFinal.EXPECT().GetCurrentState().Return(transaction.State_Final).Maybe()
-	c, _ := NewCoordinatorBuilderForTesting(t, State_Closing).
+	c, mocks := NewCoordinatorBuilderForTesting(t, State_Closing).
 		NodeName("node1").
 		CurrentActiveCoordinator("node2").
 		Transactions(txFinal).
 		Build()
+	mocks.DomainContext.On("ResetTransactions", mock.Anything).Return().Once()
 	require.Equal(t, 1, len(c.transactionsByID))
 	require.NoError(t, c.stateMachineEventLoop.ProcessEvent(ctx, &common.TransactionStateTransitionEvent[transaction.State]{
 		TransactionID: txID,
