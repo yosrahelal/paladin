@@ -19,8 +19,10 @@ package syncpoints
 import (
 	"context"
 
+	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
+	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -74,12 +76,13 @@ func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX persistenc
 	// Chained outcomes are handled separately in txmgr receipt propagation; in this code path,
 	// only off-chain assembly reverts are propagated post-submit (on-chain reverts are handled
 	// by coordinator retry logic, and chained successes are not propagated here).
-	//
-	// We still trigger a syncpoint for each finalize so Domain Context state is flushed before
-	// removing the transaction from in-memory Domain Context.
 	receiptsToDistribute := make([]*components.ReceiptInputWithOriginator, 0, len(finalizeOperations))
 	for _, op := range finalizeOperations {
-		if op.OnChain != nil && op.OnChain.Type != pldtypes.NotOnChain && len(op.RevertData) > 0 {
+		if op.OnChain != nil && op.OnChain.Type != pldtypes.NotOnChain {
+			failureMessage := op.FailureMessage
+			if len(op.RevertData) == 0 && failureMessage == "" {
+				failureMessage = i18n.NewError(ctx, msgs.MsgTxMgrRevertedNoData).Error()
+			}
 			receiptsToDistribute = append(receiptsToDistribute, &components.ReceiptInputWithOriginator{
 				Originator: op.Originator,
 				ReceiptInput: components.ReceiptInput{
@@ -88,7 +91,7 @@ func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX persistenc
 					TransactionID:  op.TransactionID,
 					OnChain:        *op.OnChain,
 					RevertData:     op.RevertData,
-					FailureMessage: op.FailureMessage,
+					FailureMessage: failureMessage,
 				},
 			})
 		} else if op.FailureMessage != "" {
@@ -101,6 +104,9 @@ func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX persistenc
 					FailureMessage: op.FailureMessage,
 				},
 			})
+		} else {
+			log.L(ctx).Errorf("Failed to build receipt for transaction %s (domain=%s, contractAddress=%s, originator=%s, failureMessage=%s, revertData=%s, onChain=%+v)",
+				op.TransactionID, op.Domain, op.ContractAddress, op.Originator, op.FailureMessage, op.RevertData.HexString0xPrefix(), op.OnChain)
 		}
 	}
 	return s.WriteOrDistributeReceipts(ctx, dbTX, receiptsToDistribute)
@@ -115,10 +121,8 @@ func (s *syncPoints) WriteOrDistributeReceipts(ctx context.Context, dbTX persist
 	remoteSends := make([]*pldapi.ReliableMessage, 0)
 	for _, r := range receipts {
 		node, _ := pldtypes.PrivateIdentityLocator(r.Originator).Node(ctx, true)
-		if r.ReceiptType != components.RT_Success {
-			log.L(ctx).Warnf("Failure receipt %s with sender %s (node='%s') and address %v: %s",
-				r.TransactionID, r.Originator, node, r.DomainContractAddress, r.FailureMessage)
-		}
+		log.L(ctx).Debugf("Failure receipt %s with sender %s (node='%s') and address %v: %s",
+			r.TransactionID, r.Originator, node, r.DomainContractAddress, r.FailureMessage)
 		if node != "" && node != s.transportMgr.LocalNodeName() {
 			remoteSends = append(remoteSends, &pldapi.ReliableMessage{
 				Node:        node,
