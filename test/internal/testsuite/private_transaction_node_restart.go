@@ -368,6 +368,9 @@ func (s *privateTransactionNodeRestartSuite) checkBatch(entries []nodeAndTxID) {
 	log.Infof("privateTransactionNodeRestartSuite: rolling check batch=%d failures=%d", len(entries), len(batchFailures))
 
 	if len(batchFailures) > 0 {
+		for _, f := range batchFailures {
+			log.Errorf("privateTransactionNodeRestartSuite: rolling check failure: %s", f)
+		}
 		s.resultsMu.Lock()
 		s.failures = append(s.failures, batchFailures...)
 		s.resultsMu.Unlock()
