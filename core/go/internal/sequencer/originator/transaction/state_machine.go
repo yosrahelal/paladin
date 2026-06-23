@@ -113,12 +113,8 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ConfirmedReverted: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					// TODO AM: use a validator rather than recording here
-					Actions: []ActionRule{{Action: action_RecordWillRetry}},
-					Transitions: []Transition{{
-						If: statemachine.GuardNot(guard_WillRetry),
-						To: State_Confirmed,
-					}},
+					Validator:   statemachine.ValidatorNot(validator_WillRetry),
+					Transitions: []Transition{{To: State_Confirmed}},
 				}},
 			},
 			Event_Delegated: {
@@ -147,11 +143,8 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ConfirmedReverted: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_RecordWillRetry}},
-					Transitions: []Transition{{
-						If: statemachine.GuardNot(guard_WillRetry),
-						To: State_Confirmed,
-					}},
+					Validator:   statemachine.ValidatorNot(validator_WillRetry),
+					Transitions: []Transition{{To: State_Confirmed}},
 				}},
 			},
 			Event_Delegated: {
@@ -224,11 +217,8 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ConfirmedReverted: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_RecordWillRetry}},
-					Transitions: []Transition{{
-						If: statemachine.GuardNot(guard_WillRetry),
-						To: State_Confirmed,
-					}},
+					Validator:   statemachine.ValidatorNot(validator_WillRetry),
+					Transitions: []Transition{{To: State_Confirmed}},
 				}},
 			},
 			Event_Delegated: {
@@ -346,11 +336,8 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ConfirmedReverted: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_RecordWillRetry}},
-					Transitions: []Transition{{
-						If: statemachine.GuardNot(guard_WillRetry),
-						To: State_Confirmed,
-					}},
+					Validator:   statemachine.ValidatorNot(validator_WillRetry),
+					Transitions: []Transition{{To: State_Confirmed}},
 				}},
 			},
 			Event_Delegated: {
@@ -430,11 +417,8 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ConfirmedReverted: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_RecordWillRetry}},
-					Transitions: []Transition{{
-						If: statemachine.GuardNot(guard_WillRetry),
-						To: State_Confirmed,
-					}},
+					Validator:   statemachine.ValidatorNot(validator_WillRetry),
+					Transitions: []Transition{{To: State_Confirmed}},
 				}},
 			},
 			Event_Delegated: {
@@ -539,17 +523,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ConfirmedReverted: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_RecordWillRetry}},
-					Transitions: []Transition{
-						{
-							If: guard_WillRetry,
-							To: State_Delegated,
-						},
-						{
-							If: statemachine.GuardNot(guard_WillRetry),
-							To: State_Confirmed,
-						},
-					},
+					Validator:   validator_WillRetry,
+					Transitions: []Transition{{To: State_Delegated}},
+				}, {
+					Transitions: []Transition{{To: State_Confirmed}},
 				}},
 			},
 			Event_Delegated: {
@@ -637,17 +614,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ConfirmedReverted: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_RecordWillRetry}},
-					Transitions: []Transition{
-						{
-							If: guard_WillRetry,
-							To: State_Delegated,
-						},
-						{
-							If: statemachine.GuardNot(guard_WillRetry),
-							To: State_Confirmed,
-						},
-					},
+					Validator:   validator_WillRetry,
+					Transitions: []Transition{{To: State_Delegated}},
+				}, {
+					Transitions: []Transition{{To: State_Confirmed}},
 				}},
 			},
 			Event_Delegated: {
@@ -729,17 +699,10 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ConfirmedReverted: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_RecordWillRetry}},
-					Transitions: []Transition{
-						{
-							If: guard_WillRetry,
-							To: State_Delegated,
-						},
-						{
-							If: statemachine.GuardNot(guard_WillRetry),
-							To: State_Confirmed,
-						},
-					},
+					Validator:   validator_WillRetry,
+					Transitions: []Transition{{To: State_Delegated}},
+				}, {
+					Transitions: []Transition{{To: State_Confirmed}},
 				}},
 			},
 			Event_Delegated: {
@@ -806,11 +769,8 @@ var stateDefinitionsMap = StateDefinitions{
 			Event_ConfirmedReverted: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
-					Actions: []ActionRule{{Action: action_RecordWillRetry}},
-					Transitions: []Transition{{
-						If: statemachine.GuardNot(guard_WillRetry),
-						To: State_Confirmed,
-					}},
+					Validator:   statemachine.ValidatorNot(validator_WillRetry),
+					Transitions: []Transition{{To: State_Confirmed}},
 				}},
 			},
 			Event_Delegated: {

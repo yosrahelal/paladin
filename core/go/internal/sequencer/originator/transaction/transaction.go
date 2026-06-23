@@ -67,7 +67,6 @@ type originatorTransaction struct {
 	latestSubmissionHash             *pldtypes.Bytes32
 	nonce                            *uint64
 	metrics                          metrics.DistributedSequencerMetrics
-	lastReceivedWillRetry            bool
 	refreshBlockHeight               func(context.Context)
 	getBlockHeight                   func() int64
 	cancelCurrentAssembly            context.CancelFunc
