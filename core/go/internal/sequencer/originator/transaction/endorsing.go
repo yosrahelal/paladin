@@ -36,3 +36,10 @@ func action_ResendAssembleParkResponse(ctx context.Context, txn *originatorTrans
 func guard_AssembleRequestMatchesPreviousResponse(ctx context.Context, txn *originatorTransaction) bool {
 	return txn.latestAssembleRequest.requestID == txn.latestFulfilledAssembleRequestID
 }
+
+// True if the most recent assemble request has the same idempotency key as the assembly goroutine currently in flight.
+// This detects a coordinator nudge arriving while the originator is still assembling the original request: the nudge
+// carries the same idempotency key, so there is no need to cancel and restart the in-progress work.
+func guard_AssembleRequestMatchesInProgressAssembly(_ context.Context, txn *originatorTransaction) bool {
+	return txn.cancelCurrentAssembly != nil && txn.latestAssembleRequest.requestID == txn.currentAssemblyRequestID
+}

@@ -110,6 +110,7 @@ func action_AssembleAndSign(ctx context.Context, txn *originatorTransaction, _ c
 		assembleCtx, cancel = context.WithDeadline(assembleCtx, req.expiry)
 	}
 	txn.cancelCurrentAssembly = cancel
+	txn.currentAssemblyRequestID = req.requestID
 
 	go func() {
 		defer cancel()
