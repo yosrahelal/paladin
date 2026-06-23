@@ -62,15 +62,11 @@ func action_SwitchActiveCoordinator(ctx context.Context, o *originator, event co
 
 // processDispatchedTransactions propagates dispatch state updates (submission hash, nonce)
 // from the active coordinator's heartbeat to our local transaction state machines.
+// Transactions not found in our in-memory map belong to other originators and are silently skipped.
 func (o *originator) processDispatchedTransactions(ctx context.Context, event *common.HeartbeatReceivedEvent) error {
 	for _, dispatchedTransaction := range event.CoordinatorSnapshot.DispatchedTransactions {
-		if dispatchedTransaction.Originator != o.nodeName {
-			continue
-		}
 		txn := o.transactionsByID[dispatchedTransaction.ID]
 		if txn == nil {
-			log.L(ctx).Warnf("received heartbeat from %s with dispatched transaction %s but no transaction found in memory",
-				o.currentActiveCoordinator, dispatchedTransaction.ID)
 			continue
 		}
 		if dispatchedTransaction.LatestSubmissionHash != nil {
@@ -102,16 +98,13 @@ func (o *originator) processDispatchedTransactions(ctx context.Context, event *c
 }
 
 // processConfirmedTransactions notifies originator transactions of any on-chain successes
-// included in the heartbeat snapshot, regardless of originator or coordinator state.
+// included in the heartbeat snapshot, regardless of coordinator state.
+// Coordinator State_Confirmed is only reached via success; revert reason is never present here.
+// Transactions not found in our in-memory map belong to other originators and are silently skipped.
 func (o *originator) processConfirmedTransactions(ctx context.Context, event *common.HeartbeatReceivedEvent) error {
 	for _, confirmedTransaction := range event.CoordinatorSnapshot.ConfirmedTransactions {
-		if confirmedTransaction.Originator != o.nodeName {
-			continue
-		}
 		txn := o.transactionsByID[confirmedTransaction.ID]
 		if txn == nil {
-			log.L(ctx).Debugf("received confirmed transaction %s in heartbeat from %s but no transaction found in memory",
-				confirmedTransaction.ID, event.FromNode)
 			continue
 		}
 		err := txn.HandleEvent(ctx, &transaction.ConfirmedSuccessEvent{
@@ -127,17 +120,12 @@ func (o *originator) processConfirmedTransactions(ctx context.Context, event *co
 
 // processRevertedTransactions notifies originator transactions of any reverts included in the
 // heartbeat snapshot from the current coordinator. Only the raw on-chain revert bytes are
-// propagated; the coordinator does not send failure message as a transaction revereted at assembly time
+// propagated; the coordinator does not send failure message as a transaction reverted at assembly time
 // may have private data in its failure message.
 func (o *originator) processRevertedTransactions(ctx context.Context, event *common.HeartbeatReceivedEvent) error {
 	for _, revertedTransaction := range event.CoordinatorSnapshot.RevertedTransactions {
-		if revertedTransaction.Originator != o.nodeName {
-			continue
-		}
 		txn := o.transactionsByID[revertedTransaction.ID]
 		if txn == nil {
-			log.L(ctx).Debugf("received reverted transaction %s in heartbeat from %s but no transaction found in memory",
-				revertedTransaction.ID, event.FromNode)
 			continue
 		}
 		err := txn.HandleEvent(ctx, &transaction.ConfirmedRevertedEvent{

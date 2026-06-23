@@ -120,8 +120,7 @@ func TestOriginator_SingleTransactionLifecycle(t *testing.T) {
 		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
 			{
 				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-					ID:         txn.ID,
-					Originator: "member1@node1",
+					ID: txn.ID,
 				},
 				Signer:               *signerAddress,
 				Nonce:                &nonce,

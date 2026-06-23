@@ -624,7 +624,7 @@ func TestStateMachine_Sending_HeartbeatReceived_NoDroppedTransactions_NoRedelega
 		CoordinatorSnapshot: &common.CoordinatorSnapshot{
 			CoordinatorState: common.CoordinatorState_Active,
 			PooledTransactions: []*common.SnapshotPooledTransaction{
-				{ID: txID, Originator: "sender@node1"},
+				{ID: txID},
 			},
 		},
 	}))

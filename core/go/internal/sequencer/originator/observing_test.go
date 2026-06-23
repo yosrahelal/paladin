@@ -254,8 +254,7 @@ func Test_action_ProcessConfirmedTransactions_ConfirmedSuccess(t *testing.T) {
 				{
 					SnapshotDispatchedTransaction: common.SnapshotDispatchedTransaction{
 						SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-							ID:         txID,
-							Originator: "member1@node1",
+							ID: txID,
 						},
 					},
 				},
@@ -266,36 +265,6 @@ func Test_action_ProcessConfirmedTransactions_ConfirmedSuccess(t *testing.T) {
 	err := action_ProcessConfirmedTransactions(ctx, o, event)
 	require.NoError(t, err)
 	mockTxn.AssertExpectations(t)
-}
-
-func Test_action_ProcessConfirmedTransactions_NotOurNode_Skipped(t *testing.T) {
-	ctx := context.Background()
-
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		NodeName("member1@node1").
-		CurrentActiveCoordinator("coordinator@node1").
-		Build()
-
-	contractAddress := *pldtypes.RandAddress()
-	event := &common.HeartbeatReceivedEvent{
-		FromNode:        "any@node",
-		ContractAddress: &contractAddress,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
-				{
-					SnapshotDispatchedTransaction: common.SnapshotDispatchedTransaction{
-						SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-							ID:         uuid.New(),
-							Originator: "other@otherNode",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	err := action_ProcessConfirmedTransactions(ctx, o, event)
-	require.NoError(t, err)
 }
 
 func Test_action_ProcessConfirmedTransactions_NotInMemory_Skipped(t *testing.T) {
@@ -315,8 +284,7 @@ func Test_action_ProcessConfirmedTransactions_NotInMemory_Skipped(t *testing.T) 
 				{
 					SnapshotDispatchedTransaction: common.SnapshotDispatchedTransaction{
 						SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-							ID:         uuid.New(),
-							Originator: "member1@node1",
+							ID: uuid.New(),
 						},
 					},
 				},
@@ -351,8 +319,7 @@ func Test_action_ProcessConfirmedTransactions_HandleEventError(t *testing.T) {
 				{
 					SnapshotDispatchedTransaction: common.SnapshotDispatchedTransaction{
 						SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-							ID:         txID,
-							Originator: "member1@node1",
+							ID: txID,
 						},
 					},
 				},
@@ -392,8 +359,7 @@ func Test_action_ProcessRevertedTransactions_FiresConfirmedRevertedEvent(t *test
 			RevertedTransactions: []*common.SnapshotRevertedTransaction{
 				{
 					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         txID,
-						Originator: "member1@node1",
+						ID: txID,
 					},
 					RevertReason: revertReason,
 				},
@@ -431,8 +397,7 @@ func Test_action_ProcessRevertedTransactions_NilRevertReason_StillFiresEvent(t *
 			RevertedTransactions: []*common.SnapshotRevertedTransaction{
 				{
 					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         txID,
-						Originator: "member1@node1",
+						ID: txID,
 					},
 				},
 			},
@@ -442,35 +407,6 @@ func Test_action_ProcessRevertedTransactions_NilRevertReason_StillFiresEvent(t *
 	err := action_ProcessRevertedTransactions(ctx, o, event)
 	require.NoError(t, err)
 	mockTxn.AssertExpectations(t)
-}
-
-func Test_action_ProcessRevertedTransactions_NotOurNode_Skipped(t *testing.T) {
-	ctx := context.Background()
-
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		NodeName("member1@node1").
-		CurrentActiveCoordinator("coordinator@node1").
-		Build()
-
-	contractAddress := *pldtypes.RandAddress()
-	event := &common.HeartbeatReceivedEvent{
-		FromNode:        "coordinator@node1",
-		ContractAddress: &contractAddress,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			RevertedTransactions: []*common.SnapshotRevertedTransaction{
-				{
-					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         uuid.New(),
-						Originator: "other@otherNode",
-					},
-				},
-			},
-		},
-	}
-
-	// No HandleEvent expectation registered — mock will fail the test if called.
-	err := action_ProcessRevertedTransactions(ctx, o, event)
-	require.NoError(t, err)
 }
 
 func Test_action_ProcessRevertedTransactions_NotInMemory_Skipped(t *testing.T) {
@@ -489,8 +425,7 @@ func Test_action_ProcessRevertedTransactions_NotInMemory_Skipped(t *testing.T) {
 			RevertedTransactions: []*common.SnapshotRevertedTransaction{
 				{
 					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         uuid.New(),
-						Originator: "member1@node1",
+						ID: uuid.New(),
 					},
 				},
 			},
@@ -523,8 +458,7 @@ func Test_action_ProcessRevertedTransactions_HandleEventError_ReturnsError(t *te
 			RevertedTransactions: []*common.SnapshotRevertedTransaction{
 				{
 					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         txID,
-						Originator: "member1@node1",
+						ID: txID,
 					},
 					RevertReason: pldtypes.HexBytes{0xde, 0xad},
 				},
@@ -561,7 +495,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_ResetsLivenessTimer(t *testi
 	assert.Equal(t, coordinatorLocator, o.currentActiveCoordinator, "coordinator must be unchanged")
 }
 
-func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionNotFoundLogsAndContinues(t *testing.T) {
+func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionNotFoundContinues(t *testing.T) {
 	ctx := context.Background()
 	originatorLocator := "sender@senderNode"
 	coordinatorLocator := "coordinator@coordinatorNode"
@@ -579,8 +513,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionNotFoun
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
 				{
 					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         unknownTxID,
-						Originator: originatorLocator,
+						ID: unknownTxID,
 					},
 				},
 			},
@@ -617,8 +550,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionWithHas
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
 				{
 					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         txn.ID,
-						Originator: originatorLocator,
+						ID: txn.ID,
 					},
 					Signer:               *signerAddress,
 					LatestSubmissionHash: &submissionHash,
@@ -656,36 +588,9 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionWithNon
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
 				{
 					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         txn.ID,
-						Originator: originatorLocator,
+						ID: txn.ID,
 					},
 					Nonce: &nonce,
-				},
-			},
-		},
-	}
-	err := action_ProcessCurrentCoordinatorHeartbeat(ctx, o, event)
-	assert.NoError(t, err)
-}
-
-func Test_action_ProcessCurrentCoordinatorHeartbeat_DispatchedTransactionFromDifferentOriginatorIgnored(t *testing.T) {
-	ctx := context.Background()
-	coordinatorLocator := "coordinator@coordinatorNode"
-	o, _ := NewOriginatorBuilderForTesting(t, State_Sending).
-		CurrentActiveCoordinator(coordinatorLocator).
-		Build()
-
-	contractAddress := *pldtypes.RandAddress()
-	event := &common.HeartbeatReceivedEvent{
-		FromNode:        coordinatorLocator,
-		ContractAddress: &contractAddress,
-		CoordinatorSnapshot: &common.CoordinatorSnapshot{
-			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-				{
-					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         uuid.New(),
-						Originator: "otherSender@otherNode",
-					},
 				},
 			},
 		},
@@ -719,8 +624,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_SubmittedHandleEventError(t 
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
 				{
 					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         txnID,
-						Originator: originatorLocator,
+						ID: txnID,
 					},
 					Signer:               *signerAddress,
 					LatestSubmissionHash: &submissionHash,
@@ -759,8 +663,7 @@ func Test_action_ProcessCurrentCoordinatorHeartbeat_NonceAssignedHandleEventErro
 			DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
 				{
 					SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-						ID:         txnID,
-						Originator: originatorLocator,
+						ID: txnID,
 					},
 					Nonce: &nonce,
 				},

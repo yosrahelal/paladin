@@ -39,8 +39,7 @@ func (t *coordinatorTransaction) GetSnapshot(ctx context.Context) (*common.Snaps
 		State_Assembling,
 		State_Pooled:
 		return &common.SnapshotPooledTransaction{
-			ID:         t.pt.ID,
-			Originator: t.originator,
+			ID: t.pt.ID,
 		}, nil, nil, nil
 
 	// State_Ready_For_Dispatch is already past the point of no return. It is as good as dispatched, just waiting for
@@ -49,8 +48,7 @@ func (t *coordinatorTransaction) GetSnapshot(ctx context.Context) (*common.Snaps
 		State_Dispatched:
 		dispatchedTransaction := &common.SnapshotDispatchedTransaction{
 			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         t.pt.ID,
-				Originator: t.originator,
+				ID: t.pt.ID,
 			},
 		}
 		if t.signerAddress != nil {
@@ -65,8 +63,7 @@ func (t *coordinatorTransaction) GetSnapshot(ctx context.Context) (*common.Snaps
 		confirmedTransaction := &common.SnapshotConfirmedTransaction{
 			SnapshotDispatchedTransaction: common.SnapshotDispatchedTransaction{
 				SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-					ID:         t.pt.ID,
-					Originator: t.originator,
+					ID: t.pt.ID,
 				},
 				Nonce:                t.nonce,
 				LatestSubmissionHash: t.latestSubmissionHash,
@@ -81,13 +78,12 @@ func (t *coordinatorTransaction) GetSnapshot(ctx context.Context) (*common.Snaps
 		log.L(ctx).Debugf("heartbeat snapshot building, transaction ID %s is in State_Reverted, sending to heartbeat recipients", t.pt.ID.String())
 		return nil, nil, nil, &common.SnapshotRevertedTransaction{
 			SnapshotPooledTransaction: common.SnapshotPooledTransaction{
-				ID:         t.pt.ID,
-				Originator: t.originator,
+				ID: t.pt.ID,
 			},
 			RevertReason: t.revertReason,
 		}
 	}
 
-	// Final/Evicted/Initial states are excluded from snapshots.
+	// Other states are excluded from snapshots.
 	return nil, nil, nil, nil
 }
