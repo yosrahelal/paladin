@@ -16,6 +16,7 @@ package transaction
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
@@ -894,19 +895,53 @@ func Test_action_FinalizeOnRevertedChainedDependencyAtCreation(t *testing.T) {
 
 	mocks.SyncPoints.EXPECT().QueueTransactionFinalize(
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-	).Run(func(_ context.Context, req *syncpoints.TransactionFinalizeRequest, onSuccess func(context.Context), onFailure func(context.Context, error)) {
+	).Run(func(_ context.Context, req *syncpoints.TransactionFinalizeRequest, onSuccess func(context.Context), _ func(context.Context, error)) {
 		assert.Equal(t, txn.pt.ID, req.TransactionID)
 		assert.Contains(t, req.FailureMessage, depTx.pt.ID.String())
 		if onSuccess != nil {
 			onSuccess(ctx)
 		}
-		if onFailure != nil {
-			onFailure(ctx, assert.AnError)
+	}).Return()
+
+	err := action_FinalizeOnRevertedChainedDependencyAtCreation(ctx, txn, nil)
+	require.NoError(t, err)
+}
+
+func Test_action_FinalizeOnRevertedChainedDependencyAtCreation_OnRollbackRetry(t *testing.T) {
+	ctx := t.Context()
+	grapher, depTracker := newTestGrapher()
+
+	depTx, _ := NewTransactionBuilderForTesting(t, State_Reverted).
+		Grapher(grapher).DependencyTracker(depTracker).
+		Build()
+
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Initial).
+		Grapher(grapher).DependencyTracker(depTracker).
+		CoordinatorTransactions(map[uuid.UUID]CoordinatorTransaction{
+			depTx.pt.ID: depTx,
+		}).
+		Build()
+
+	depTracker.GetChainedDeps().AddPrerequisites(ctx, txn.pt.ID, depTx.pt.ID)
+
+	callCount := 0
+	maxCalls := 2
+	mocks.SyncPoints.On("QueueTransactionFinalize",
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+	).Run(func(args mock.Arguments) {
+		callCount++
+		if callCount < maxCalls {
+			onFailure := args.Get(3).(func(context.Context, error))
+			onFailure(ctx, errors.New("finalize failed"))
+		} else {
+			onSuccess := args.Get(2).(func(context.Context))
+			onSuccess(ctx)
 		}
 	}).Return()
 
 	err := action_FinalizeOnRevertedChainedDependencyAtCreation(ctx, txn, nil)
 	require.NoError(t, err)
+	assert.Equal(t, maxCalls, callCount)
 }
 
 func Test_action_FinalizeOnRevertedChainedDependencyAtCreation_NoRevertedDependency(t *testing.T) {
