@@ -19,10 +19,8 @@ package syncpoints
 import (
 	"context"
 
-	"github.com/LFDT-Paladin/paladin/common/go/pkg/i18n"
 	"github.com/LFDT-Paladin/paladin/common/go/pkg/log"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
-	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
 	"github.com/LFDT-Paladin/paladin/core/pkg/persistence"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldapi"
 	"github.com/LFDT-Paladin/paladin/sdk/go/pkg/pldtypes"
@@ -79,10 +77,6 @@ func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX persistenc
 	receiptsToDistribute := make([]*components.ReceiptInputWithOriginator, 0, len(finalizeOperations))
 	for _, op := range finalizeOperations {
 		if op.OnChain != nil && op.OnChain.Type != pldtypes.NotOnChain {
-			failureMessage := op.FailureMessage
-			if len(op.RevertData) == 0 && failureMessage == "" {
-				failureMessage = i18n.NewError(ctx, msgs.MsgTxMgrRevertedNoData).Error()
-			}
 			receiptsToDistribute = append(receiptsToDistribute, &components.ReceiptInputWithOriginator{
 				Originator: op.Originator,
 				ReceiptInput: components.ReceiptInput{
@@ -91,7 +85,7 @@ func (s *syncPoints) writeFailureOperations(ctx context.Context, dbTX persistenc
 					TransactionID:  op.TransactionID,
 					OnChain:        *op.OnChain,
 					RevertData:     op.RevertData,
-					FailureMessage: failureMessage,
+					FailureMessage: op.FailureMessage,
 				},
 			})
 		} else if op.FailureMessage != "" {
