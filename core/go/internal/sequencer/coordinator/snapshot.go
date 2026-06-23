@@ -66,6 +66,7 @@ func (c *coordinator) sendHeartbeat(ctx context.Context, includeLocks bool) erro
 				DispatchedTransactions: baseSnapshot.DispatchedTransactions,
 				PooledTransactions:     baseSnapshot.PooledTransactions,
 				ConfirmedTransactions:  baseSnapshot.ConfirmedTransactions,
+				RevertedTransactions:   baseSnapshot.RevertedTransactions,
 				CoordinatorState:       baseSnapshot.CoordinatorState,
 				BlockHeight:            baseSnapshot.BlockHeight,
 				Locks:                  statesAndLocks.LockedState,
@@ -115,9 +116,10 @@ func (c *coordinator) getSnapshot(ctx context.Context) *common.CoordinatorSnapsh
 	pooledTransactions := make([]*common.SnapshotPooledTransaction, 0, len(c.transactionsByID))
 	dispatchedTransactions := make([]*common.SnapshotDispatchedTransaction, 0, len(c.transactionsByID))
 	confirmedTransactions := make([]*common.SnapshotConfirmedTransaction, 0, len(c.transactionsByID))
+	revertedTransactions := make([]*common.SnapshotRevertedTransaction, 0, len(c.transactionsByID))
 
 	for _, txn := range c.transactionsByID {
-		pooledTransaction, dispatchedTransaction, confirmedTransaction := txn.GetSnapshot(ctx)
+		pooledTransaction, dispatchedTransaction, confirmedTransaction, revertedTransaction := txn.GetSnapshot(ctx)
 		if pooledTransaction != nil {
 			pooledTransactions = append(pooledTransactions, pooledTransaction)
 		}
@@ -127,17 +129,21 @@ func (c *coordinator) getSnapshot(ctx context.Context) *common.CoordinatorSnapsh
 		if confirmedTransaction != nil {
 			confirmedTransactions = append(confirmedTransactions, confirmedTransaction)
 		}
+		if revertedTransaction != nil {
+			revertedTransactions = append(revertedTransactions, revertedTransaction)
+		}
 	}
 
 	coordinatorState := c.stateMachineEventLoop.GetCurrentState()
-	log.L(ctx).Debugf("created snapshot for sequencer %s with %d transactions (%d pooled, %d dispatched, %d confirmed)",
-		c.contractAddress.String(), len(pooledTransactions)+len(dispatchedTransactions)+len(confirmedTransactions),
-		len(pooledTransactions), len(dispatchedTransactions), len(confirmedTransactions))
+	log.L(ctx).Debugf("created snapshot for sequencer %s with %d transactions (%d pooled, %d dispatched, %d confirmed, %d reverted)",
+		c.contractAddress.String(), len(pooledTransactions)+len(dispatchedTransactions)+len(confirmedTransactions)+len(revertedTransactions),
+		len(pooledTransactions), len(dispatchedTransactions), len(confirmedTransactions), len(revertedTransactions))
 
 	return &common.CoordinatorSnapshot{
 		DispatchedTransactions: dispatchedTransactions,
 		PooledTransactions:     pooledTransactions,
 		ConfirmedTransactions:  confirmedTransactions,
+		RevertedTransactions:   revertedTransactions,
 		CoordinatorState:       coordinatorState,
 		BlockHeight:            uint64(c.currentBlockHeight),
 		EndorserCandidates:     c.endorserCandidates,

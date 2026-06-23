@@ -200,7 +200,6 @@ func Test_hasDroppedTransactions_TrueWhenDelegatedTxnNotInSnapshot(t *testing.T)
 }
 func Test_hasDroppedTransactions_FalseWhenDelegatedTxnInSnapshot(t *testing.T) {
 	ctx := context.Background()
-	originatorLocator := "sender@senderNode"
 	txID := uuid.New()
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.On("GetID").Return(txID)
@@ -210,19 +209,18 @@ func Test_hasDroppedTransactions_FalseWhenDelegatedTxnInSnapshot(t *testing.T) {
 		Build()
 	snapshot := &common.CoordinatorSnapshot{
 		PooledTransactions: []*common.SnapshotPooledTransaction{
-			{ID: txID, Originator: originatorLocator},
+			{ID: txID},
 		},
 	}
 	assert.False(t, o.hasDroppedTransactions(ctx, snapshot))
 }
 func Test_transactionFoundInSnapshot_TrueWhenInDispatchedTransactions(t *testing.T) {
-	originatorLocator := "sender@senderNode"
 	txID := uuid.New()
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.On("GetID").Return(txID)
 	snapshot := &common.CoordinatorSnapshot{
 		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{
-			{SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txID, Originator: originatorLocator}},
+			{SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txID}},
 		},
 		PooledTransactions:    []*common.SnapshotPooledTransaction{},
 		ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{},
@@ -230,21 +228,19 @@ func Test_transactionFoundInSnapshot_TrueWhenInDispatchedTransactions(t *testing
 	assert.True(t, transactionFoundInSnapshot(snapshot, mockTxn))
 }
 func Test_transactionFoundInSnapshot_TrueWhenInPooledTransactions(t *testing.T) {
-	originatorLocator := "sender@senderNode"
 	txID := uuid.New()
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.On("GetID").Return(txID)
 	snapshot := &common.CoordinatorSnapshot{
 		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
 		PooledTransactions: []*common.SnapshotPooledTransaction{
-			{ID: txID, Originator: originatorLocator},
+			{ID: txID},
 		},
 		ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{},
 	}
 	assert.True(t, transactionFoundInSnapshot(snapshot, mockTxn))
 }
 func Test_transactionFoundInSnapshot_TrueWhenInConfirmedTransactions(t *testing.T) {
-	originatorLocator := "sender@senderNode"
 	txID := uuid.New()
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.On("GetID").Return(txID)
@@ -253,7 +249,7 @@ func Test_transactionFoundInSnapshot_TrueWhenInConfirmedTransactions(t *testing.
 		PooledTransactions:     []*common.SnapshotPooledTransaction{},
 		ConfirmedTransactions: []*common.SnapshotConfirmedTransaction{
 			{SnapshotDispatchedTransaction: common.SnapshotDispatchedTransaction{
-				SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txID, Originator: originatorLocator},
+				SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txID},
 			}},
 		},
 	}
@@ -261,14 +257,13 @@ func Test_transactionFoundInSnapshot_TrueWhenInConfirmedTransactions(t *testing.
 }
 
 func Test_transactionFoundInSnapshot_FalseWhenOnlyOtherTxnsInSnapshot(t *testing.T) {
-	originatorLocator := "sender@senderNode"
 	txID := uuid.New()
 	otherID := uuid.New()
 	mockTxn := originatortransactionmocks.NewOriginatorTransaction(t)
 	mockTxn.On("GetID").Return(txID)
 	snapshot := &common.CoordinatorSnapshot{
 		PooledTransactions: []*common.SnapshotPooledTransaction{
-			{ID: otherID, Originator: originatorLocator},
+			{ID: otherID},
 		},
 		DispatchedTransactions: []*common.SnapshotDispatchedTransaction{},
 		ConfirmedTransactions:  []*common.SnapshotConfirmedTransaction{},

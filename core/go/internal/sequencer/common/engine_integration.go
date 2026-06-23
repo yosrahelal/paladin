@@ -142,7 +142,6 @@ func (e *engineIntegration) AssembleAndSign(ctx context.Context, transactionID u
 		})
 	}
 
-	// TODO AM: could assembly and sign not do this resolution
 	return e.assembleAndSign(ctx, transactionID, preAssembly, resolvedVerifiers, dCtx)
 }
 
