@@ -212,6 +212,10 @@ var stateDefinitionsMap = StateDefinitions{
 					// Process confirmed transactions from every heartbeat regardless of sender state or identity.
 					Actions: []ActionRule{{Action: action_ProcessConfirmedTransactions}},
 				}, {
+					// Process reverted transactions from the current coordinator only.
+					Validator: validator_IsFromCurrentCoordinator,
+					Actions:   []ActionRule{{Action: action_ProcessRevertedTransactions}},
+				}, {
 					// Higher-priority coordinator announced; redirect and reset liveness timer.
 					Validator: statemachine.ValidatorAnd(
 						validator_IsHeartbeatSenderLive,

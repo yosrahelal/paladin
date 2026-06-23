@@ -138,23 +138,28 @@ func action_NotifyOriginatorOfChainedDependencyFailure(ctx context.Context, t *c
 func action_FinalizeNonRetryableRevert(ctx context.Context, t *coordinatorTransaction, _ common.Event) error {
 	failureMessage := t.decodedRevertReason
 	log.L(ctx).Infof("finalizing transaction %s as reverted (revertCount=%d): %s", t.pt.ID.String(), t.revertCount, failureMessage)
-	t.syncPoints.QueueTransactionFinalize(ctx,
-		&syncpoints.TransactionFinalizeRequest{
-			Domain:          t.pt.Domain,
-			ContractAddress: pldtypes.EthAddress{},
-			Originator:      t.originator,
-			TransactionID:   t.pt.ID,
-			FailureMessage:  failureMessage,
-			RevertData:      t.revertReason,
-			OnChain:         t.revertOnChain,
-		},
-		func(ctx context.Context) {
-			log.L(ctx).Debugf("finalized non-retryable revert for transaction %s", t.pt.ID)
-		},
-		func(ctx context.Context, err error) {
-			log.L(ctx).Errorf("error finalizing non-retryable revert for transaction %s: %s", t.pt.ID, err)
-		},
-	)
+	var tryFinalize func()
+	tryFinalize = func() {
+		t.syncPoints.QueueTransactionFinalize(ctx,
+			&syncpoints.TransactionFinalizeRequest{
+				Domain:          t.pt.Domain,
+				ContractAddress: pldtypes.EthAddress{},
+				Originator:      t.originator,
+				TransactionID:   t.pt.ID,
+				FailureMessage:  failureMessage,
+				RevertData:      t.revertReason,
+				OnChain:         t.revertOnChain,
+			},
+			func(ctx context.Context) {
+				log.L(ctx).Debugf("finalized non-retryable revert for transaction %s", t.pt.ID)
+			},
+			func(ctx context.Context, err error) {
+				log.L(ctx).Errorf("error finalizing non-retryable revert for transaction %s: %s", t.pt.ID, err)
+				tryFinalize()
+			},
+		)
+	}
+	tryFinalize()
 	return nil
 }
 
@@ -204,21 +209,26 @@ func action_CascadeChainedDependencyFailure(ctx context.Context, t *coordinatorT
 func action_FinalizeOnChainedDependencyFailure(ctx context.Context, t *coordinatorTransaction, event common.Event) error {
 	e := event.(*ChainedDependencyFailedEvent)
 	log.L(ctx).Infof("finalizing TX %s due to chained dependency failure from TX %s", t.pt.ID, e.FailedTxID)
-	t.syncPoints.QueueTransactionFinalize(ctx,
-		&syncpoints.TransactionFinalizeRequest{
-			Domain:          t.pt.Domain,
-			ContractAddress: t.pt.Address,
-			Originator:      t.originator,
-			TransactionID:   t.pt.ID,
-			FailureMessage:  i18n.NewError(ctx, msgs.MsgTxMgrDependencyFailed, e.FailedTxID).Error(),
-		},
-		func(ctx context.Context) {
-			log.L(ctx).Debugf("finalized TX %s due to chained dependency failure", t.pt.ID)
-		},
-		func(ctx context.Context, err error) {
-			log.L(ctx).Errorf("error finalizing TX %s due to chained dependency failure: %s", t.pt.ID, err)
-		},
-	)
+	var tryFinalize func()
+	tryFinalize = func() {
+		t.syncPoints.QueueTransactionFinalize(ctx,
+			&syncpoints.TransactionFinalizeRequest{
+				Domain:          t.pt.Domain,
+				ContractAddress: t.pt.Address,
+				Originator:      t.originator,
+				TransactionID:   t.pt.ID,
+				FailureMessage:  i18n.NewError(ctx, msgs.MsgTxMgrDependencyFailed, e.FailedTxID).Error(),
+			},
+			func(ctx context.Context) {
+				log.L(ctx).Debugf("finalized TX %s due to chained dependency failure", t.pt.ID)
+			},
+			func(ctx context.Context, err error) {
+				log.L(ctx).Errorf("error finalizing TX %s due to chained dependency failure: %s", t.pt.ID, err)
+				tryFinalize()
+			},
+		)
+	}
+	tryFinalize()
 	return nil
 }
 

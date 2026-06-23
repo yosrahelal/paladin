@@ -231,43 +231,49 @@ stateDiagram-v2
     Initial --> Confirmed : ConfirmedSuccess
     Initial --> Pending : Created
     Pending --> Confirmed : ConfirmedSuccess
+    Pending --> Confirmed : ConfirmedReverted
     Pending --> Delegated : Delegated
     Delegated --> Confirmed : ConfirmedSuccess
+    Delegated --> Confirmed : ConfirmedReverted
     Delegated --> Assembling : AssembleRequestReceived
     Delegated --> Dispatched : Dispatched
     Assembling --> Confirmed : ConfirmedSuccess
+    Assembling --> Confirmed : ConfirmedReverted
     Assembling --> Delegated : Delegated
     Assembling --> Endorsement_Gathering : AssembleAndSignSuccess
     Assembling --> Reverted : AssembleRevert
     Assembling --> Parked : AssemblePark
     Assembling --> Delegated : AssembleError
     Endorsement_Gathering --> Confirmed : ConfirmedSuccess
+    Endorsement_Gathering --> Confirmed : ConfirmedReverted
     Endorsement_Gathering --> Delegated : Delegated
     Endorsement_Gathering --> Assembling : AssembleRequestReceived [!AssembleRequestMatchesPreviousResponse]
     Endorsement_Gathering --> Prepared : PreDispatchRequestReceived
     Prepared --> Confirmed : ConfirmedSuccess
+    Prepared --> Confirmed : ConfirmedReverted
     Prepared --> Delegated : Delegated
     Prepared --> Dispatched : Dispatched
     Prepared --> Assembling : AssembleRequestReceived [!AssembleRequestMatchesPreviousResponse]
     Dispatched --> Confirmed : ConfirmedSuccess
-    Dispatched --> Delegated : ConfirmedReverted [WillRetry]
-    Dispatched --> Confirmed : ConfirmedReverted [!WillRetry]
+    Dispatched --> Delegated : ConfirmedReverted
+    Dispatched --> Confirmed : ConfirmedReverted
     Dispatched --> Delegated : Delegated
     Dispatched --> Sequenced : NonceAssigned
     Dispatched --> Submitted : Submitted
     Dispatched --> Assembling : AssembleRequestReceived
     Sequenced --> Confirmed : ConfirmedSuccess
-    Sequenced --> Delegated : ConfirmedReverted [WillRetry]
-    Sequenced --> Confirmed : ConfirmedReverted [!WillRetry]
+    Sequenced --> Delegated : ConfirmedReverted
+    Sequenced --> Confirmed : ConfirmedReverted
     Sequenced --> Delegated : Delegated
     Sequenced --> Submitted : Submitted
     Sequenced --> Assembling : AssembleRequestReceived
     Submitted --> Confirmed : ConfirmedSuccess
-    Submitted --> Delegated : ConfirmedReverted [WillRetry]
-    Submitted --> Confirmed : ConfirmedReverted [!WillRetry]
+    Submitted --> Delegated : ConfirmedReverted
+    Submitted --> Confirmed : ConfirmedReverted
     Submitted --> Delegated : Delegated
     Submitted --> Assembling : AssembleRequestReceived
     Parked --> Confirmed : ConfirmedSuccess
+    Parked --> Confirmed : ConfirmedReverted
     Parked --> Delegated : Delegated
     Parked --> Pending : Resumed
     Confirmed --> Final : Finalize

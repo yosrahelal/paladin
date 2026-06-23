@@ -61,6 +61,7 @@ func Test_initializeStateMachine_InvokesTransitionCallback(t *testing.T) {
 
 func Test_HandleEvent_ConfirmedReverted_WillRetry_TransitionsToDelegated(t *testing.T) {
 	ctx := context.Background()
+	// Post-dispatch states support retryable reverts by returning to State_Delegated.
 	states := []State{
 		State_Dispatched,
 		State_Sequenced,
@@ -83,10 +84,18 @@ func Test_HandleEvent_ConfirmedReverted_WillRetry_TransitionsToDelegated(t *test
 
 func Test_HandleEvent_ConfirmedReverted_WillNotRetry_TransitionsToConfirmed(t *testing.T) {
 	ctx := context.Background()
+	// All non-final states transition to State_Confirmed on a non-retryable revert,
+	// mirroring the ConfirmedSuccess fast-forward path used by snapshot recovery.
 	states := []State{
+		State_Pending,
+		State_Delegated,
+		State_Assembling,
+		State_Endorsement_Gathering,
+		State_Prepared,
 		State_Dispatched,
 		State_Sequenced,
 		State_Submitted,
+		State_Parked,
 	}
 
 	for _, state := range states {

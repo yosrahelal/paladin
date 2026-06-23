@@ -21,10 +21,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// CoordinatorSnapshot must only contain information about transactions which is (or will eventually be)
+// known on the base ledger (e.g. hash, nonce, signer, revert reason). It must not contain information
+// such as the transaction originator.
+// The exception to this is OutputStates, since this is already filtered to only include output states
+// that the receiver is allowed to see.
 type CoordinatorSnapshot struct {
 	DispatchedTransactions []*SnapshotDispatchedTransaction `json:"dispatchedTransactions"`
 	PooledTransactions     []*SnapshotPooledTransaction     `json:"pooledTransactions"`
 	ConfirmedTransactions  []*SnapshotConfirmedTransaction  `json:"confirmedTransactions"`
+	RevertedTransactions   []*SnapshotRevertedTransaction   `json:"revertedTransactions"`
 	CoordinatorState       CoordinatorState                 `json:"coordinatorState"`
 	BlockHeight            uint64                           `json:"blockHeight"`
 	EndorserCandidates     []string                         `json:"endorserCandidates,omitempty"` // (COORDINATOR_ENDORSER selection mode only)
@@ -39,8 +45,7 @@ type CoordinatorSnapshot struct {
 }
 
 type SnapshotPooledTransaction struct {
-	ID         uuid.UUID
-	Originator string
+	ID uuid.UUID
 }
 
 func (t *SnapshotPooledTransaction) GetID() string {
@@ -56,6 +61,10 @@ type SnapshotDispatchedTransaction struct {
 
 type SnapshotConfirmedTransaction struct {
 	SnapshotDispatchedTransaction
-	Hash         pldtypes.Bytes32
+	Hash pldtypes.Bytes32
+}
+
+type SnapshotRevertedTransaction struct {
+	SnapshotPooledTransaction
 	RevertReason pldtypes.HexBytes
 }
