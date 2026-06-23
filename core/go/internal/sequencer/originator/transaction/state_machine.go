@@ -110,6 +110,17 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}},
 			},
+			Event_ConfirmedReverted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					// TODO AM: use a validator rather than recording here
+					Actions: []ActionRule{{Action: action_RecordWillRetry}},
+					Transitions: []Transition{{
+						If: statemachine.GuardNot(guard_WillRetry),
+						To: State_Confirmed,
+					}},
+				}},
+			},
 			Event_Delegated: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -129,6 +140,16 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
 					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
+				}},
+			},
+			Event_ConfirmedReverted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_RecordWillRetry}},
+					Transitions: []Transition{{
+						If: statemachine.GuardNot(guard_WillRetry),
 						To: State_Confirmed,
 					}},
 				}},
@@ -196,6 +217,16 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
 					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
+				}},
+			},
+			Event_ConfirmedReverted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_RecordWillRetry}},
+					Transitions: []Transition{{
+						If: statemachine.GuardNot(guard_WillRetry),
 						To: State_Confirmed,
 					}},
 				}},
@@ -312,6 +343,16 @@ var stateDefinitionsMap = StateDefinitions{
 					}},
 				}},
 			},
+			Event_ConfirmedReverted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_RecordWillRetry}},
+					Transitions: []Transition{{
+						If: statemachine.GuardNot(guard_WillRetry),
+						To: State_Confirmed,
+					}},
+				}},
+			},
 			Event_Delegated: {
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
@@ -382,6 +423,16 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
 					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
+				}},
+			},
+			Event_ConfirmedReverted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_RecordWillRetry}},
+					Transitions: []Transition{{
+						If: statemachine.GuardNot(guard_WillRetry),
 						To: State_Confirmed,
 					}},
 				}},
@@ -748,6 +799,16 @@ var stateDefinitionsMap = StateDefinitions{
 				Match: statemachine.MatchFirst,
 				Handlers: []EventHandler{{
 					Transitions: []Transition{{
+						To: State_Confirmed,
+					}},
+				}},
+			},
+			Event_ConfirmedReverted: {
+				Match: statemachine.MatchFirst,
+				Handlers: []EventHandler{{
+					Actions: []ActionRule{{Action: action_RecordWillRetry}},
+					Transitions: []Transition{{
+						If: statemachine.GuardNot(guard_WillRetry),
 						To: State_Confirmed,
 					}},
 				}},

@@ -40,7 +40,7 @@ func TestGetSnapshot_OK(t *testing.T) {
 
 func TestGetSnapshot_AggregatesTransactionsBySnapshotType(t *testing.T) {
 	ctx := context.Background()
-	pooledTxnID, dispatchedTxnID, confirmedTxnID, excludedTxnID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	pooledTxnID, dispatchedTxnID, confirmedTxnID, revertedTxnID, excludedTxnID := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	pooledSnapshot := &common.SnapshotPooledTransaction{
 		ID: pooledTxnID,
 	}
@@ -48,22 +48,27 @@ func TestGetSnapshot_AggregatesTransactionsBySnapshotType(t *testing.T) {
 	dispatchedSnapshot.ID = dispatchedTxnID
 	confirmedSnapshot := &common.SnapshotConfirmedTransaction{}
 	confirmedSnapshot.ID = confirmedTxnID
+	revertedSnapshot := &common.SnapshotRevertedTransaction{}
+	revertedSnapshot.ID = revertedTxnID
 
 	pooledTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	pooledTxn.EXPECT().GetID().Return(pooledTxnID)
-	pooledTxn.EXPECT().GetSnapshot(mock.Anything).Return(pooledSnapshot, nil, nil)
+	pooledTxn.EXPECT().GetSnapshot(mock.Anything).Return(pooledSnapshot, nil, nil, nil)
 	dispatchedTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	dispatchedTxn.EXPECT().GetID().Return(dispatchedTxnID)
-	dispatchedTxn.EXPECT().GetSnapshot(mock.Anything).Return(nil, dispatchedSnapshot, nil)
+	dispatchedTxn.EXPECT().GetSnapshot(mock.Anything).Return(nil, dispatchedSnapshot, nil, nil)
 	confirmedTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	confirmedTxn.EXPECT().GetID().Return(confirmedTxnID)
-	confirmedTxn.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, confirmedSnapshot)
+	confirmedTxn.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, confirmedSnapshot, nil)
+	revertedTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
+	revertedTxn.EXPECT().GetID().Return(revertedTxnID)
+	revertedTxn.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, nil, revertedSnapshot)
 	excludedTxn := coordinatortransactionmocks.NewCoordinatorTransaction(t)
 	excludedTxn.EXPECT().GetID().Return(excludedTxnID)
-	excludedTxn.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, nil)
+	excludedTxn.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, nil, nil)
 
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).
-		Transactions(pooledTxn, dispatchedTxn, confirmedTxn, excludedTxn).
+		Transactions(pooledTxn, dispatchedTxn, confirmedTxn, revertedTxn, excludedTxn).
 		Build()
 
 	snapshot := c.getSnapshot(ctx)
@@ -71,9 +76,11 @@ func TestGetSnapshot_AggregatesTransactionsBySnapshotType(t *testing.T) {
 	assert.Len(t, snapshot.PooledTransactions, 1)
 	assert.Len(t, snapshot.DispatchedTransactions, 1)
 	assert.Len(t, snapshot.ConfirmedTransactions, 1)
+	assert.Len(t, snapshot.RevertedTransactions, 1)
 	assert.Equal(t, pooledTxnID, snapshot.PooledTransactions[0].ID)
 	assert.Equal(t, dispatchedTxnID, snapshot.DispatchedTransactions[0].ID)
 	assert.Equal(t, confirmedTxnID, snapshot.ConfirmedTransactions[0].ID)
+	assert.Equal(t, revertedTxnID, snapshot.RevertedTransactions[0].ID)
 }
 
 func TestGetSnapshot_IncludesCoordinatorStateAndBlockHeight(t *testing.T) {

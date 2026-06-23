@@ -25,6 +25,7 @@ type CoordinatorSnapshot struct {
 	DispatchedTransactions []*SnapshotDispatchedTransaction `json:"dispatchedTransactions"`
 	PooledTransactions     []*SnapshotPooledTransaction     `json:"pooledTransactions"`
 	ConfirmedTransactions  []*SnapshotConfirmedTransaction  `json:"confirmedTransactions"`
+	RevertedTransactions   []*SnapshotRevertedTransaction   `json:"revertedTransactions"`
 	CoordinatorState       CoordinatorState                 `json:"coordinatorState"`
 	BlockHeight            uint64                           `json:"blockHeight"`
 	EndorserCandidates     []string                         `json:"endorserCandidates,omitempty"` // (COORDINATOR_ENDORSER selection mode only)
@@ -56,6 +57,10 @@ type SnapshotDispatchedTransaction struct {
 
 type SnapshotConfirmedTransaction struct {
 	SnapshotDispatchedTransaction
-	Hash         pldtypes.Bytes32
+	Hash pldtypes.Bytes32
+}
+
+type SnapshotRevertedTransaction struct {
+	SnapshotPooledTransaction
 	RevertReason pldtypes.HexBytes
 }

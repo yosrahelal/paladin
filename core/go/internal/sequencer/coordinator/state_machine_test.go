@@ -49,7 +49,7 @@ func newDispatchedTxMock(t *testing.T) (*coordinatortransactionmocks.Coordinator
 	// GetSnapshot is called by action_SendHeartbeat when building the coordinator heartbeat payload.
 	tx.EXPECT().GetSnapshot(mock.Anything).Return(nil, &common.SnapshotDispatchedTransaction{
 		SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txID},
-	}, nil).Maybe()
+	}, nil, nil).Maybe()
 	// HandleEvent is called by action_PropagateHeartbeatIntervalToTransactions on each heartbeat tick.
 	tx.EXPECT().HandleEvent(mock.Anything, mock.AnythingOfType("*common.HeartbeatIntervalEvent")).Return(nil).Maybe()
 	// HasDispatchedPublicTransaction is called by action_NudgeDispatchLoop to track in-flight counts.
@@ -656,7 +656,7 @@ func TestCoordinator_WhenElect_HigherPriorityHeartbeat_HasInflightNoDispatched_T
 	txConfirmed.EXPECT().GetID().Return(txID).Maybe()
 	txConfirmed.EXPECT().GetCurrentState().Return(transaction.State_Confirmed).Maybe()
 	// GetSnapshot is called by action_SendHeartbeat in OnTransitionTo Closing.
-	txConfirmed.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, nil).Maybe()
+	txConfirmed.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, nil, nil).Maybe()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Elect).
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
@@ -1069,7 +1069,7 @@ func TestCoordinator_WhenPreparedReceivesClosingHeartbeat_ConfirmedTransactionsI
 	confirmedTxID := uuid.New()
 	confirmedTx.EXPECT().GetID().Return(confirmedTxID).Maybe()
 	confirmedTx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
-	confirmedTx.EXPECT().GetSnapshot(mock.Anything).Return(&common.SnapshotPooledTransaction{ID: confirmedTxID}, nil, nil).Maybe()
+	confirmedTx.EXPECT().GetSnapshot(mock.Anything).Return(&common.SnapshotPooledTransaction{ID: confirmedTxID}, nil, nil, nil).Maybe()
 
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Prepared).
 		NodeName("node1").
@@ -1142,7 +1142,7 @@ func TestCoordinator_WhenPrepared_HeartbeatReceived_HigherPriority_HasInflightNo
 	txConfirmed.EXPECT().GetID().Return(txID).Maybe()
 	txConfirmed.EXPECT().GetCurrentState().Return(transaction.State_Confirmed).Maybe()
 	// GetSnapshot is called by action_SendHeartbeat in OnTransitionTo Closing.
-	txConfirmed.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, nil).Maybe()
+	txConfirmed.EXPECT().GetSnapshot(mock.Anything).Return(nil, nil, nil, nil).Maybe()
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Prepared).
 		NodeName("node2").
 		CurrentActiveCoordinator("node3").
@@ -1321,7 +1321,7 @@ func TestCoordinator_WhenPreparedTransitionsToActive_RefreshesSigningIdentityAnd
 	pooledTx.EXPECT().GetID().Return(pooledTxID).Maybe()
 	pooledTx.EXPECT().GetCurrentState().Return(transaction.State_Pooled).Maybe()
 	// action_SendHeartbeat (OnTransitionTo Active) builds the payload by calling GetSnapshot on each transaction.
-	pooledTx.EXPECT().GetSnapshot(mock.Anything).Return(&common.SnapshotPooledTransaction{ID: pooledTxID}, nil, nil).Maybe()
+	pooledTx.EXPECT().GetSnapshot(mock.Anything).Return(&common.SnapshotPooledTransaction{ID: pooledTxID}, nil, nil, nil).Maybe()
 	pooledTx.EXPECT().HandleEvent(mock.Anything, mock.AnythingOfType("*transaction.SelectedEvent")).Return(nil).Once()
 
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Prepared).
@@ -1704,7 +1704,7 @@ func TestCoordinator_WhenActive_TransactionStateTransition_ToPooled_PoolsAndSele
 	txReverting.EXPECT().GetCurrentState().Return(transaction.State_Dispatched).Maybe()
 	txReverting.EXPECT().GetSnapshot(mock.Anything).Return(nil, &common.SnapshotDispatchedTransaction{
 		SnapshotPooledTransaction: common.SnapshotPooledTransaction{ID: txID},
-	}, nil).Maybe()
+	}, nil, nil).Maybe()
 	// action_NudgeDispatchLoop calls HasDispatchedPublicTransaction on each dispatched transaction.
 	txReverting.EXPECT().HasDispatchedPublicTransaction().Return(true).Maybe()
 	// action_SelectTransaction will call HandleEvent(SelectedEvent) after pooling.

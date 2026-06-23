@@ -38,7 +38,7 @@ type CoordinatorTransaction interface {
 	GetID() uuid.UUID
 	GetCurrentState() State
 	HasDispatchedPublicTransaction() bool
-	GetSnapshot(ctx context.Context) (*common.SnapshotPooledTransaction, *common.SnapshotDispatchedTransaction, *common.SnapshotConfirmedTransaction)
+	GetSnapshot(ctx context.Context) (*common.SnapshotPooledTransaction, *common.SnapshotDispatchedTransaction, *common.SnapshotConfirmedTransaction, *common.SnapshotRevertedTransaction)
 	GetOriginatorNode() string
 }
 
