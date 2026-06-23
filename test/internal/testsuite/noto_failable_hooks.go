@@ -609,6 +609,12 @@ func (s *notoRevertableHooksSuite) checkBatch(entries []pendingEntry) {
 	log.Infof("notoRevertableHooksSuite: rolling check batch=%d failures=%d pente_input_n/a=%d dep_failed=%d",
 		len(entries), len(batchFailures), len(penteInputNotAvailableTxIDs), len(dependencyFailedTxIDs))
 
+	if len(batchFailures) > 0 {
+		for _, f := range batchFailures {
+			log.Errorf("notoRevertableHooksSuite: rolling check failure: %s", f)
+		}
+	}
+
 	s.resultsMu.Lock()
 	s.failures = append(s.failures, batchFailures...)
 	if len(penteInputNotAvailableTxIDs) > 0 {
