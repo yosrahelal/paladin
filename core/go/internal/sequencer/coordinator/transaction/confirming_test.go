@@ -592,16 +592,16 @@ func Test_action_FinalizeNonRetryableRevert_OnCommitCallback(t *testing.T) {
 	assert.True(t, onCommitCalled, "onCommit callback should have been invoked")
 }
 
-func Test_action_FinalizeNonRetryableRevert_OnRollbackCallback(t *testing.T) {
+func Test_action_FinalizeNonRetryableRevert_OnRollbackRetry(t *testing.T) {
 	ctx := t.Context()
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Confirmed).
 		RevertCount(2).
 		RevertReason(pldtypes.MustParseHexBytes("0xdeadbeef")).
 		Build()
 
-	rollbackErr := errors.New("finalize failed")
-	onRollbackCalled := false
-	mocks.SyncPoints.EXPECT().QueueTransactionFinalize(
+	callCount := 0
+	maxCalls := 2
+	mocks.SyncPoints.On("QueueTransactionFinalize",
 		mock.Anything,
 		mock.MatchedBy(func(req *syncpoints.TransactionFinalizeRequest) bool {
 			return req.Domain == txn.pt.Domain &&
@@ -609,14 +609,20 @@ func Test_action_FinalizeNonRetryableRevert_OnRollbackCallback(t *testing.T) {
 				req.TransactionID == txn.pt.ID
 		}),
 		mock.Anything, mock.Anything,
-	).Run(func(_ context.Context, _ *syncpoints.TransactionFinalizeRequest, _ func(context.Context), onRollback func(context.Context, error)) {
-		onRollback(ctx, rollbackErr)
-		onRollbackCalled = true
+	).Run(func(args mock.Arguments) {
+		callCount++
+		if callCount < maxCalls {
+			onRollback := args.Get(3).(func(context.Context, error))
+			onRollback(ctx, errors.New("finalize failed"))
+		} else {
+			onCommit := args.Get(2).(func(context.Context))
+			onCommit(ctx)
+		}
 	}).Return()
 
 	err := action_FinalizeNonRetryableRevert(ctx, txn, nil)
 	require.NoError(t, err)
-	assert.True(t, onRollbackCalled, "onRollback callback should have been invoked")
+	assert.Equal(t, maxCalls, callCount)
 }
 
 func Test_action_NotifyDependantsOfRevertedConfirmation_SendsRevertedEvent(t *testing.T) {
@@ -823,9 +829,7 @@ func TestDependsOn_FinalizeOnChainedDependencyFailure(t *testing.T) {
 		mock.Anything,
 	).Run(func(args mock.Arguments) {
 		onCommit := args.Get(2).(func(context.Context))
-		onRollback := args.Get(3).(func(context.Context, error))
 		onCommit(ctx)
-		onRollback(ctx, assert.AnError)
 	}).Return()
 
 	event := &ChainedDependencyFailedEvent{
@@ -834,6 +838,42 @@ func TestDependsOn_FinalizeOnChainedDependencyFailure(t *testing.T) {
 	}
 	err := action_FinalizeOnChainedDependencyFailure(ctx, txn, event)
 	require.NoError(t, err)
+}
+
+func TestDependsOn_FinalizeOnChainedDependencyFailure_OnRollbackRetry(t *testing.T) {
+	ctx := t.Context()
+	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).Build()
+	dependencyID := uuid.New()
+	failureMsg := i18n.NewError(ctx, msgs.MsgTxMgrDependencyFailed, dependencyID).Error()
+
+	callCount := 0
+	maxCalls := 2
+	mocks.SyncPoints.On("QueueTransactionFinalize",
+		mock.Anything,
+		mock.MatchedBy(func(req *syncpoints.TransactionFinalizeRequest) bool {
+			return req.TransactionID == txn.pt.ID &&
+				req.FailureMessage == failureMsg
+		}),
+		mock.Anything,
+		mock.Anything,
+	).Run(func(args mock.Arguments) {
+		callCount++
+		if callCount < maxCalls {
+			onRollback := args.Get(3).(func(context.Context, error))
+			onRollback(ctx, errors.New("finalize failed"))
+		} else {
+			onCommit := args.Get(2).(func(context.Context))
+			onCommit(ctx)
+		}
+	}).Return()
+
+	event := &ChainedDependencyFailedEvent{
+		BaseCoordinatorEvent: BaseCoordinatorEvent{TransactionID: txn.pt.ID},
+		FailedTxID:           dependencyID,
+	}
+	err := action_FinalizeOnChainedDependencyFailure(ctx, txn, event)
+	require.NoError(t, err)
+	assert.Equal(t, maxCalls, callCount)
 }
 
 func TestDependsOn_CascadeFailure_ErrorsWhenDependentMissing(t *testing.T) {
