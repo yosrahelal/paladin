@@ -63,7 +63,7 @@ Some contracts will be single-use (or very infrequent use) where others may regu
 The seqencer lifecycle management built in to Paladin is highly configurable, but the default configuration is intended to provide:
 
 - minimal resource consumption for infrequently used contracts
-  - a sequencer will be removed from memory whe not in use
+  - a sequencer will be removed from memory when not in use
 - minimal latency for frequently used contracts
   - a sequencer will not be removed from memory if it is actively processing transactions
 - stability of the Paladin runtime by limited the overall number of sequencers which are active at a given time
