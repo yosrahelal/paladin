@@ -74,7 +74,7 @@ The following sequence diagram shows the lifecycle of a sequencer for a newly su
 
 ## Event driven state machines
 
-The distributed sequencer is built using [state machines](./distributed_sequencer_state_machine.md) to track the coordinator, originator, and their transactions. A single Go route called the `event loop` processes all events for the coordinator and originator respectively. This ensures thread safe updating of the state machines.
+The distributed sequencer is built using [state machines](./distributed_sequencer_state_machine.md) to track the coordinator, originator, and their transactions. A single goroutine called the `event loop` processes all events for the coordinator and originator respectively. This ensures thread safe updating of the state machines.
 
 The state machines are updated by the event loop processing events. Events typically result in a transition between the states and in some cases result in specific actions being carried out before or during the transition.
 
