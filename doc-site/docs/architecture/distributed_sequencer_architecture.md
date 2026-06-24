@@ -4,13 +4,84 @@ Paladin is made up of a number of discrete components, each of which handles dif
 
 The distributed sequencer is one of those standalone components and the sequencer manager handles the lifetime of sequencers for different domain contracts.
 
-The following diagram provides detail on the interfaces between other Paladin components and the sequencer. The _SequencerLifecycle_ interface provides the mechanism by which the sequencer for a specific domain contract is retrieved. If it is
-the first time that sequencer has been loaded in the node, the sequencer will be instatiated before being returned. If the sequencer is already loaded it will simple be returned.
+The distributed sequencer is implemented using [state machines](./distributed_sequencer_state_machine.md) to track activity in the [2 core components](./distributed_sequencer_components.md) of the sequencer (the originator and the coordinator).
 
-![Distributed Sequencer Architecture](diagrams/paladin-code-architecture.svg){.zoomable-image}
+For every active sequencer the state machines are updated by generating, receiving (from other nodes), and processing state machine events. The order that state machine events are handled is critical for reliable transaction processing. The sequencer architecture uses several event handling queues, implemented using Golang channels, to maintain this ordering.
 
-Depending on the type of domain contract being coordinated, Paladin messages may need to flow to and from other Paladin nodes in order to assemble, endorse, and confirm transactions. For domain contracts that are coordinated on the same node the transaction originated from, no communication with other nodes is required.
+## Sequencer Components
 
-The sequencer architecture uses internal events to progress transactions through the sequencer state machine. If communication with other nodes is node required, events are flowed directly back into the state machine rather than being transmitted across the network.
+In domains (such as Pente) where the spending rules for states allow any one of a group of parties to spend the state, then we need to coordinate the assembly of transactions across multiple nodes so that we can maximize the throughput by speculatively spending new states and avoiding transactions being reverted due to double concurrent spending / state contention.
 
-For more information about the different sequencer state machines and how they work see the [state machine](./distributed_sequencer_state_machine.md) topic.
+To achieve this, it is important that we have an algorithm that allows all nodes to agree on which of them should be selected as the coordinator at any given point in time. And all other nodes delegate their transactions to the coordinator.
+
+A node uses 3 key components to coordinate transactions with a domain contract:
+
+### 1 - Sequencer
+
+The sequencer manages the overall lifecycle of transactions submitted to the node. The sequencer comprises 2 sub-components:
+
+### 2 - Originator
+
+The originator is responsible for assembling and transactions when instructed to do so by the coordinator.
+
+### 3 - Coordinator
+
+The coordinator determines which contract-wide states should be spent in order to satisfy a transaction's inputs and communicates with originators to instruct them what to submit to the EVM.
+
+A coordinator may not always be running on every node participating in the private contract (see below).
+
+For each node, for each active private contract, there is one instance of the `Sequencer` in memory. The `Sequencer` contains sub components for the `Originator` and `Coordinator`. The `Originator` is responsible for keeping track of transactions sent, including delegating them to the active coordinator (which may be on a different node) and responding to requests to assemble its tranasctions. The `Coordinator` is responsible for coordinating the assembly and submission of transactions from all `Originators`.
+
+```mermaid
+---
+title: In memory state for a given node and a given contract address
+---
+classDiagram
+    Sequencer "1" --> "1" Originator
+    Sequencer "1" --> "1" Coordinator
+    Originator "1" --> "*"  OriginatorTransaction : Transactions
+    Coordinator "1" --> "*"  CoordinatorTransaction : Transactions
+    class Sequencer{
+        Address ContractAddress
+    }
+    class Originator {
+    }
+    class Coordinator {
+    }
+    class OriginatorTransaction {
+    }
+    class CoordinatorTransaction {
+    }
+```
+
+## Sequencer lifecycle
+
+Paladin runs a dedicated sequencer for every domain contract it is actively processing transactions for. The sequencers used for different contracts have specific committee members, originator nodes, and coordination behaviours.
+
+Some contracts will be single-use (or very infrequent use) where others may regularly have new transactions being submitted. Paladin manages the lifecycle of every sequencer to avoid runtime resources being used if no transactions are actively being handled for a given domain instance.
+
+The seqencer lifecycle management built in to Paladin is highly configurable, but the default configuration is intended to provide:
+
+- minimal resource consumption for infrequently used contracts
+  - a sequencer will be removed from memory whe not in use
+- minimal latency for frequently used contracts
+  - a sequencer will not be removed from memory if it is actively processing transactions
+- stability of the Paladin runtime by limited the overall number of sequencers which are active at a given time
+
+The following sequence diagram shows the lifecycle of a sequencer for a newly submitted transaction:
+
+![Sequencer Lifecycle](./diagrams/paladin-sequencer-tx-flow.svg){.zoomable-image}
+
+## Event driven state machines
+
+The distributed sequencer is built using [state machines](./distributed_sequencer_state_machine.md) to track the coordinator, originator, and their transactions. A single Go route called the `event loop` processes all events for the coordinator and originator respectively. This ensures thread safe updating of the state machines.
+
+The state machines are updated by the event loop processing events. Events typically result in a transition between the states and in some cases result in specific actions being carried out before or during the transition.
+
+Events can be received from sources external to the node (such as another node), or internally from a state machine produce events as a result of processing other ones.
+
+The following diagram demonstrates how events are passed to the state machines and how events are processed in one of two priority categories. Priority events are always processed first by the relevant state machine, while regular events are processed whenever there are no priority events to handle:
+
+![Event Handling](diagrams/paladin-code-architecture.svg){.zoomable-image}
+
+The [state machine](./distributed_sequencer_state_machine.md)'s handling of events can in some cases require it to create and immediately process a new event. This allows the state machine to ensure particular updates are processed synchronously.
