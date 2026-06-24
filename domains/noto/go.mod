@@ -1,6 +1,8 @@
 module github.com/LFDT-Paladin/paladin/domains/noto
 
-go 1.24.4
+go 1.25.0
+
+toolchain go1.25.11
 
 require (
 	github.com/LFDT-Paladin/paladin/common/go v0.0.0-00010101000000-000000000000
@@ -11,7 +13,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hyperledger/firefly-signer v1.1.22
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/text v0.33.0
+	golang.org/x/text v0.38.0
 )
 
 require (
@@ -35,10 +37,10 @@ require (
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
-	golang.org/x/crypto v0.47.0 // indirect
-	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/term v0.39.0 // indirect
+	golang.org/x/crypto v0.53.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/term v0.44.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250303144028-a0af3efb3deb // indirect
 	google.golang.org/grpc v1.72.1 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
