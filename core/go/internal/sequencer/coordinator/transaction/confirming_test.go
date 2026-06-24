@@ -538,7 +538,7 @@ func Test_action_RecordConfirmationRevert_OnChainNoRevertData(t *testing.T) {
 	txn, mocks := NewTransactionBuilderForTesting(t, State_Dispatched).
 		BaseLedgerRevertRetryThreshold(3).
 		Build()
-	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, pldtypes.HexBytes(nil)).Return(false, "", nil)
+	mocks.DomainAPI.EXPECT().IsBaseLedgerRevertRetryable(mock.Anything, mock.Anything).Return(false, "", nil)
 
 	onChain := pldtypes.OnChainLocation{Type: pldtypes.OnChainTransaction}
 	err := action_RecordConfirmationRevert(ctx, txn, &ConfirmedRevertedEvent{
