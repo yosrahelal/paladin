@@ -181,15 +181,9 @@ func (ss *stateManager) GetTransactionStates(ctx context.Context, dbTX persisten
 	var records []*transactionStateRecord
 	err := dbTX.DB().
 		WithContext(ctx).
-		// Split the original single query with an OR join condition into two UNION ALL parts.
-		// The OR prevented the planner from using the states.id index, forcing a full table scan.
-		//
-		// Part 1: all four record types resolved by direct state ID.
-		//   Spend records that reference a nullifier ID (not a state ID) are excluded via NOT EXISTS
-		//   so they do not appear as "unavailable" here while Part 2 returns them with state data.
-		//
-		// Part 2: spend records resolved through state_nullifiers → states (nullifier-spent states).
-		//   LEFT JOIN preserves the unavailable row when the state itself is missing.
+		// Previously we used OR join condition to join the records table with the states table.
+		// This prevented the planner from using the states.id index, forcing a full table scan.
+		// Instead we use union all to join the records table with the states table.
 		Raw(`SELECT "states".*, "records"."state", "records"."transaction", "records"."record_type" FROM ( `+
 			`SELECT "transaction", "state", 'spent' AS "record_type" FROM "state_spend_records" WHERE "transaction" = ? `+
 			`  AND NOT EXISTS (SELECT 1 FROM "state_nullifiers" WHERE "state_nullifiers"."id" = "state_spend_records"."state") `+
