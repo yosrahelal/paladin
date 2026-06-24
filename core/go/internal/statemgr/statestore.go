@@ -181,6 +181,8 @@ func (ss *stateManager) GetTransactionStates(ctx context.Context, dbTX persisten
 	var records []*transactionStateRecord
 	err := dbTX.DB().
 		WithContext(ctx).
+		// This query joins across three tables in a single query - pushing the complexity to the DB.
+		// The reason we have three tables is to make the queries for available states simpler.
 		// Previously we used OR join condition to join the records table with the states table.
 		// This prevented the planner from using the states.id index, forcing a full table scan.
 		// Instead we use union all to join the records table with the states table.
