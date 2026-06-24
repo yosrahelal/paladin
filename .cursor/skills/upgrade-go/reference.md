@@ -31,37 +31,37 @@ The `update_go_directives.py` script handles this, including inserting a `toolch
 
 ## controller-gen compatibility
 
-`controller-gen` is installed via `go install` in `operator/Makefile` at a pinned version. Each CT version is tied to a specific k8s version and minimum Go version:
+`controller-gen` is installed via `go install` in `operator/Makefile` at a pinned version (`CONTROLLER_TOOLS_VERSION`). Each CT version is tied to a specific k8s version and has a minimum Go version requirement:
 
 | CT version | k8s.io/* | Min Go | x/tools |
 |------------|----------|--------|---------|
-| v0.16.x | v0.31 | 1.22 | ~v0.24 ⚠️ |
+| v0.16.x | v0.31 | 1.22 | ~v0.24 |
 | v0.17.x | v0.32 | 1.23 | ~v0.27 |
 | v0.18.x | v0.33 | 1.23 | ~v0.30 |
-| v0.19.x | v0.34 | 1.24 | ~v0.36 ✓ |
-| v0.20.x | v0.35 | 1.25 | ~v0.40 ✓ |
-| v0.21.x | v0.36 | 1.26 | ~v0.44 ✓ |
-
-**The breakage**: CT v0.16.x uses `x/tools ~v0.24.0`, which contains a compile-time array assertion (`var _ [-delta*delta]byte`) that Go 1.26 rejects as an invalid negative array length. Any CT version using `x/tools >= v0.25.0` is safe.
+| v0.19.x | v0.34 | 1.24 | ~v0.36 |
+| v0.20.x | v0.35 | 1.25 | ~v0.40 |
+| v0.21.x | v0.36 | 1.26 | ~v0.44 |
 
 **How to pick the right version**:
 1. Check the operator's current `k8s.io/api` version in `operator/go.mod`
 2. Find the CT version row whose k8s column matches
-3. Verify that CT version's `x/tools` is ≥ v0.25.0 (all v0.19+ are fine)
+3. Verify the CT version compiles against the target Go version — check its `go` directive and transitive dependency versions (especially `x/tools`) on pkg.go.dev
 4. Update `CONTROLLER_TOOLS_VERSION` in `operator/Makefile`
 
 If the operator's k8s version also needs bumping, that's a larger change — coordinate k8s, controller-runtime, and CT upgrades together.
 
-**Check a tool's x/tools version** without installing it:
+**CRD regeneration**: bumping `CONTROLLER_TOOLS_VERSION` causes the CRDs to be regenerated the next time `make generate` or `make manifests` is run (e.g. in CI). Even a minor CT version bump can produce formatting or ordering changes in the generated YAML. Review the CRD diffs carefully — most will be cosmetic, but occasionally a new CT version adds or changes a field (e.g. `x-kubernetes-*` validation annotations). Commit the regenerated CRDs as part of the same PR as the version bump.
+
+**Check a CT version's details** without installing it:
 
 ```
-https://pkg.go.dev/sigs.k8s.io/controller-tools@vX.Y.Z  (Dependencies tab)
+https://pkg.go.dev/sigs.k8s.io/controller-tools@vX.Y.Z
 ```
 
 ## Other tools that may need bumping
 
-The same `x/tools` issue can affect other tools. Check their dependency on `x/tools` the same way:
+After a Go version bump, other pinned tools may also fail to compile. Check each tool's `go` directive and dependencies the same way:
 
-- **mockery**: installed via `installMockery` task in `build.gradle` — check `github.com/vektra/mockery/v3` deps
-- **golangci-lint**: installed via `installGolangCILint` — check `github.com/golangci/golangci-lint` deps
+- **mockery**: installed via `installMockery` task in `build.gradle` — check `github.com/vektra/mockery/v3`
+- **golangci-lint**: installed via `installGolangCILint` — check `github.com/golangci/golangci-lint`
 - **protoc-gen-go / protoc-gen-go-grpc**: installed via `installProtocGenGo` / `installProtocGenGoRPC` — these track grpc/protobuf releases and rarely have this issue
