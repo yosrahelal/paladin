@@ -78,7 +78,7 @@ The distributed sequencer is built using [state machines](./distributed_sequence
 
 The state machines are updated by the event loop processing events. Events typically result in a transition between the states and in some cases result in specific actions being carried out before or during the transition.
 
-Events can be received from sources external to the node (such as another node), or internally from a state machine produce events as a result of processing other ones.
+Events can be received from sources external to the node (such as another node), or internally from a state machine producing events as a result of processing other ones.
 
 The following diagram demonstrates how events are passed to the state machines and how events are processed in one of two priority categories. Priority events are always processed first by the relevant state machine, while regular events are processed whenever there are no priority events to handle:
 
