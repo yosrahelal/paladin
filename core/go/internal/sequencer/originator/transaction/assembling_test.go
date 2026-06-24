@@ -782,3 +782,45 @@ func Test_action_RejectAssemblyPrivateStateDataPending_SendsRejection(t *testing
 	require.NoError(t, err)
 	assert.True(t, mocks.SentMessageRecorder.HasSentAssembleRejection(), "expected assemble rejection to be sent")
 }
+
+func TestGuard_AssembleRequestMatchesCurrentAssembly_Matches(t *testing.T) {
+	// Returns true when the latest request ID matches the in-flight assembly request ID and a cancel func is set.
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Assembling)
+	txn, _ := builder.BuildWithMocks()
+
+	requestID := uuid.New()
+	txn.currentAssemblyRequestID = requestID
+	txn.latestAssembleRequest = &assembleRequestFromCoordinator{requestID: requestID}
+	txn.cancelCurrentAssembly = func() {}
+
+	assert.True(t, guard_AssembleRequestMatchesInProgressAssembly(ctx, txn))
+}
+
+func TestGuard_AssembleRequestMatchesCurrentAssembly_DoesNotMatch(t *testing.T) {
+	// Returns false when the latest request ID differs from the in-flight one.
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Assembling)
+	txn, _ := builder.BuildWithMocks()
+
+	txn.currentAssemblyRequestID = uuid.New()
+	txn.latestAssembleRequest = &assembleRequestFromCoordinator{requestID: uuid.New()}
+	txn.cancelCurrentAssembly = func() {}
+
+	assert.False(t, guard_AssembleRequestMatchesInProgressAssembly(ctx, txn))
+}
+
+func TestGuard_AssembleRequestMatchesCurrentAssembly_NoCancelFunc(t *testing.T) {
+	// Returns false when there is no in-flight goroutine (cancelCurrentAssembly is nil), even if
+	// the request IDs happen to match, because there is nothing currently being assembled.
+	ctx := context.Background()
+	builder := NewTransactionBuilderForTesting(t, State_Assembling)
+	txn, _ := builder.BuildWithMocks()
+
+	requestID := uuid.New()
+	txn.currentAssemblyRequestID = requestID
+	txn.latestAssembleRequest = &assembleRequestFromCoordinator{requestID: requestID}
+	txn.cancelCurrentAssembly = nil
+
+	assert.False(t, guard_AssembleRequestMatchesInProgressAssembly(ctx, txn))
+}
