@@ -40,7 +40,7 @@ func Test_stopDispatchLoop_StopsRunningLoop(t *testing.T) {
 
 	c, mocks := NewCoordinatorBuilderForTesting(t, State_Active).Build()
 	mocks.EngineIntegration.On("GetBlockHeight", mock.Anything).Return(int64(0))
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 
 	c.startDispatchLoop()
 	require.NotNil(t, c.dispatchLoopDone, "dispatch loop must be running after startDispatchLoop")
@@ -70,7 +70,7 @@ func TestDispatchLoop_StopWhileWaitingForInFlightSlot(t *testing.T) {
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
 
 	ctx, cancel := context.WithCancel(t.Context())
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 	defer cancel()
 
 	c.startDispatchLoop()
@@ -102,7 +102,7 @@ func TestDispatchLoop_StopAtSelect(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	c, mocks := builder.Build()
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 	c.startDispatchLoop()
 	cancel()
 	// Stop without ever queueing a tx; loop is blocked on the select waiting for dispatchQueue or ctx.Done()
