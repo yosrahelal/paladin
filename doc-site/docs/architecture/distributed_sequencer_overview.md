@@ -12,7 +12,7 @@ For the Pente domain for example, there may be 2 parties who wish to modify the 
 
 The component of Paladin that manages the sequencing of private transactions for all domains is called the **Distributed Sequencer**.
 
-![Distributed Sequencer](diagrams/paladin-sequencer.svg){.zoomable-image}
+![Distributed Sequencer](diagrams/paladin-sequencer.png){.zoomable-image}
 
 The term "distributed" refers to the fact that for any given instance of a domain the sequencing of transactions is distributed among the nodes that are participating in that domain instance. The sequencing of transactions is distributed among the nodes to share the workload and resources across the peers. For some domain types it is important to ensure that only one participating node acts as the sequencer at a given point in time. For other domain types the participating nodes are responsible for their own sequencing.
 
@@ -26,7 +26,7 @@ For domains that use technologies such as zero-knowledge proofs to validate the 
 
 ### Privacy groups and private smart contracts
 
-For private smart contracts deployed to a privacy group, every change to the state trie made by a private smart contract transaction must visible to subsequent transactions invoking the same private smart contract. This ensures that the new state trie created by the first tranasction is used as the starting state for the next transaction. This requires that only one member of the privacy group acts as the transaction coordinator at a given time, but since all members of the privacy group have visibility of the private smart contract state any party can act as the sequencer.
+For private smart contracts deployed to a privacy group, every change to the state trie made by a private smart contract transaction must visible to subsequent transactions invoking the same private smart contract. This ensures that the new state trie created by the first transaction is used as the starting state for the next transaction. This requires that only one member of the privacy group acts as the transaction coordinator at a given time, but since all members of the privacy group have visibility of the private smart contract state any party can act as the coordinator.
 
 Paladin uses a deterministic algorithm for selecting which node to act as the sequencing node if none is currently doing so. If a node becomes temporarily unavailable the algorithm chooses an alternative node to act as the sequencing node, repeating the process until one of the nodes begins sequencing transactions.
 

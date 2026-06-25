@@ -145,25 +145,31 @@ stateDiagram-v2
 
     classDef parentCls fill:#dae8fc,stroke:#6c8ebf,color:#333
     classDef chainedCls fill:#ffe6cc,stroke:#d79b00,color:#333
+    classDef failedCls fill:#f8cecc,stroke:#b85450,color:#999
 
     Tx1 : Tx 1
     Tx2 : Tx 2
     Tx3 : Tx 3
     Tx4 : Tx 4
     Tx5 : Tx 5
-    Tx6 : Tx 6
+    Tx6 : Tx 6 (reverted)
+    Tx7 : Tx 7
 
     class Tx1,Tx3,Tx5 parentCls
-    class Tx2,Tx4,Tx6 chainedCls
+    class Tx2,Tx4,Tx7 chainedCls
+    class Tx6 failedCls
 
     Tx1 --> Tx2 : chains to
     Tx1 --> Tx3 : grapher dep
     Tx3 --> Tx4 : chains to
     Tx3 --> Tx5 : grapher dep
     Tx5 --> Tx6 : chains to
+    Tx5 --> Tx7 : chains to
 ```
 
-Each transaction produces at most one chained child. **Tx 1** produces **Tx 2** (chained), and is also a grapher prerequisite of **Tx 3** — Tx 3 reads or spends a state minted by Tx 1. **Tx 3** in turn produces its own chained child **Tx 4**, and is a grapher prerequisite of **Tx 5**. **Tx 5** produces its own chained child **Tx 6**.
+Each transaction produces a chained child. **Tx 1** produces **Tx 2** (chained), and is also a grapher prerequisite of **Tx 3** — Tx 3 reads or spends a state minted by Tx 1. **Tx 3** in turn produces its own chained child **Tx 4**, and is a grapher prerequisite of **Tx 5**.
+
+**Tx 5** produces its own chained child **Tx 6**. However, it is possible for a chained transaction to revert when submitted to the base ledger which results in re-assembly of the parent transaction and subsequently a new chained transaction.
 
 Unlike post-assembly dependencies (which are discovered from shared state), chained dependencies are registered when the parent transaction's domain implementation creates the child transaction.
 

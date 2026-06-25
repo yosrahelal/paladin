@@ -4,31 +4,30 @@ Paladin is made up of a number of discrete components, each of which handles dif
 
 The distributed sequencer is one of those standalone components and the sequencer manager handles the lifetime of sequencers for different domain contracts.
 
-The distributed sequencer is implemented using [state machines](./distributed_sequencer_state_machine.md) to track activity in the [2 core components](./distributed_sequencer_components.md) of the sequencer (the originator and the coordinator).
+The distributed sequencer is implemented using [state machines](./distributed_sequencer_state_machine.md) to track activity in the [2 core components](#sequencer-components) of the sequencer (the `originator` and the `coordinator`).
 
 For every active sequencer the state machines are updated by generating, receiving (from other nodes), and processing state machine events. The order that state machine events are handled is critical for reliable transaction processing. The sequencer architecture uses several event handling queues, implemented using Golang channels, to maintain this ordering.
 
 ## Sequencer Components
 
-In domains (such as Pente) where the spending rules for states allow any one of a group of parties to spend the state, then we need to coordinate the assembly of transactions across multiple nodes so that we can maximize the throughput by speculatively spending new states and avoiding transactions being reverted due to double concurrent spending / state contention.
+In domains (such as Pente) where the spending rules for states allow any one of a group of parties to spend the state, then we need to coordinate the assembly of transactions across multiple nodes so that we can maximize the throughput by speculatively spending new states and avoiding transactions being reverted due to double spending / state contention.
 
 To achieve this, it is important that we have an algorithm that allows all nodes to agree on which of them should be selected as the coordinator at any given point in time. And all other nodes delegate their transactions to the coordinator.
 
-A node uses 3 key components to coordinate transactions with a domain contract:
-
-### 1 - Sequencer
+A node uses a sequencer to coordinate transactions with a domain contract:
 
 The sequencer manages the overall lifecycle of transactions submitted to the node. The sequencer comprises 2 sub-components:
 
-### 2 - Originator
+### Originator
 
-The originator is responsible for assembling and transactions when instructed to do so by the coordinator.
+The originator is responsible for delegating transactions submitted to the node, to an active coordinator. It performs assembly of delegated transactions when instructed to do so by the coordinator.
 
-### 3 - Coordinator
+### Coordinator
 
-The coordinator determines which contract-wide states should be spent in order to satisfy a transaction's inputs and communicates with originators to instruct them what to submit to the EVM.
+The coordinator orchestrates the assembly of all transactions for a domain instance. For a given domain instance there can only be one tranasction being assembled at a time. The coordinator maintains a pool
+of delegated transactions, selects them in turn for assembly, and orchestrates the endorsement of them.
 
-A coordinator may not always be running on every node participating in the private contract (see below).
+A coordinator may not always be active on every node participating in the private contract (see below).
 
 For each node, for each active private contract, there is one instance of the `Sequencer` in memory. The `Sequencer` contains sub components for the `Originator` and `Coordinator`. The `Originator` is responsible for keeping track of transactions sent, including delegating them to the active coordinator (which may be on a different node) and responding to requests to assemble its tranasctions. The `Coordinator` is responsible for coordinating the assembly and submission of transactions from all `Originators`.
 
@@ -70,7 +69,7 @@ The seqencer lifecycle management built in to Paladin is highly configurable, bu
 
 The following sequence diagram shows the lifecycle of a sequencer for a newly submitted transaction:
 
-![Sequencer Lifecycle](./diagrams/paladin-sequencer-tx-flow.svg){.zoomable-image}
+![Sequencer TX Flow](./diagrams/paladin-sequencer-tx-flow.png){.zoomable-image}
 
 ## Event driven state machines
 
@@ -82,6 +81,6 @@ Events can be received from sources external to the node (such as another node),
 
 The following diagram demonstrates how events are passed to the state machines and how events are processed in one of two priority categories. Priority events are always processed first by the relevant state machine, while regular events are processed whenever there are no priority events to handle:
 
-![Event Handling](diagrams/paladin-code-architecture.svg){.zoomable-image}
+![Event Handling](diagrams/paladin-code-architecture.png){.zoomable-image}
 
 The [state machine](./distributed_sequencer_state_machine.md)'s handling of events can in some cases require it to create and immediately process a new event. This allows the state machine to ensure particular updates are processed synchronously.

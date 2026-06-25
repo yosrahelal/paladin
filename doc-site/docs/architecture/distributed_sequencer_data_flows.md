@@ -22,7 +22,7 @@ To aid with problem diagnostics and to allow an identity who submits a transacti
     - The `remote_id` of the `dispatch` sequencer activity is the ID of a `dispatch` record at the coordinator node. 
  - Chained private transactions
     - This is available on the coordinator node.
-    - It can be used to retrieve the chained transaction created during assembly of a Paladin transaction
+    - It can be used to retrieve the ID of the chained transaction created during the dispatch of a Paladin transaction
     - The `remote_id` of the `chained_dispatch` sequencer activity is the ID of a `chained transaction` record at the coordinator node. 
 
 The follow JSON/RPC queries can be used to retrieve sequencing activities and public transaction submissions:
@@ -45,7 +45,7 @@ The following diagram gives an example of the data flows between nodes for a pri
 
 ## Chained transactions
 
-Some Paladin transactions are assembled into a new private transaction, called a "chained" transaction. A typical example of this is where a `Noto` token is deployed with a hook to delegate transaction approval to a private smart contract deployed to a `Pente` privacy group.
+Some Paladin transactions are dispatched as a new private transaction, called a "chained" transaction. A typical example of this is where a `Noto` token is deployed with a hook to delegate transaction approval to a private smart contract deployed to a `Pente` privacy group.
 
 The following diagram shows the flow of data between the nodes involved in both the original and the chained transaction:
 
