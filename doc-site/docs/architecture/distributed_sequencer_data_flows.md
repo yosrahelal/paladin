@@ -37,7 +37,8 @@ The following diagram gives an example of the data flows between nodes for a pri
  - Node 2 is Notary for this `Noto` domain so it is the node that coordinates all `Noto` transactions
  - Nodes 3 and 4 also participate in this `Noto` domain but are not involved in this particular Paladin transaction in a privacy group with Node 2. 
 
-![Data flows](diagrams/paladin-node-data-flows.svg){.zoomable-image}
+![Data flows](diagrams/light/node-data-flows.svg#only-light){.zoomable-image}
+![Data flows](diagrams/dark/node-data-flows.svg#only-dark){.zoomable-image}
 
  - Queries to Node 1 return all transaction data, as well as the public transaction submissions and any sequencing records.
  - Queries to Node 2 return the receipt for the Paladin transaction, as well as the public transaction submissions and any sequencing records. The node does not store or return the Paladin transaction itself.
@@ -49,7 +50,8 @@ Some Paladin transactions are dispatched as a new private transaction, called a 
 
 The following diagram shows the flow of data between the nodes involved in both the original and the chained transaction:
 
-![Chained transaction flows](diagrams/paladin-node-data-flows-chained-transactions.svg){.zoomable-image}
+![Chained transaction flows](diagrams/light/node-data-flows-chained-transactions.svg#only-light){.zoomable-image}
+![Chained transaction flows](diagrams/dark/node-data-flows-chained-transactions.svg#only-dark){.zoomable-image}
 
 
 1. TX1 - in this case a Noto transfer - is submitted to Node 1

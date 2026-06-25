@@ -69,7 +69,8 @@ The seqencer lifecycle management built in to Paladin is highly configurable, bu
 
 The following sequence diagram shows the lifecycle of a sequencer for a newly submitted transaction:
 
-![Sequencer TX Flow](./diagrams/paladin-sequencer-tx-flow.png){.zoomable-image}
+![Sequencer TX Flow](./diagrams/light/sequencer-tx-flow.png#only-light){.zoomable-image}
+![Sequencer TX Flow](./diagrams/dark/sequencer-tx-flow.png#only-dark){.zoomable-image}
 
 ## Event driven state machines
 
@@ -81,6 +82,7 @@ Events can be received from sources external to the node (such as another node),
 
 The following diagram demonstrates how events are passed to the state machines and how events are processed in one of two priority categories. Priority events are always processed first by the relevant state machine, while regular events are processed whenever there are no priority events to handle:
 
-![Event Handling](diagrams/paladin-code-architecture.png){.zoomable-image}
+![Event Handling](diagrams/light/code-architecture.png#only-light){.zoomable-image}
+![Event Handling](diagrams/dark/code-architecture.png#only-dark){.zoomable-image}
 
 The [state machine](./distributed_sequencer_state_machine.md)'s handling of events can in some cases require it to create and immediately process a new event. This allows the state machine to ensure particular updates are processed synchronously.
