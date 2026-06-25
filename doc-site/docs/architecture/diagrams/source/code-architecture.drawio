@@ -238,8 +238,15 @@
             <mxPoint x="1180" y="524" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="hJJGvJK_ioRVoAejF05v-153" parent="1" style="shape=mxgraph.basic.arc;html=1;startAngle=0.37609760289585414;endAngle=0.1;endArrow=none;endFill=0;startArrow=classic;startFill=1;rotation=-180;" value="" vertex="1">
-          <mxGeometry height="69" width="69" x="1199.5" y="566" as="geometry" />
+        <mxCell id="hJJGvJK_ioRVoAejF05v-155" edge="1" parent="1" source="aNiqXzNtH5demji9GXow-11" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="hJJGvJK_ioRVoAejF05v-150" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <Array as="points">
+              <mxPoint x="1310" y="613" />
+              <mxPoint x="1310" y="516" />
+            </Array>
+            <mxPoint x="1147" y="673" as="sourcePoint" />
+            <mxPoint x="990" y="540" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
       </root>
     </mxGraphModel>
