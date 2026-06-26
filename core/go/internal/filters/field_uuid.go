@@ -34,7 +34,7 @@ func (sf UUIDField) SQLColumn() string {
 }
 
 func (sf UUIDField) SupportsLIKE() bool {
-	return true
+	return false
 }
 
 func (sf UUIDField) SQLValue(ctx context.Context, jsonValue pldtypes.RawJSON) (driver.Value, error) {

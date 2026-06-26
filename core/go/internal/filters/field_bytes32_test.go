@@ -50,10 +50,6 @@ func TestBytes32Field(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, nv)
 
-	assert.True(t, Bytes32Field("test").SupportsLIKE())
-
-	v, err = resolveLikeValue(ctx, "test", (pldtypes.RawJSON)(`"a%"`))
-	require.NoError(t, err)
-	assert.Equal(t, "a%", v)
+	assert.False(t, Bytes32Field("test").SupportsLIKE())
 
 }
