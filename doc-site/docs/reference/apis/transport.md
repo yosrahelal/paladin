@@ -39,6 +39,16 @@ title: transport_*
 
 0. `peers`: [`PeerInfo[]`](../types/peerinfo.md#peerinfo)
 
+## `transport_queryPeers`
+
+### Parameters
+
+0. `query`: [`QueryJSON`](../types/queryjson.md#queryjson)
+
+### Returns
+
+0. `peers`: [`PeerInfo[]`](../types/peerinfo.md#peerinfo)
+
 ## `transport_queryReliableMessageAcks`
 
 ### Parameters

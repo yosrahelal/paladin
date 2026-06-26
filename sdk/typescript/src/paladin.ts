@@ -1109,8 +1109,19 @@ export default class PaladinClient {
       return res.data.result;
     },
 
+  /**
+   * @deprecated Use transport.queryPeers instead
+   */
     peers: async () => {
       const res = await this.post<JsonRpcResult<any[]>>("transport_peers", []);
+      return res.data.result;
+    },
+
+    queryPeers: async (query: IQuery) => {
+      const res = await this.post<JsonRpcResult<any[]>>(
+        "transport_queryPeers",
+        [query]
+      );
       return res.data.result;
     },
 
