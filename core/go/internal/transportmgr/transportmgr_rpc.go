@@ -36,7 +36,8 @@ func (tm *transportManager) initRPC() {
 		Add("transport_localTransportDetails", tm.rpcLocalTransportDetails()).
 		Add("transport_peers", tm.rpcPeers()).
 		Add("transport_queryPeers", tm.rpcQueryPeers()).
-		Add("transport_peerInfo", tm.rpcPeerInfo()).
+		Add("transport_peerInfo", tm.transport_getPeer()). // Deprecated: Use transport_getPeer instead
+		Add("transport_getPeer", tm.transport_getPeer()).
 		Add("transport_queryReliableMessages", tm.rpcQueryReliableMessages()).
 		Add("transport_queryReliableMessageAcks", tm.rpcQueryReliableMessageAcks())
 }
@@ -80,7 +81,7 @@ func (tm *transportManager) rpcQueryPeers() rpcserver.RPCHandler {
 	})
 }
 
-func (tm *transportManager) rpcPeerInfo() rpcserver.RPCHandler {
+func (tm *transportManager) transport_getPeer() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, nodeName string) (*pldapi.PeerInfo, error) {
 		// ctx = log.WithComponent(ctx, "transportmanager")
 		return tm.getPeerInfo(nodeName), nil

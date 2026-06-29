@@ -1125,9 +1125,21 @@ export default class PaladinClient {
       return res.data.result;
     },
 
+    /**
+   * @deprecated Use transport.queryPeers instead
+   */
     peerInfo: async (nodeName: string) => {
       const res = await this.post<JsonRpcResult<any>>(
         "transport_peerInfo",
+        [nodeName],
+        { validateStatus: (status) => status < 300 || status === 404 }
+      );
+      return res.status === 404 ? undefined : res.data.result;
+    },
+
+    getPeer: async (nodeName: string) => {
+      const res = await this.post<JsonRpcResult<any>>(
+        "transport_getPeer",
         [nodeName],
         { validateStatus: (status) => status < 300 || status === 404 }
       );
