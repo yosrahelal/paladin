@@ -1,6 +1,16 @@
 ---
 title: transport_*
 ---
+## `transport_getPeer`
+
+### Parameters
+
+0. `nodeName`: `string`
+
+### Returns
+
+0. `peer`: [`PeerInfo`](../types/peerinfo.md#peerinfo)
+
 ## `transport_localTransportDetails`
 
 ### Parameters
@@ -24,16 +34,6 @@ title: transport_*
 0. `nodeName`: `string`
 
 ## `transport_peerInfo`
-
-### Parameters
-
-0. `nodeName`: `string`
-
-### Returns
-
-0. `peer`: [`PeerInfo`](../types/peerinfo.md#peerinfo)
-
-## `transport_getPeer`
 
 ### Parameters
 
