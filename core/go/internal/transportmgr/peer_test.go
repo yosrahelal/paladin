@@ -366,6 +366,24 @@ func TestQueryPeers(t *testing.T) {
 	require.Len(t, peers, 1)
 	require.Equal(t, "node2", peers[0].Name)
 
+	peers, err = tm.QueryPeers(ctx, query.NewQueryBuilder().Limit(1).Query())
+	require.NoError(t, err)
+	require.Len(t, peers, 1)
+	require.Equal(t, "node1", peers[0].Name)
+
+	peers, err = tm.QueryPeers(ctx, query.NewQueryBuilder().Sort("-name").Limit(10).Query())
+	require.NoError(t, err)
+	require.Len(t, peers, 3)
+	require.Equal(t, "node3", peers[0].Name)
+	require.Equal(t, "node2", peers[1].Name)
+	require.Equal(t, "node1", peers[2].Name)
+
+	_, err = tm.QueryPeers(ctx, query.NewQueryBuilder().Equal("wrong", "node1").Limit(1).Query())
+	require.Regexp(t, "PD010700.*wrong", err)
+
+	_, err = tm.QueryPeers(ctx, query.NewQueryBuilder().Limit(1).Sort("wrong").Query())
+	require.Regexp(t, "PD010700.*wrong", err)
+
 	_, err = tm.QueryPeers(ctx, query.NewQueryBuilder().Query())
 	require.Regexp(t, "PD010721", err)
 }
