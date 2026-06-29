@@ -1152,11 +1152,14 @@ func TestHandleEventBatchPendingPrivateStateData(t *testing.T) {
 	domainConf := goodDomainConf()
 	domainConf.FullStateAvailablityRequired = true
 
+	sequencerNotified := make(chan struct{}, 1)
 	td, done := newTestDomain(t, false, domainConf, mockSchemas(), func(mc *mockComponents) {
 		mc.stateStore.On("WriteStateFinalizations", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mc.stateStore.On("WritePendingPrivateStateDataBatch", mock.Anything, mock.Anything, "test1", mock.Anything).Return(nil)
 		mc.txManager.On("FinalizeTransactions", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mc.sequencerManager.On("PrivateTransactionsConfirmed", mock.Anything, mock.Anything).Return(nil)
+		mc.sequencerManager.On("PrivateTransactionsConfirmed", mock.Anything, mock.Anything).Run(func(mock.Arguments) {
+			sequencerNotified <- struct{}{}
+		}).Return(nil)
 	})
 	defer done()
 
@@ -1198,6 +1201,8 @@ func TestHandleEventBatchPendingPrivateStateData(t *testing.T) {
 		})
 	})
 	require.NoError(t, err)
+
+	<-sequencerNotified
 }
 
 func TestHandleEventBatchPendingPrivateStateDataWriteError(t *testing.T) {
