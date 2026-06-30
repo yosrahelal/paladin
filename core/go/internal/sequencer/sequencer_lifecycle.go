@@ -195,11 +195,7 @@ func (sMgr *sequencerManager) LoadSequencer(ctx context.Context, dbTX persistenc
 				sMgr.metrics,
 				selectionConfig,
 			)
-			if err := seqOriginator.Start(seqCtx); err != nil {
-				cancelCtx()
-				log.L(ctx).Errorf("failed to start sequencer originator for contract %s: %s", contractAddr.String(), err)
-				return nil, err
-			}
+			seqOriginator.Start(seqCtx)
 			sequencer.originator = seqOriginator
 
 			seqCoordinator := coordinator.NewCoordinator(
@@ -216,16 +212,10 @@ func (sMgr *sequencerManager) LoadSequencer(ctx context.Context, dbTX persistenc
 				sMgr.config,
 				sMgr.nodeName,
 				sMgr.metrics,
-				func(ctx context.Context, event common.Event) {
-					seqOriginator.QueueEvent(ctx, event)
-				},
+				seqOriginator.QueueEvent,
 				selectionConfig,
 			)
-			if err := seqCoordinator.Start(seqCtx); err != nil {
-				cancelCtx()
-				log.L(ctx).Errorf("failed to start sequencer coordinator for contract %s: %s", contractAddr.String(), err)
-				return nil, err
-			}
+			seqCoordinator.Start(seqCtx)
 			sequencer.coordinator = seqCoordinator
 
 			sMgr.sequencers[contractAddr.String()] = sequencer

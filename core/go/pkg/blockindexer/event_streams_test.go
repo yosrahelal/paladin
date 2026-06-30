@@ -1392,3 +1392,75 @@ func testTimeout(t *testing.T) time.Duration {
 	}
 	return 30 * time.Second // Default timeout if no deadline is set
 }
+
+func TestEventStreamGetters(t *testing.T) {
+	id := uuid.New()
+	es := &eventStream{
+		definition: &EventStreamDefinition{ID: id},
+	}
+	es.checkpoint.Store(25)
+
+	assert.Equal(t, id, es.ID())
+	assert.Equal(t, int64(25), es.CheckpointBlock())
+}
+
+func TestDispatcherNilEventSkipped(t *testing.T) {
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	cancellableCtx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx()
+
+	es := &eventStream{
+		bi:  bi,
+		ctx: cancellableCtx,
+		definition: &EventStreamDefinition{
+			ID:   uuid.New(),
+			Type: EventStreamTypeInternal.Enum(),
+		},
+		batchSize:         10,
+		batchTimeout:      1 * time.Second,
+		dispatch:          make(chan *detectorMsg, 2),
+		dispatcherDone:    make(chan struct{}),
+		dispatcherStarted: make(chan struct{}),
+	}
+
+	go func() { es.dispatcher() }()
+	<-es.dispatcherStarted
+
+	// A message with neither confirmed nor event set should be silently skipped.
+	es.dispatch <- &detectorMsg{}
+
+	cancelCtx()
+	<-es.dispatcherDone
+}
+
+func TestDispatcherCheckpointUpdateError(t *testing.T) {
+	ctx, bi, _, _, done := newMockBlockIndexer(t, &pldconf.BlockIndexerConfig{})
+	defer done()
+
+	cancellableCtx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx()
+
+	es := &eventStream{
+		bi:  bi,
+		ctx: cancellableCtx,
+		definition: &EventStreamDefinition{
+			ID:   uuid.New(),
+			Type: EventStreamTypeInternal.Enum(),
+		},
+		batchSize:         10,
+		batchTimeout:      1 * time.Second,
+		dispatch:          make(chan *detectorMsg, 1),
+		dispatcherDone:    make(chan struct{}),
+		dispatcherStarted: make(chan struct{}),
+	}
+	// checkpoint starts at 0; send a confirmed advance to block 5
+	// The sqlmock has no remaining expectations, so the INSERT INTO event_stream_checkpoints
+	// will fail with an unexpected-query error, exercising the error return path.
+	go func() { es.dispatcher() }()
+	<-es.dispatcherStarted
+
+	es.dispatch <- &detectorMsg{confirmed: &blockConfirmed{blockNumber: 5}}
+	<-es.dispatcherDone
+}

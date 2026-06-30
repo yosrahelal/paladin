@@ -38,7 +38,7 @@ import (
 // Originator is the interface that consumers use to interact with the originator.
 type Originator interface {
 	// Start begins the event loop. It must be called once after construction before any events are queued.
-	Start(ctx context.Context) error
+	Start(ctx context.Context)
 
 	// Asynchronously update the state machine by queueing an event to be processed
 	// This the only interface by which consumers should update the state of the originator
@@ -120,9 +120,9 @@ func NewOriginator(
 	return o
 }
 
-func (o *originator) Start(ctx context.Context) error {
+func (o *originator) Start(ctx context.Context) {
 	if o.started {
-		return nil
+		return
 	}
 	o.ctx = log.WithLogField(ctx, "role", "originator")
 
@@ -134,8 +134,6 @@ func (o *originator) Start(ctx context.Context) error {
 	go o.stateMachineEventLoop.Start(o.ctx)
 
 	o.QueueEvent(o.ctx, &OriginatorCreatedEvent{})
-
-	return nil
 }
 
 func (o *originator) WaitForDone(ctx context.Context) {

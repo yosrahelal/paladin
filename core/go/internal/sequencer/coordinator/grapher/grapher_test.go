@@ -650,6 +650,26 @@ func TestForgetLocks_RemovesExpiredLocks(t *testing.T) {
 	assert.Empty(t, data.LockedState)
 }
 
+func TestForgetLocks_RemovesExpiredSpendLocks(t *testing.T) {
+	ctx := t.Context()
+	g := testGrapher(t)
+	txID := uuid.New()
+	s := pldtypes.MustParseHexBytes("0x" + strings.Repeat("57", 32))
+	g.LockMintsOnReadAndSpend(ctx, []*components.FullState{}, []*components.FullState{{ID: s}}, txID)
+	g.ForgetTransaction(ctx, txID, 100)
+
+	// tolerance = 5, confirmedAt = 100, expires at >= 105
+	g.ForgetLocks(ctx, 104) // not yet expired
+	data, err := g.ExportStatesAndLocks(ctx, "test-node")
+	require.NoError(t, err)
+	assert.Len(t, data.LockedState, 1)
+
+	g.ForgetLocks(ctx, 105) // exactly at expiry
+	data, err = g.ExportStatesAndLocks(ctx, "test-node")
+	require.NoError(t, err)
+	assert.Empty(t, data.LockedState)
+}
+
 func TestForgetLocks_DoesNotRemoveTransactionOwnedLocks(t *testing.T) {
 	ctx := t.Context()
 	g := testGrapher(t)

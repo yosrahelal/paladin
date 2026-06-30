@@ -34,6 +34,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// jsonMarshalFn and protoMarshalFn are package-level variables so tests can inject errors.
+var (
+	jsonMarshalFn  = json.Marshal
+	protoMarshalFn = proto.MarshalOptions{}.Marshal
+)
+
 // Where a request is sent, there are three possible types of message that may be sent back:
 // - response: the result of actioning the request, which may include expected errors (e.g. assembly reverted)
 // - error: an unexpected error occurred while actioning the request
@@ -104,7 +110,7 @@ func (tw *transportWriter) SendDelegationRequest(
 ) error {
 	allTxBytes := make([][]byte, 0, len(transactions))
 	for _, transaction := range transactions {
-		transactionBytes, err := json.Marshal(transaction)
+		transactionBytes, err := jsonMarshalFn(transaction)
 		if err != nil {
 			log.L(ctx).Errorf("error marshalling transaction for delegation request: %v", err)
 			return err
@@ -117,7 +123,7 @@ func (tw *transportWriter) SendDelegationRequest(
 		OriginatorBlockHeight: int64(blockHeight),
 		PrivateTransactions:   allTxBytes,
 	}
-	delegationRequestBytes, err := proto.Marshal(delegationRequest)
+	delegationRequestBytes, err := protoMarshalFn(delegationRequest)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling delegationRequest message: %s", err)
 		return err
@@ -149,7 +155,7 @@ func (tw *transportWriter) SendDelegationResponse(
 		ContractAddress: tw.contractAddress.String(),
 		Errors:          errors,
 	}
-	delegationRequestAcknowledgmentBytes, err := proto.Marshal(delegationRequestAcknowledgment)
+	delegationRequestAcknowledgmentBytes, err := protoMarshalFn(delegationRequestAcknowledgment)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling delegationRequestAcknowledgment  message: %s", err)
 		return err
@@ -184,7 +190,7 @@ func (tw *transportWriter) SendDelegationRejection(
 		CoordinatorBlockHeight: coordinatorBlockHeight,
 		BlockHeightTolerance:   blockHeightTolerance,
 	}
-	rejectionBytes, err := proto.Marshal(rejection)
+	rejectionBytes, err := protoMarshalFn(rejection)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling delegation rejection message: %s", err)
 		return err
@@ -208,7 +214,7 @@ func (tw *transportWriter) SendHandoverRequest(ctx context.Context, targetNode s
 		FromNode:        tw.nodeID,
 		ContractAddress: contractAddress.String(),
 	}
-	handoverRequestBytes, err := proto.Marshal(handoverRequest)
+	handoverRequestBytes, err := protoMarshalFn(handoverRequest)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling handover request: %s", err)
 		return err
@@ -246,7 +252,7 @@ func (tw *transportWriter) SendEndorsementRequest(ctx context.Context, txID uuid
 		BlockHeightTolerance:     blockHeightTolerance,
 	}
 
-	endorsementRequestBytes, err := proto.Marshal(endorsementRequest)
+	endorsementRequestBytes, err := protoMarshalFn(endorsementRequest)
 	if err != nil {
 		log.L(ctx).Error("error marshalling endorsement request", err)
 		return err
@@ -283,7 +289,7 @@ func (tw *transportWriter) SendEndorsementResponse(ctx context.Context, transact
 		endorsementResponse.RevertReason = &revertReason
 	}
 
-	endorsementResponseBytes, err := proto.Marshal(endorsementResponse)
+	endorsementResponseBytes, err := protoMarshalFn(endorsementResponse)
 	if err != nil {
 		log.L(ctx).Error("error marshalling endorsement response", err)
 	}
@@ -310,7 +316,7 @@ func (tw *transportWriter) SendEndorsementError(ctx context.Context, transaction
 		Party:                  party,
 		AttestationRequestName: attestationRequestName,
 	}
-	endorsementErrorBytes, err := proto.Marshal(endorsementError)
+	endorsementErrorBytes, err := protoMarshalFn(endorsementError)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling endorsement error message: %s", err)
 		return err
@@ -339,7 +345,7 @@ func (tw *transportWriter) SendEndorsementRejection(ctx context.Context, transac
 		EndorserBlockHeight:    endorserBlockHeight,
 		BlockHeightTolerance:   blockHeightTolerance,
 	}
-	rejectionBytes, err := proto.Marshal(rejection)
+	rejectionBytes, err := protoMarshalFn(rejection)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling endorsement rejection message: %s", err)
 		return err
@@ -360,12 +366,12 @@ func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNo
 
 	log.L(ctx).Tracef("transport writer attempting to send assemble request to assembling node %s", assemblingNode)
 
-	preAssemblyBytes, err := json.Marshal(preAssembly)
+	preAssemblyBytes, err := jsonMarshalFn(preAssembly)
 	if err != nil {
 		log.L(ctx).Error("error marshalling preassembly", err)
 		return err
 	}
-	stateLocksJSON, err := json.Marshal(stateLocks)
+	stateLocksJSON, err := jsonMarshalFn(stateLocks)
 	if err != nil {
 		log.L(ctx).Error("error marshalling state locks", err)
 		return err
@@ -383,7 +389,7 @@ func (tw *transportWriter) SendAssembleRequest(ctx context.Context, assemblingNo
 		BlockHeightTolerance:   blockHeightTolerance,
 	}
 
-	assembleRequestBytes, err := proto.Marshal(assembleRequest)
+	assembleRequestBytes, err := protoMarshalFn(assembleRequest)
 	if err != nil {
 		log.L(ctx).Error("error marshalling assemble request", err)
 		return err
@@ -411,7 +417,7 @@ func (tw *transportWriter) SendAssembleError(ctx context.Context, txID uuid.UUID
 		AssembleRequestId: assembleRequestId.String(),
 		ContractAddress:   tw.contractAddress.HexString(),
 	}
-	assembleErrorBytes, err := proto.Marshal(assembleError)
+	assembleErrorBytes, err := protoMarshalFn(assembleError)
 	if err != nil {
 		return err
 	}
@@ -439,7 +445,7 @@ func (tw *transportWriter) SendAssembleRejection(ctx context.Context, txID uuid.
 		CoordinatorBlockHeight: coordinatorBlockHeight,
 		AssemblerBlockHeight:   assemblerBlockHeight,
 	}
-	rejectionBytes, err := proto.Marshal(rejection)
+	rejectionBytes, err := protoMarshalFn(rejection)
 	if err != nil {
 		return err
 	}
@@ -462,7 +468,7 @@ func (tw *transportWriter) SendPreDispatchRejection(ctx context.Context, txID uu
 		return i18n.NewError(ctx, msgs.MsgSequencerInternalError, "attempt to send pre-dispatch rejection without specifying contract address")
 	}
 
-	msgBytes, err := proto.Marshal(&engineProto.PreDispatchRejection{
+	msgBytes, err := protoMarshalFn(&engineProto.PreDispatchRejection{
 		TransactionId:   txID.String(),
 		RequestId:       requestID.String(),
 		ContractAddress: tw.contractAddress.HexString(),
@@ -488,12 +494,12 @@ func (tw *transportWriter) SendAssembleResponse(ctx context.Context, txID uuid.U
 
 	log.L(ctx).Tracef("transport writer attempting to send assemble response to node %s", recipient)
 
-	postAssemblyBytes, err := json.Marshal(postAssembly)
+	postAssemblyBytes, err := jsonMarshalFn(postAssembly)
 	if err != nil {
 		return err
 	}
 
-	preAssemblyBytes, err := json.Marshal(preAssembly)
+	preAssemblyBytes, err := jsonMarshalFn(preAssembly)
 	if err != nil {
 		return err
 	}
@@ -505,7 +511,7 @@ func (tw *transportWriter) SendAssembleResponse(ctx context.Context, txID uuid.U
 		PostAssembly:      postAssemblyBytes,
 		PreAssembly:       preAssemblyBytes,
 	}
-	assembleResponseBytes, err := proto.Marshal(assembleResponse)
+	assembleResponseBytes, err := protoMarshalFn(assembleResponse)
 	if err != nil {
 		return err
 	}
@@ -535,7 +541,7 @@ func (tw *transportWriter) SendNonceAssigned(ctx context.Context, txID uuid.UUID
 		ContractAddress: contractAddress.HexString(),
 		Nonce:           int64(nonce),
 	}
-	nonceAssignedBytes, err := proto.Marshal(nonceAssigned)
+	nonceAssignedBytes, err := protoMarshalFn(nonceAssigned)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling nonce assigned event: %s", err)
 	}
@@ -565,7 +571,7 @@ func (tw *transportWriter) SendTransactionSubmitted(ctx context.Context, txID uu
 		ContractAddress: contractAddress.HexString(),
 		Hash:            txHash.Bytes(),
 	}
-	txSubmittedBytes, err := proto.Marshal(txSubmitted)
+	txSubmittedBytes, err := protoMarshalFn(txSubmitted)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling TX submitted event: %s", err)
 	}
@@ -602,7 +608,7 @@ func (tw *transportWriter) SendTransactionConfirmed(ctx context.Context, txID uu
 	if nonce != nil {
 		txConfirmed.Nonce = int64(*nonce)
 	}
-	txConfirmedBytes, err := proto.Marshal(txConfirmed)
+	txConfirmedBytes, err := protoMarshalFn(txConfirmed)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling TX confirmed event: %s", err)
 	}
@@ -622,7 +628,7 @@ func (tw *transportWriter) SendHeartbeat(ctx context.Context, targetNode string,
 
 	log.L(ctx).Tracef("transport writer attempting to send haertbeat to node %s", targetNode)
 
-	coordinatorSnapshotBytes, err := json.Marshal(coordinatorSnapshot)
+	coordinatorSnapshotBytes, err := jsonMarshalFn(coordinatorSnapshot)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling heartbeat: %s", err)
 		return err
@@ -634,7 +640,7 @@ func (tw *transportWriter) SendHeartbeat(ctx context.Context, targetNode string,
 		CoordinatorSnapshot: coordinatorSnapshotBytes,
 	}
 	log.L(ctx).Debugf("sending heartbeat: From 	%s, Contract Address %s", tw.transportManager.LocalNodeName(), contractAddress.HexString())
-	heartbeatRequestBytes, err := proto.Marshal(heartbeatRequest)
+	heartbeatRequestBytes, err := protoMarshalFn(heartbeatRequest)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling heartbeat request message: %s", err)
 		return err
@@ -666,7 +672,7 @@ func (tw *transportWriter) SendPreDispatchRequest(ctx context.Context, originato
 		PostAssembleHash: hash.Bytes(),
 	}
 
-	dispatchConfirmationRequestBytes, err := proto.Marshal(dispatchConfirmationRequest)
+	dispatchConfirmationRequestBytes, err := protoMarshalFn(dispatchConfirmationRequest)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling pre-dispatch request message: %s", err)
 	}
@@ -692,7 +698,7 @@ func (tw *transportWriter) SendPreDispatchResponse(ctx context.Context, transact
 		ContractAddress: tw.contractAddress.HexString(),
 	}
 
-	dispatchResponseEventBytes, err := proto.Marshal(dispatchResponseEvent)
+	dispatchResponseEventBytes, err := protoMarshalFn(dispatchResponseEvent)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling pre-dispatch response message: %s", err)
 	}
@@ -719,7 +725,7 @@ func (tw *transportWriter) SendDispatched(ctx context.Context, transactionOrigin
 		Signer:          transactionOriginator,
 	}
 
-	dispatchedEventBytes, err := proto.Marshal(dispatchedEvent)
+	dispatchedEventBytes, err := protoMarshalFn(dispatchedEvent)
 	if err != nil {
 		log.L(ctx).Errorf("error marshalling dispatch confirmation request  message: %s", err)
 	}

@@ -873,3 +873,39 @@ func TestBuildQueryJSONContainsShortNames(t *testing.T) {
 	})
 	assert.Equal(t, "SELECT count(*) FROM \"test\" WHERE sequence <= 12345 AND sequence > 12345", generatedSQL)
 }
+
+func TestBuildQueryJSONLikeEmptyValue(t *testing.T) {
+	qf := &query.QueryJSON{}
+	qf.Like = []*query.OpSingleVal{{Op: query.Op{Field: "tag"}, Value: nil}}
+
+	p, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+	db := BuildGORM(context.Background(), qf, p.P.DB().Table("test"), FieldMap{
+		"tag": StringField("tag"),
+	})
+	assert.ErrorContains(t, db.Error, "PD")
+}
+
+func TestBuildQueryJSONLikeInvalidJSON(t *testing.T) {
+	qf := &query.QueryJSON{}
+	qf.Like = []*query.OpSingleVal{{Op: query.Op{Field: "tag"}, Value: []byte("{invalid}")}}
+
+	p, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+	db := BuildGORM(context.Background(), qf, p.P.DB().Table("test"), FieldMap{
+		"tag": StringField("tag"),
+	})
+	assert.Error(t, db.Error)
+}
+
+func TestBuildQueryJSONLikeNonStringValue(t *testing.T) {
+	qf := &query.QueryJSON{}
+	qf.Like = []*query.OpSingleVal{{Op: query.Op{Field: "tag"}, Value: []byte("123")}}
+
+	p, err := mockpersistence.NewSQLMockProvider()
+	require.NoError(t, err)
+	db := BuildGORM(context.Background(), qf, p.P.DB().Table("test"), FieldMap{
+		"tag": StringField("tag"),
+	})
+	assert.ErrorContains(t, db.Error, "PD")
+}

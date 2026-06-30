@@ -38,6 +38,207 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// ===== NewTransportWriter / Lifecycle Tests =====
+
+func TestNewTransportWriter(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	mockTM := componentsmocks.NewTransportManager(t)
+
+	tw := NewTransportWriter(ctx, contractAddress, "local-node", mockTM, func(_ context.Context, _ *components.ReceivedMessage) {})
+	require.NotNil(t, tw)
+}
+
+func TestStartLoopbackWriter_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+
+	tw := NewTransportWriter(ctx, contractAddress, "local-node", mockTM, func(_ context.Context, _ *components.ReceivedMessage) {})
+	tw.StartLoopbackWriter()
+
+	// Cancel the writer context to trigger the tw.ctx.Done() branch in loopbackSender.
+	cancel()
+	tw.WaitForDone(context.Background())
+}
+
+func TestStartLoopbackWriter_QueueClosed(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
+	mockLT.On("LoopbackQueue").Return(loopbackQueue).Maybe()
+
+	tw := &transportWriter{
+		ctx:                   ctx,
+		nodeID:                "local-node",
+		transportManager:      mockTM,
+		loopbackTransport:     mockLT,
+		contractAddress:       contractAddress,
+		loopbackSenderStopped: make(chan struct{}),
+	}
+	tw.StartLoopbackWriter()
+
+	// Closing the channel triggers the !ok path in loopbackSender.
+	close(loopbackQueue)
+	tw.WaitForDone(context.Background())
+}
+
+func TestLoopbackSender_SendError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
+	mockLT.On("LoopbackQueue").Return(loopbackQueue).Maybe()
+
+	sendCalled := make(chan struct{})
+	mockLT.On("Send", mock.Anything, mock.Anything).
+		Run(func(_ mock.Arguments) { close(sendCalled) }).
+		Return(errors.New("loopback send error"))
+
+	tw := &transportWriter{
+		ctx:                   ctx,
+		nodeID:                "local-node",
+		transportManager:      mockTM,
+		loopbackTransport:     mockLT,
+		contractAddress:       contractAddress,
+		loopbackSenderStopped: make(chan struct{}),
+	}
+
+	tw.StartLoopbackWriter()
+
+	// Enqueue a message; the goroutine will process it and get the error.
+	loopbackQueue <- &components.FireAndForgetMessageSend{Node: "local-node", MessageType: "test"}
+
+	// Wait until Send has been called (and returned the error).
+	<-sendCalled
+
+	cancel()
+	tw.WaitForDone(context.Background())
+}
+
+func TestWaitForDone_ContextExpired(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
+	mockLT.On("LoopbackQueue").Return(loopbackQueue).Maybe()
+
+	tw := &transportWriter{
+		ctx:                   ctx,
+		nodeID:                "local-node",
+		transportManager:      mockTM,
+		loopbackTransport:     mockLT,
+		contractAddress:       contractAddress,
+		loopbackSenderStopped: make(chan struct{}),
+	}
+	tw.StartLoopbackWriter()
+
+	// WaitForDone should return immediately when the supplied ctx is already cancelled.
+	waitCtx, waitCancel := context.WithCancel(context.Background())
+	waitCancel()
+	tw.WaitForDone(waitCtx)
+
+	// Now stop the sender cleanly.
+	cancel()
+	tw.WaitForDone(context.Background())
+}
+
+// ===== send() Internal Tests =====
+
+func TestSend_EmptyNode(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.send(ctx, &components.FireAndForgetMessageSend{
+		Node:        "",
+		MessageType: "test",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "destination node name")
+}
+
+func TestSend_ContextCancelled_LoopbackQueueFull(t *testing.T) {
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	// Fill the loopback queue (buffer=1) so the channel send blocks.
+	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
+	loopbackQueue <- &components.FireAndForgetMessageSend{Node: "local-node", MessageType: "dummy"}
+	mockLT.On("LoopbackQueue").Return(loopbackQueue).Maybe()
+
+	tw := &transportWriter{
+		ctx:               context.Background(), // non-cancelled tw ctx
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.send(cancelledCtx, &components.FireAndForgetMessageSend{
+		Node:        "local-node",
+		MessageType: "test",
+	})
+	require.Error(t, err)
+	assert.Equal(t, context.Canceled, err)
+}
+
+func TestSend_WriterContextCancelled_LoopbackQueueFull(t *testing.T) {
+	twCtx, twCancel := context.WithCancel(context.Background())
+	twCancel() // cancel tw context immediately
+
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	// Fill the loopback queue so the channel send blocks.
+	loopbackQueue := make(chan *components.FireAndForgetMessageSend, 1)
+	loopbackQueue <- &components.FireAndForgetMessageSend{Node: "local-node", MessageType: "dummy"}
+	mockLT.On("LoopbackQueue").Return(loopbackQueue).Maybe()
+
+	tw := &transportWriter{
+		ctx:               twCtx, // cancelled writer context
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.send(context.Background(), &components.FireAndForgetMessageSend{
+		Node:        "local-node",
+		MessageType: "test",
+	})
+	require.Error(t, err)
+	assert.Equal(t, context.Canceled, err)
+}
+
 func TestSendTransactionSubmitted_Success(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
@@ -237,6 +438,34 @@ func TestSendTransactionSubmitted_VerifyProtoFields(t *testing.T) {
 
 }
 
+func TestSendTransactionSubmitted_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txHashVal := pldtypes.MustParseBytes32("0x00000000000000000000000000000000000000000000000000000000000000ab")
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockTM.On("Send", ctx, mock.Anything).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	// SendTransactionSubmitted logs but does NOT return the proto.Marshal error; it continues.
+	err := tw.SendTransactionSubmitted(ctx, uuid.New(), "originator-node", contractAddress, &txHashVal)
+	require.NoError(t, err)
+}
+
+
 // ===== SendDelegationRequest Tests =====
 
 func TestSendDelegationRequest_Success(t *testing.T) {
@@ -302,6 +531,28 @@ func TestSendDelegationRequest_Success(t *testing.T) {
 	assert.Equal(t, tx2ID, tx2.ID)
 }
 
+func TestSendDelegationRequest_SendError(t *testing.T) {
+	ctx := context.Background()
+	coordinatorNode := "coordinator-node"
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	mockTransportManager := componentsmocks.NewTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
+	mockTransportManager.On("Send", ctx, mock.Anything).Return(errors.New("transport send error"))
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTransportManager,
+		loopbackTransport: mockLoopbackTransport,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendDelegationRequest(ctx, coordinatorNode, nil, 0)
+	require.NoError(t, err) // send errors are logged but not propagated
+}
+
 func TestSendDelegationRequest_EmptyTransactions(t *testing.T) {
 	ctx := context.Background()
 	coordinatorNode := "coordinator-node"
@@ -330,6 +581,57 @@ func TestSendDelegationRequest_EmptyTransactions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, capturedRequest.PrivateTransactions)
 }
+
+func TestSendDelegationRequest_JSONMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	orig := jsonMarshalFn
+	jsonMarshalFn = func(_ any) ([]byte, error) { return nil, errors.New("forced JSON error") }
+	defer func() { jsonMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	// Need at least one transaction so the json.Marshal in the loop is executed.
+	txns := []*components.PrivateTransaction{{ID: uuid.New()}}
+	err := tw.SendDelegationRequest(ctx, "coordinator-node", txns, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced JSON error")
+}
+
+func TestSendDelegationRequest_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendDelegationRequest(ctx, "coordinator-node", nil, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
 
 // ===== SendDelegationResponse Tests =====
 
@@ -412,6 +714,31 @@ func TestSendDelegationResponse_SendError(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestSendDelegationResponse_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendDelegationResponse(ctx, "delegating-node", "del-id", nil, nil, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
+
 // ===== SendDelegationRejection Tests =====
 
 func TestSendDelegationRejection_Success(t *testing.T) {
@@ -473,6 +800,110 @@ func TestSendDelegationRejection_SendError(t *testing.T) {
 
 	err := tw.SendDelegationRejection(ctx, delegatingNodeName, delegationId, engineProto.RejectionReason_NOT_CURRENT_DELEGATE, "node1", int64(100), int64(90), int64(0))
 	require.NoError(t, err)
+}
+
+func TestSendDelegationRejection_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendDelegationRejection(ctx, "node", "del-id", engineProto.RejectionReason_NOT_CURRENT_DELEGATE, "", 0, 0, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
+
+// ===== SendHandoverRequest Tests =====
+
+func TestSendHandoverRequest_Success(t *testing.T) {
+	ctx := context.Background()
+	targetNode := "target-node"
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockTM.On("Send", ctx, mock.MatchedBy(func(msg *components.FireAndForgetMessageSend) bool {
+		if msg.MessageType != MessageType_HandoverRequest || msg.Node != targetNode {
+			return false
+		}
+		var req engineProto.CoordinatorHandoverRequest
+		if err := proto.Unmarshal(msg.Payload, &req); err != nil {
+			return false
+		}
+		return req.ContractAddress == contractAddress.String()
+	})).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendHandoverRequest(ctx, targetNode, contractAddress)
+	require.NoError(t, err)
+}
+
+func TestSendHandoverRequest_SendError(t *testing.T) {
+	ctx := context.Background()
+	targetNode := "target-node"
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockTM.On("Send", ctx, mock.Anything).Return(errors.New("send failed"))
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendHandoverRequest(ctx, targetNode, contractAddress)
+	require.NoError(t, err) // send errors are logged but not propagated
+}
+
+func TestSendHandoverRequest_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendHandoverRequest(ctx, "target-node", contractAddress)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
 }
 
 // ===== SendEndorsementRequest Tests =====
@@ -601,6 +1032,35 @@ func TestSendEndorsementRequest_SerialisesExpiryTimeIntoProto(t *testing.T) {
 	assert.Equal(t, expiry.UnixMilli(), capturedExpiry, "ExpiryTimeUnixMs should match expiry.UnixMilli()")
 }
 
+func TestSendEndorsementRequest_SendError(t *testing.T) {
+	ctx := context.Background()
+	txID := uuid.New()
+	idempotencyKey := uuid.New()
+	party := "party1@node1"
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	transactionSpecification := &prototk.TransactionSpecification{
+		TransactionId: txID.String(),
+		ContractInfo:  &prototk.ContractInfo{ContractAddress: contractAddress.HexString()},
+	}
+
+	mockTransportManager := componentsmocks.NewTransportManager(t)
+	mockLoopbackTransport := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTransportManager.On("LocalNodeName").Return("local-node").Maybe()
+	mockTransportManager.On("Send", ctx, mock.Anything).Return(errors.New("transport send error"))
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTransportManager,
+		loopbackTransport: mockLoopbackTransport,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendEndorsementRequest(ctx, txID, idempotencyKey, party, nil, transactionSpecification, nil, nil, nil, nil, nil, nil, time.Time{}, 0, 0)
+	require.NoError(t, err) // send errors are logged but not propagated
+}
+
 func TestSendEndorsementRequest_NodeLookupError(t *testing.T) {
 	ctx := context.Background()
 	txID := uuid.New()
@@ -634,6 +1094,36 @@ func TestSendEndorsementRequest_NodeLookupError(t *testing.T) {
 	require.Error(t, err)
 	mockTransportManager.AssertNotCalled(t, "Send")
 }
+
+func TestSendEndorsementRequest_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txID := uuid.New()
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	txSpec := &prototk.TransactionSpecification{
+		TransactionId: txID.String(),
+		ContractInfo:  &prototk.ContractInfo{ContractAddress: contractAddress.HexString()},
+	}
+	err := tw.SendEndorsementRequest(ctx, txID, uuid.New(), "party@node1", nil, txSpec, nil, nil, nil, nil, nil, nil, time.Time{}, 0, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
 
 // ===== SendEndorsementResponse Tests =====
 
@@ -780,6 +1270,33 @@ func TestSendEndorsementResponse_SendError(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestSendEndorsementResponse_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := "0x1234567890123456789012345678901234567890"
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockTM.On("Send", ctx, mock.Anything).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   pldtypes.MustEthAddress(contractAddress),
+	}
+
+	// SendEndorsementResponse does NOT return the proto.Marshal error - it logs it and continues.
+	err := tw.SendEndorsementResponse(ctx, uuid.New().String(), uuid.New().String(), contractAddress, nil, &components.EndorsementResult{}, "", "att1", "party", "node")
+	require.NoError(t, err)
+}
+
+
 // ===== SendEndorsementRejection Tests =====
 
 func TestSendEndorsementRejection_Success(t *testing.T) {
@@ -850,6 +1367,31 @@ func TestSendEndorsementRejection_SendError(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestSendEndorsementRejection_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := "0x1234567890123456789012345678901234567890"
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   pldtypes.MustEthAddress(contractAddress),
+	}
+
+	err := tw.SendEndorsementRejection(ctx, uuid.New().String(), uuid.New().String(), contractAddress, "att", "party@node", "node", engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, 100, 90, 10)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
+
 // ===== SendEndorsementError Tests =====
 
 func TestSendEndorsementError_Success(t *testing.T) {
@@ -914,6 +1456,31 @@ func TestSendEndorsementError_SendError(t *testing.T) {
 	err := tw.SendEndorsementError(ctx, uuid.New().String(), uuid.New().String(), contractAddress, "some error", "party1@node2", "att1", "node2")
 	require.NoError(t, err)
 }
+
+func TestSendEndorsementError_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := "0x1234567890123456789012345678901234567890"
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   pldtypes.MustEthAddress(contractAddress),
+	}
+
+	err := tw.SendEndorsementError(ctx, uuid.New().String(), uuid.New().String(), contractAddress, "err", "party@node", "att", "node")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
 
 // ===== SendAssembleRequest Tests =====
 
@@ -1049,6 +1616,98 @@ func TestSendAssembleRequest_SendError(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestSendAssembleRequest_PreAssemblyJSONMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txID := uuid.New()
+
+	orig := jsonMarshalFn
+	jsonMarshalFn = func(_ any) ([]byte, error) { return nil, errors.New("forced JSON error") }
+	defer func() { jsonMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	preAssembly := &components.TransactionPreAssembly{
+		TransactionSpecification: &prototk.TransactionSpecification{TransactionId: txID.String()},
+	}
+	err := tw.SendAssembleRequest(ctx, "node", txID, uuid.New(), preAssembly, grapher.ExportableStates{}, 0, time.Time{}, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced JSON error")
+}
+
+func TestSendAssembleRequest_StateLocksJSONMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txID := uuid.New()
+
+	callCount := 0
+	orig := jsonMarshalFn
+	jsonMarshalFn = func(v any) ([]byte, error) {
+		callCount++
+		if callCount == 1 {
+			return json.Marshal(v) // first call (preAssembly) succeeds
+		}
+		return nil, errors.New("forced JSON error on stateLocks")
+	}
+	defer func() { jsonMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	preAssembly := &components.TransactionPreAssembly{
+		TransactionSpecification: &prototk.TransactionSpecification{TransactionId: txID.String()},
+	}
+	err := tw.SendAssembleRequest(ctx, "node", txID, uuid.New(), preAssembly, grapher.ExportableStates{}, 0, time.Time{}, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced JSON error on stateLocks")
+}
+
+func TestSendAssembleRequest_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txID := uuid.New()
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	preAssembly := &components.TransactionPreAssembly{
+		TransactionSpecification: &prototk.TransactionSpecification{TransactionId: txID.String()},
+	}
+	err := tw.SendAssembleRequest(ctx, "node", txID, uuid.New(), preAssembly, grapher.ExportableStates{}, 0, time.Time{}, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
+
 // ===== SendAssembleResponse Tests =====
 
 func TestSendAssembleResponse_Success(t *testing.T) {
@@ -1142,6 +1801,89 @@ func TestSendAssembleResponse_SendError(t *testing.T) {
 	err := tw.SendAssembleResponse(ctx, txID, assembleRequestId, postAssembly, preAssembly, recipient)
 	require.NoError(t, err)
 }
+
+func TestSendAssembleResponse_PostAssemblyJSONMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txID := uuid.New()
+
+	orig := jsonMarshalFn
+	jsonMarshalFn = func(_ any) ([]byte, error) { return nil, errors.New("forced JSON error") }
+	defer func() { jsonMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendAssembleResponse(ctx, txID, uuid.New(), &components.TransactionPostAssembly{}, &components.TransactionPreAssembly{}, "recipient")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced JSON error")
+}
+
+func TestSendAssembleResponse_PreAssemblyJSONMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txID := uuid.New()
+
+	callCount := 0
+	orig := jsonMarshalFn
+	jsonMarshalFn = func(v any) ([]byte, error) {
+		callCount++
+		if callCount == 1 {
+			return json.Marshal(v) // first call (postAssembly) succeeds
+		}
+		return nil, errors.New("forced JSON error on preAssembly")
+	}
+	defer func() { jsonMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendAssembleResponse(ctx, txID, uuid.New(), &components.TransactionPostAssembly{}, &components.TransactionPreAssembly{}, "recipient")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced JSON error on preAssembly")
+}
+
+func TestSendAssembleResponse_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txID := uuid.New()
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendAssembleResponse(ctx, txID, uuid.New(), &components.TransactionPostAssembly{}, &components.TransactionPreAssembly{}, "recipient")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
 
 // ===== SendAssembleError Tests =====
 
@@ -1258,6 +2000,31 @@ func TestSendAssembleError_Loopback(t *testing.T) {
 
 }
 
+func TestSendAssembleError_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendAssembleError(ctx, uuid.New(), uuid.New(), "recipient-node")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
+
 // ===== SendAssembleRejection Tests =====
 
 func TestSendAssembleRejection_Success(t *testing.T) {
@@ -1326,6 +2093,31 @@ func TestSendAssembleRejection_SendError(t *testing.T) {
 	err := tw.SendAssembleRejection(ctx, txID, assembleRequestId, recipient, engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, 100, 95)
 	require.NoError(t, err)
 }
+
+func TestSendAssembleRejection_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendAssembleRejection(ctx, uuid.New(), uuid.New(), "recipient-node", engineProto.RejectionReason_BLOCK_HEIGHT_TOLERANCE, 100, 90)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
 
 // ===== SendNonceAssigned Tests =====
 
@@ -1461,6 +2253,33 @@ func TestSendNonceAssigned_VerifyGeneratedId(t *testing.T) {
 	assert.NoError(t, err)
 
 }
+
+func TestSendNonceAssigned_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockTM.On("Send", ctx, mock.Anything).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	// SendNonceAssigned logs but does NOT return the proto.Marshal error; it continues.
+	err := tw.SendNonceAssigned(ctx, uuid.New(), "originator-node", contractAddress, 42)
+	require.NoError(t, err)
+}
+
 
 // ===== SendTransactionConfirmed Tests =====
 
@@ -1804,6 +2623,34 @@ func TestSendTransactionConfirmed_Loopback_WillRetryFalse(t *testing.T) {
 	}
 }
 
+func TestSendTransactionConfirmed_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	nonceVal := pldtypes.HexUint64(42)
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockTM.On("Send", ctx, mock.Anything).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	// SendTransactionConfirmed logs but does NOT return the proto.Marshal error; it continues.
+	err := tw.SendTransactionConfirmed(ctx, uuid.New(), "originator-node", contractAddress, &nonceVal, engineProto.TransactionConfirmed_OUTCOME_SUCCESS, nil, "", false)
+	require.NoError(t, err)
+}
+
+
 // ===== SendHeartbeat Tests =====
 
 func TestSendHeartbeat_Success(t *testing.T) {
@@ -1935,6 +2782,56 @@ func TestSendHeartbeat_Loopback(t *testing.T) {
 	}
 
 }
+
+func TestSendHeartbeat_JSONMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	orig := jsonMarshalFn
+	jsonMarshalFn = func(_ any) ([]byte, error) { return nil, errors.New("forced JSON error") }
+	defer func() { jsonMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendHeartbeat(ctx, "target-node", contractAddress, &common.CoordinatorSnapshot{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced JSON error")
+}
+
+func TestSendHeartbeat_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	origProto := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = origProto }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendHeartbeat(ctx, "target-node", contractAddress, &common.CoordinatorSnapshot{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
 
 // ===== SendPreDispatchRequest Tests =====
 
@@ -2070,6 +2967,36 @@ func TestSendPreDispatchRequest_Loopback(t *testing.T) {
 
 }
 
+func TestSendPreDispatchRequest_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txID := uuid.New()
+	hashVal := pldtypes.MustParseBytes32("0x00000000000000000000000000000000000000000000000000000000000000ab")
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockTM.On("Send", ctx, mock.Anything).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	txSpec := &prototk.TransactionSpecification{TransactionId: txID.String()}
+	// SendPreDispatchRequest logs but does NOT return the proto.Marshal error; it continues.
+	err := tw.SendPreDispatchRequest(ctx, "originator-node", uuid.New(), txSpec, &hashVal)
+	require.NoError(t, err)
+}
+
+
 // ===== SendPreDispatchResponse Tests =====
 
 func TestSendPreDispatchResponse_Success(t *testing.T) {
@@ -2193,6 +3120,35 @@ func TestSendPreDispatchResponse_Loopback(t *testing.T) {
 	}
 
 }
+
+func TestSendPreDispatchResponse_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txID := uuid.New()
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockTM.On("Send", ctx, mock.Anything).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	txSpec := &prototk.TransactionSpecification{TransactionId: txID.String()}
+	// SendPreDispatchResponse logs but does NOT return the proto.Marshal error; it continues.
+	err := tw.SendPreDispatchResponse(ctx, "originator-node", uuid.New(), txSpec)
+	require.NoError(t, err)
+}
+
 
 // ===== SendDispatched Tests =====
 
@@ -2347,6 +3303,35 @@ func TestSendDispatched_Loopback(t *testing.T) {
 
 }
 
+func TestSendDispatched_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+	txID := uuid.New()
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+	mockTM.On("LocalNodeName").Return("local-node").Maybe()
+	mockTM.On("Send", ctx, mock.Anything).Return(nil)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	txSpec := &prototk.TransactionSpecification{TransactionId: txID.String()}
+	// SendDispatched logs but does NOT return the proto.Marshal error; it continues.
+	err := tw.SendDispatched(ctx, "originator@originator-node", uuid.New(), txSpec)
+	require.NoError(t, err)
+}
+
+
 // ===== SendPreDispatchRejection Tests =====
 
 func TestSendPreDispatchRejection_Success(t *testing.T) {
@@ -2432,3 +3417,28 @@ func TestSendPreDispatchRejection_SendError(t *testing.T) {
 	err := tw.SendPreDispatchRejection(ctx, txID, requestID, coordinatorNode, engineProto.RejectionReason_TRANSACTION_UNKNOWN)
 	require.NoError(t, err)
 }
+
+func TestSendPreDispatchRejection_ProtoMarshalError(t *testing.T) {
+	ctx := context.Background()
+	contractAddress := pldtypes.MustEthAddress("0x1234567890123456789012345678901234567890")
+
+	orig := protoMarshalFn
+	protoMarshalFn = func(_ proto.Message) ([]byte, error) { return nil, errors.New("forced proto error") }
+	defer func() { protoMarshalFn = orig }()
+
+	mockTM := componentsmocks.NewTransportManager(t)
+	mockLT := sequencertransportmocks.NewLoopbackTransportManager(t)
+
+	tw := &transportWriter{
+		ctx:               ctx,
+		nodeID:            "local-node",
+		transportManager:  mockTM,
+		loopbackTransport: mockLT,
+		contractAddress:   contractAddress,
+	}
+
+	err := tw.SendPreDispatchRejection(ctx, uuid.New(), uuid.New(), "coordinator-node", engineProto.RejectionReason_NOT_CURRENT_DELEGATE)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forced proto error")
+}
+
