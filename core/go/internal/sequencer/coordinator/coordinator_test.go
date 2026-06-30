@@ -67,7 +67,7 @@ func TestCoordinator_SingleTransactionLifecycle(t *testing.T) {
 	}).Return(nil).Once()
 
 	ctx, cancel := context.WithCancel(t.Context())
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 	defer func() {
 		cancel()
 		c.WaitForDone(t.Context())
@@ -479,7 +479,7 @@ func TestCoordinator_CancelContext_StopsEventLoopAndDispatchLoop(t *testing.T) {
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, mocks := builder.Build()
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 
 	// Verify event loop is running
 	require.False(t, c.stateMachineEventLoop.IsStopped(), "event loop should not be stopped initially")
@@ -511,7 +511,7 @@ func TestCoordinator_CancelContext_WaitsForTransportShutdown(t *testing.T) {
 		c.WaitForDone(t.Context())
 	}()
 
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 }
 
 func TestCoordinator_CancelContext_CompletesSuccessfullyWhenCalledOnce(t *testing.T) {
@@ -519,7 +519,7 @@ func TestCoordinator_CancelContext_CompletesSuccessfullyWhenCalledOnce(t *testin
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, mocks := builder.Build()
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 
 	cancel()
 	c.WaitForDone(t.Context())
@@ -534,7 +534,7 @@ func TestCoordinator_CancelContext_StopsLoopsEvenWhenProcessingEvents(t *testing
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, mocks := builder.Build()
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 
 	// Queue some events to ensure loops are busy
 	for i := 0; i < 10; i++ {
@@ -554,7 +554,7 @@ func TestCoordinator_CancelContext_WhenAlreadyCancelled_ReturnsImmediately(t *te
 	builder := NewCoordinatorBuilderForTesting(t, State_Idle)
 	c, mocks := builder.Build()
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 
 	cancel()
 	c.WaitForDone(t.Context())
@@ -750,8 +750,7 @@ func TestStart_Idempotent_SecondCallReturnsNil(t *testing.T) {
 	c, _ := NewCoordinatorBuilderForTesting(t, State_Idle).Build()
 	// Mark as already started without launching goroutines
 	c.started = true
-	err := c.Start(ctx)
-	require.NoError(t, err)
+	c.Start(ctx)
 	// Confirm no goroutines were started by verifying the dispatch loop is not running
 	require.Nil(t, c.dispatchLoopDone, "dispatch loop should not be running after idempotent Start()")
 }
@@ -779,7 +778,7 @@ func TestCoordinator_WaitForDone_ReturnsEarlyWhenContextCancelled(t *testing.T) 
 
 	c, mocks := builder.Build()
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 
 	defer func() {
 		cancel()

@@ -27,6 +27,7 @@ import (
 	"github.com/LFDT-Paladin/paladin/config/pkg/pldconf"
 	"github.com/LFDT-Paladin/paladin/core/internal/components"
 	"github.com/LFDT-Paladin/paladin/core/internal/msgs"
+	"github.com/LFDT-Paladin/paladin/core/mocks/blockindexermocks"
 	"github.com/LFDT-Paladin/paladin/core/mocks/componentsmocks"
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-signer/pkg/abi"
@@ -1818,6 +1819,15 @@ func TestDomainFixedSigningIdentity(t *testing.T) {
 
 	registerTestDomain(t, dm2, tp2)
 	assert.Equal(t, "", tp2.d.FixedSigningIdentity())
+}
+
+func TestDomainGetBlockHeight(t *testing.T) {
+	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas())
+	defer done()
+	mockES := blockindexermocks.NewEventStream(t)
+	mockES.EXPECT().CheckpointBlock().Return(int64(42)).Once()
+	td.d.eventStream = mockES
+	assert.Equal(t, int64(42), td.d.GetBlockHeight())
 }
 
 func TestEnqueueCompletionsContextDone(t *testing.T) {

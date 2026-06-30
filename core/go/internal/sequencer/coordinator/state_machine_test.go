@@ -64,7 +64,7 @@ func Test_queueEventInternal_QueuesPriorityEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	c, mocks := builder.Build()
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 	defer func() {
 		cancel()
 		c.WaitForDone(t.Context())
@@ -81,7 +81,7 @@ func Test_TryQueueEvent_QueuesToEventLoop(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	c, mocks := builder.Build()
 	mocks.EngineIntegration.EXPECT().GetBlockHeight(mock.Anything).Return(int64(0))
-	require.NoError(t, c.Start(ctx))
+	c.Start(ctx)
 	defer func() {
 		cancel()
 		c.WaitForDone(t.Context())
