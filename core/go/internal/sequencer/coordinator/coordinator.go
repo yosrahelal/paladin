@@ -50,7 +50,7 @@ type signingIdentityState struct {
 type Coordinator interface {
 	// Start initializes the coordinator from the contract config and begins the event loop and
 	// dispatch goroutines. It must be called once after construction before any events are processed.
-	Start(ctx context.Context) error
+	Start(ctx context.Context)
 
 	// Asynchronously update the state machine by queueing an event to be processed
 	// These are the only interfaces by which consumers should update the state of the coordinator
@@ -213,9 +213,9 @@ func NewCoordinator(
 	return c
 }
 
-func (c *coordinator) Start(ctx context.Context) error {
+func (c *coordinator) Start(ctx context.Context) {
 	if c.started {
-		return nil
+		return
 	}
 	coordCtx := log.WithLogField(ctx, "role", "coordinator")
 	c.ctx = coordCtx
@@ -242,8 +242,6 @@ func (c *coordinator) Start(ctx context.Context) error {
 
 	// Trigger the initial transition out of State_Initial
 	c.QueueEvent(coordCtx, &CoordinatorCreatedEvent{})
-
-	return nil
 }
 
 // GetCurrentState returns the current state of the coordinator.
