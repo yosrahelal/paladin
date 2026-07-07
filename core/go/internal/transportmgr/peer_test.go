@@ -349,7 +349,7 @@ func TestQueryPeers(t *testing.T) {
 		},
 	}
 
-	peers, err := tm.QueryPeers(ctx, query.NewQueryBuilder().
+	peers, err := tm.queryPeers(ctx, query.NewQueryBuilder().
 		In("name", []any{"node1", "node3"}).
 		Limit(10).
 		Query())
@@ -358,7 +358,7 @@ func TestQueryPeers(t *testing.T) {
 	require.Equal(t, "node1", peers[0].Name)
 	require.Equal(t, "node3", peers[1].Name)
 
-	peers, err = tm.QueryPeers(ctx, query.NewQueryBuilder().
+	peers, err = tm.queryPeers(ctx, query.NewQueryBuilder().
 		Equal("name", "node2").
 		Limit(10).
 		Query())
@@ -366,25 +366,25 @@ func TestQueryPeers(t *testing.T) {
 	require.Len(t, peers, 1)
 	require.Equal(t, "node2", peers[0].Name)
 
-	peers, err = tm.QueryPeers(ctx, query.NewQueryBuilder().Limit(1).Query())
+	peers, err = tm.queryPeers(ctx, query.NewQueryBuilder().Limit(1).Query())
 	require.NoError(t, err)
 	require.Len(t, peers, 1)
 	require.Equal(t, "node1", peers[0].Name)
 
-	peers, err = tm.QueryPeers(ctx, query.NewQueryBuilder().Sort("-name").Limit(10).Query())
+	peers, err = tm.queryPeers(ctx, query.NewQueryBuilder().Sort("-name").Limit(10).Query())
 	require.NoError(t, err)
 	require.Len(t, peers, 3)
 	require.Equal(t, "node3", peers[0].Name)
 	require.Equal(t, "node2", peers[1].Name)
 	require.Equal(t, "node1", peers[2].Name)
 
-	_, err = tm.QueryPeers(ctx, query.NewQueryBuilder().Equal("wrong", "node1").Limit(1).Query())
+	_, err = tm.queryPeers(ctx, query.NewQueryBuilder().Equal("wrong", "node1").Limit(1).Query())
 	require.Regexp(t, "PD010700.*wrong", err)
 
-	_, err = tm.QueryPeers(ctx, query.NewQueryBuilder().Limit(1).Sort("wrong").Query())
+	_, err = tm.queryPeers(ctx, query.NewQueryBuilder().Limit(1).Sort("wrong").Query())
 	require.Regexp(t, "PD010700.*wrong", err)
 
-	_, err = tm.QueryPeers(ctx, query.NewQueryBuilder().Query())
+	_, err = tm.queryPeers(ctx, query.NewQueryBuilder().Query())
 	require.Regexp(t, "PD010721", err)
 }
 

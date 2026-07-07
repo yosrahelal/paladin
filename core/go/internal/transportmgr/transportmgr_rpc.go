@@ -77,7 +77,7 @@ func (tm *transportManager) rpcPeers() rpcserver.RPCHandler {
 func (tm *transportManager) rpcQueryPeers() rpcserver.RPCHandler {
 	return rpcserver.RPCMethod1(func(ctx context.Context, jq query.QueryJSON) ([]*pldapi.PeerInfo, error) {
 		ctx = log.WithComponent(ctx, "transportmanager")
-		return tm.QueryPeers(ctx, &jq)
+		return tm.queryPeers(ctx, &jq)
 	})
 }
 

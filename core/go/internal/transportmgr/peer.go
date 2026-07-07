@@ -128,7 +128,7 @@ func peerInfoValueSet(p *pldapi.PeerInfo) filters.PassthroughValueSet {
 	}
 }
 
-func (tm *transportManager) QueryPeers(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.PeerInfo, error) {
+func (tm *transportManager) queryPeers(ctx context.Context, jq *query.QueryJSON) ([]*pldapi.PeerInfo, error) {
 	if err := filters.CheckLimitSet(ctx, jq); err != nil {
 		return nil, err
 	}
