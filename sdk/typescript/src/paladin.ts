@@ -1126,7 +1126,7 @@ export default class PaladinClient {
     },
 
     /**
-   * @deprecated Use transport.queryPeers instead
+   * @deprecated Use transport.getPeer instead
    */
     peerInfo: async (nodeName: string) => {
       const res = await this.post<JsonRpcResult<any>>(
