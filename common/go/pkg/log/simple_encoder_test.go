@@ -95,6 +95,75 @@ type assertError string
 
 func (e assertError) Error() string { return string(e) }
 
+func TestSimpleEncoderCloneCopiesFields(t *testing.T) {
+	e := newSimpleEncoder(defaultTimestampFormat, false)
+	e.AddString("bound", "b")
+
+	clone := e.Clone().(*simpleEncoder)
+	require.Len(t, clone.fields, 1)
+
+	// Mutating the clone must not affect the original's accumulated fields.
+	clone.AddString("extra", "x")
+	assert.Len(t, e.fields, 1)
+	assert.Len(t, clone.fields, 2)
+}
+
+func TestSimpleEncoderObjectEncoderAllTypes(t *testing.T) {
+	e := newSimpleEncoder(defaultTimestampFormat, false)
+
+	require.NoError(t, e.AddArray("arr", zapcore.ArrayMarshalerFunc(func(zapcore.ArrayEncoder) error { return nil })))
+	require.NoError(t, e.AddObject("obj", zapcore.ObjectMarshalerFunc(func(zapcore.ObjectEncoder) error { return nil })))
+	require.NoError(t, e.AddReflected("refl", struct{ X int }{X: 7}))
+	e.AddBinary("bin", []byte{0x01, 0x02})
+	e.AddByteString("bytestr", []byte("bs"))
+	e.AddBool("bool", true)
+	e.AddComplex128("c128", complex(1, 2))
+	e.AddComplex64("c64", complex64(complex(3, 4)))
+	e.AddDuration("dur", 5*time.Second)
+	e.AddFloat64("f64", 1.5)
+	e.AddFloat32("f32", 2.5)
+	e.AddInt("int", 1)
+	e.AddInt64("int64", 2)
+	e.AddInt32("int32", 3)
+	e.AddInt16("int16", 4)
+	e.AddInt8("int8", 5)
+	e.AddString("str", "s")
+	e.AddTime("time", fixedTime)
+	e.AddUint("uint", 6)
+	e.AddUint64("uint64", 7)
+	e.AddUint32("uint32", 8)
+	e.AddUint16("uint16", 9)
+	e.AddUint8("uint8", 10)
+	e.AddUintptr("uintptr", 11)
+	e.OpenNamespace("ns") // no-op, must not panic
+
+	buf, err := e.EncodeEntry(zapcore.Entry{Level: zapcore.InfoLevel, Time: fixedTime, Message: "types"}, nil)
+	require.NoError(t, err)
+	out := buf.String()
+
+	// Scalars rendered directly by appendValue.
+	assert.Contains(t, out, "bool=true")
+	assert.Contains(t, out, "int=1")
+	assert.Contains(t, out, "int64=2")
+	assert.Contains(t, out, "int32=3")
+	assert.Contains(t, out, "int16=4")
+	assert.Contains(t, out, "int8=5")
+	assert.Contains(t, out, "str=s")
+	assert.Contains(t, out, "bytestr=bs")
+	assert.Contains(t, out, "uint=6")
+	assert.Contains(t, out, "uint64=7")
+	assert.Contains(t, out, "uint32=8")
+	assert.Contains(t, out, "uint16=9")
+	assert.Contains(t, out, "uint8=10")
+	// Types that fall through to the "%+v" default branch.
+	assert.Contains(t, out, "f64=1.5")
+	assert.Contains(t, out, "f32=2.5")
+	assert.Contains(t, out, "uintptr=11")
+	assert.Contains(t, out, "dur=5s")
+	assert.Contains(t, out, "refl={X:7}")
+	assert.Contains(t, out, "bin=[1 2]")
+}
+
 func TestLevelNames(t *testing.T) {
 	for _, tc := range []struct {
 		level zapcore.Level
