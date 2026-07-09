@@ -280,7 +280,7 @@ func newZapLogger(out io.Writer, format *Formatting) *zap.SugaredLogger {
 	if tsFormat == "" {
 		tsFormat = defaultTimestampFormat
 	}
-	var ws zapcore.WriteSyncer = zapcore.AddSync(out)
+	ws := zapcore.AddSync(out)
 	if format.Buffered {
 		// Batch log lines in memory to cut the write syscall per line. Size/FlushInterval
 		// of 0 fall back to zap's defaults (256kB / 30s). The flush goroutine is stopped

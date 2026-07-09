@@ -144,7 +144,7 @@ func appendValue(buf *buffer.Buffer, v any) {
 		// Floats, errors, durations, structs, Stringers, byte slices, ... — anything
 		// whose "%+v" rendering differs from a plain strconv conversion falls through
 		// here so output stays byte-for-byte identical to the previous encoder.
-		fmt.Fprintf(buf, "%+v", val)
+		_, _ = fmt.Fprintf(buf, "%+v", val)
 	}
 }
 
