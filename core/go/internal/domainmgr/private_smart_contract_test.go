@@ -1044,7 +1044,7 @@ func TestDomainWritePotentialStatesFail(t *testing.T) {
 	td, done := newTestDomain(t, false, goodDomainConf(), mockSchemas(schema), mockHighestBlock)
 	defer done()
 
-	td.mdsw.On("UpsertStates", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
+	td.mdsw.On("StageStateUpserts", mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("pop"))
 
 	psc, tx := doDomainInitAssembleTransactionOK(t, td)
 	tx.PostAssembly.OutputStatesPotential = []*prototk.NewState{

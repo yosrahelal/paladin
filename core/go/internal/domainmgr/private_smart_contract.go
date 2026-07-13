@@ -322,7 +322,7 @@ func (dc *domainContract) upsertPotentialStates(ctx context.Context, dsw compone
 	writtenStates = make([]*components.FullState, len(newStatesToWrite))
 	if len(newStatesToWrite) > 0 {
 		log.L(ctx).Infof("Writing %d states to domain state writer for transaction=%s domain=%s contract-address=%s", len(newStatesToWrite), tx.ID, dc.d.name, contractAddr)
-		newStates, err := dsw.UpsertStates(ctx, readTX, newStatesToWrite...)
+		newStates, err := dsw.StageStateUpserts(ctx, readTX, newStatesToWrite...)
 		if err != nil {
 			return nil, err
 		}

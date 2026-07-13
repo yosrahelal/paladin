@@ -92,14 +92,14 @@ type StateQueryOptions struct {
 
 // DomainStateWriter is a long-lived write buffer used for flushing domain states and nullifiers to the DB.
 type DomainStateWriter interface {
-	// UpsertStates creates or updates states in the in-memory write buffer.
+	// StageStateUpserts creates or updates states in the in-memory write buffer.
 	// States are visible immediately for queries on this writer (even before flush).
 	// If a non-nil CreatedBy is set on a state, an in-memory create lock is registered.
-	UpsertStates(ctx context.Context, dbTX persistence.DBTX, states ...*StateUpsert) (s []*pldapi.State, err error)
+	StageStateUpserts(ctx context.Context, dbTX persistence.DBTX, states ...*StateUpsert) (s []*pldapi.State, err error)
 
-	// UpsertNullifiers creates nullifier records associated with states.
+	// StageNullifierUpserts creates nullifier records associated with states.
 	// Nullifiers will be written to the DB on the next flush.
-	UpsertNullifiers(ctx context.Context, nullifiers ...*NullifierUpsert) error
+	StageNullifierUpserts(ctx context.Context, nullifiers ...*NullifierUpsert) error
 
 	// Flush writes all pending states and nullifiers to the database within the given transaction.
 	// Must be called within an active DB transaction. Returns an error if a flush is already in

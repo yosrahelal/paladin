@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright contributors to Paladin, an LFDT project
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -213,8 +213,8 @@ func (dqc *domainQueryContext) applyLocks(ctx context.Context, states []*pldapi.
 	return states
 }
 
-func (dqc *domainQueryContext) mergeSnapshotStates(ctx context.Context, schema components.Schema, dbStates []*pldapi.State, q *query.QueryJSON, excludeSpent, requireNullifier bool) (_ []*components.StateWithLabels, err error) {
-	matches := make([]*components.StateWithLabels, 0, len(dqc.creatingStates))
+func (dqc *domainQueryContext) findSnapshotMatches(ctx context.Context, schema components.Schema, dbStates []*pldapi.State, q *query.QueryJSON, excludeSpent, requireNullifier bool) (snapshotMatches []*components.StateWithLabels, err error) {
+	snapshotMatches = make([]*components.StateWithLabels, 0, len(dqc.creatingStates))
 	schemaId := schema.Persisted().ID
 	for _, state := range dqc.creatingStates {
 		log.L(ctx).Tracef("State %s is a creating state", state.ID)
@@ -255,22 +255,22 @@ func (dqc *domainQueryContext) mergeSnapshotStates(ctx context.Context, schema c
 			if !dup {
 				log.L(ctx).Tracef("Matched state %s from snapshot", &state.ID)
 				shallowCopy := *state
-				matches = append(matches, &shallowCopy)
+				snapshotMatches = append(snapshotMatches, &shallowCopy)
 			}
 		}
 	}
 
 	if log.IsTraceEnabled() {
-		log.L(ctx).Tracef("mergeSnapshotStates: found %d matches", len(matches))
-		for _, m := range matches {
+		log.L(ctx).Tracef("findSnapshotMatches: found %d matches", len(snapshotMatches))
+		for _, m := range snapshotMatches {
 			log.L(ctx).Tracef("Matched state: %s", m.ID)
 		}
 	}
 
-	return matches, nil
+	return snapshotMatches, nil
 }
 
-func (dqc *domainQueryContext) mergeInMemoryMatches(ctx context.Context, schema components.Schema, states []*pldapi.State, extras []*components.StateWithLabels, q *query.QueryJSON) (_ []*pldapi.State, err error) {
+func (dqc *domainQueryContext) mergeAndSortStates(ctx context.Context, schema components.Schema, states []*pldapi.State, extras []*components.StateWithLabels, q *query.QueryJSON) (_ []*pldapi.State, err error) {
 	fullList := make([]*components.StateWithLabels, len(states), len(states)+len(extras))
 	persistedStateIDs := make(map[string]bool)
 	for i, s := range states {
@@ -312,12 +312,12 @@ func (dqc *domainQueryContext) mergeSnapshotApplyLocks(ctx context.Context, sche
 	}
 
 	retStates := dbStates
-	matches, err := dqc.mergeSnapshotStates(ctx, schema, dbStates, q, excludeSpent, requireNullifier)
+	snapshotStates, err := dqc.findSnapshotMatches(ctx, schema, dbStates, q, excludeSpent, requireNullifier)
 	if err != nil {
 		return nil, err
 	}
-	if len(matches) > 0 {
-		if retStates, err = dqc.mergeInMemoryMatches(ctx, schema, dbStates, matches, q); err != nil {
+	if len(snapshotStates) > 0 {
+		if retStates, err = dqc.mergeAndSortStates(ctx, schema, dbStates, snapshotStates, q); err != nil {
 			return nil, err
 		}
 	}
@@ -412,10 +412,10 @@ func (dqc *domainQueryContext) GetStatesByID(ctx context.Context, dbTX persisten
 		StatusQualifier: pldapi.StateStatusAll,
 	})
 	if err == nil {
-		var memMatches []*components.StateWithLabels
-		memMatches, err = dqc.mergeSnapshotStates(ctx, schema, matches, q, false /* locked states are fine */, false /* nullifiers not required */)
-		if err == nil && len(memMatches) > 0 {
-			matches, err = dqc.mergeInMemoryMatches(ctx, schema, matches, memMatches, q)
+		var snapshotStates []*components.StateWithLabels
+		snapshotStates, err = dqc.findSnapshotMatches(ctx, schema, matches, q, false /* locked states are fine */, false /* nullifiers not required */)
+		if err == nil && len(snapshotStates) > 0 {
+			matches, err = dqc.mergeAndSortStates(ctx, schema, matches, snapshotStates, q)
 		}
 	}
 	if err != nil {
@@ -423,4 +423,3 @@ func (dqc *domainQueryContext) GetStatesByID(ctx context.Context, dbTX persisten
 	}
 	return schema, matches, err
 }
-

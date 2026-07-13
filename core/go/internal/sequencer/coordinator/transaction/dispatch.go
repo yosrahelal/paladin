@@ -72,7 +72,7 @@ func (t *coordinatorTransaction) dispatch(ctx context.Context) error {
 
 	localNullifiers, err := t.components.SequencerManager().BuildNullifiers(ctx, stateDistributionSet.Local)
 	if err == nil && len(localNullifiers) > 0 {
-		err = t.dsw.UpsertNullifiers(ctx, localNullifiers...)
+		err = t.dsw.StageNullifierUpserts(ctx, localNullifiers...)
 	}
 	if err != nil {
 		log.L(ctx).Errorf("error building nullifiers: %s", err)

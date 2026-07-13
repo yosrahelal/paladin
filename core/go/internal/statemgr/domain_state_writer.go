@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright contributors to Paladin, an LFDT project
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -90,14 +90,14 @@ func (sw *domainStateWriter) upsertStates(ctx context.Context, dbTX persistence.
 	return vss.states, nil
 }
 
-// UpsertStates creates or updates states in the in-memory write buffer.
-func (sw *domainStateWriter) UpsertStates(ctx context.Context, dbTX persistence.DBTX, stateUpserts ...*components.StateUpsert) (states []*pldapi.State, err error) {
+// StageStateUpserts creates or updates states in the in-memory write buffer.
+func (sw *domainStateWriter) StageStateUpserts(ctx context.Context, dbTX persistence.DBTX, stateUpserts ...*components.StateUpsert) (states []*pldapi.State, err error) {
 	return sw.upsertStates(ctx, dbTX, false, stateUpserts...)
 }
 
-// UpsertNullifiers creates nullifier records to be written on the next flush.
+// StageNullifierUpserts creates nullifier records to be written on the next flush.
 // The state being nullified must already be staged in this writer's unFlushed or flushing buffer.
-func (sw *domainStateWriter) UpsertNullifiers(ctx context.Context, nullifiers ...*components.NullifierUpsert) error {
+func (sw *domainStateWriter) StageNullifierUpserts(ctx context.Context, nullifiers ...*components.NullifierUpsert) error {
 	sw.stateLock.Lock()
 	defer sw.stateLock.Unlock()
 	if flushErr := sw.checkResetInitUnFlushed(ctx); flushErr != nil {

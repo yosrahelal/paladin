@@ -554,7 +554,7 @@ func storeTestState(t *testing.T, td *testDomainContext, txID uuid.UUID, amount 
 	// Call the real statestore via the DomainStateWriter, flush, then confirm so the state
 	// appears as "available" when queried by the domain context during assembly.
 	schemaID := pldtypes.MustParseBytes32(td.tp.stateSchemas[0].Id)
-	states, err := td.dsw.UpsertStates(td.ctx, td.c.dbTX, &components.StateUpsert{
+	states, err := td.dsw.StageStateUpserts(td.ctx, td.c.dbTX, &components.StateUpsert{
 		Schema:    schemaID,
 		Data:      stateJSON,
 		CreatedBy: &txID,

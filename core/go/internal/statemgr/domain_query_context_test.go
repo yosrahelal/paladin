@@ -1,18 +1,18 @@
-/*
- * Copyright © 2026 Kaleido, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
- * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
+// Copyright contributors to Paladin, an LFDT project
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package statemgr
 
 import (
@@ -296,7 +296,7 @@ func TestDCMergeInMemoryMatchesRecoverLabelsFail(t *testing.T) {
 	// Corrupt the state data to cause RecoverLabels to fail
 	s1.Data = pldtypes.RawJSON(`! wrong `)
 
-	_, err = dqc.mergeInMemoryMatches(ctx, schema, []*pldapi.State{
+	_, err = dqc.mergeAndSortStates(ctx, schema, []*pldapi.State{
 		s1.State,
 	}, []*components.StateWithLabels{}, nil)
 	assert.Regexp(t, "PD010116", err)
@@ -320,7 +320,7 @@ func TestDCMergeInMemoryMatchesSortFail(t *testing.T) {
 		pldtypes.RandHex(32))), nil, dqc.customHashFunction)
 	require.NoError(t, err)
 
-	_, err = dqc.mergeInMemoryMatches(ctx, schema, []*pldapi.State{
+	_, err = dqc.mergeAndSortStates(ctx, schema, []*pldapi.State{
 		s1.State,
 	}, []*components.StateWithLabels{}, query.NewQueryBuilder().Sort("wrong").Query())
 	assert.Regexp(t, "PD010700", err)
@@ -373,7 +373,7 @@ func TestMergeInMemoryMatchesLimit(t *testing.T) {
 
 	extras := []*components.StateWithLabels{mkState(10), mkState(20), mkState(30)}
 	limit := 2
-	result, err := dqc.mergeInMemoryMatches(ctx, schema, []*pldapi.State{}, extras, query.NewQueryBuilder().Limit(limit).Sort(".created").Query())
+	result, err := dqc.mergeAndSortStates(ctx, schema, []*pldapi.State{}, extras, query.NewQueryBuilder().Limit(limit).Sort(".created").Query())
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
 }
@@ -560,7 +560,7 @@ func TestImportSnapshot(t *testing.T) {
 			CreatedBy: &tx0,
 		}
 	}
-	_, err = sw.UpsertStates(ctx, ss.p.NOTX(), upsertWithCreate...)
+	_, err = sw.StageStateUpserts(ctx, ss.p.NOTX(), upsertWithCreate...)
 	require.NoError(t, err)
 	syncFlushWriter(t, ctx, sw)
 
@@ -638,14 +638,14 @@ func TestFindNullifiersSpendingExclusion(t *testing.T) {
 	nullID1 := pldtypes.HexBytes(pldtypes.RandBytes(32))
 	nullID2 := pldtypes.HexBytes(pldtypes.RandBytes(32))
 	tx1 := uuid.New()
-	states1, err := sw.UpsertStates(ctx, ss.p.NOTX(),
+	states1, err := sw.StageStateUpserts(ctx, ss.p.NOTX(),
 		genWidget(t, schema1.ID(), &tx1, fmt.Sprintf(`{"amount": 11, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, pldtypes.RandHex(32))),
 		genWidget(t, schema1.ID(), &tx1, fmt.Sprintf(`{"amount": 22, "owner": "0x615dD09124271D8008225054d85Ffe720E7a447A", "salt": "%s"}`, pldtypes.RandHex(32))),
 	)
 	require.NoError(t, err)
 	require.Len(t, states1, 2)
 
-	err = sw.UpsertNullifiers(ctx,
+	err = sw.StageNullifierUpserts(ctx,
 		&components.NullifierUpsert{State: states1[0].ID, ID: nullID1},
 		&components.NullifierUpsert{State: states1[1].ID, ID: nullID2},
 	)
@@ -785,7 +785,7 @@ func TestGetStatesByIDFail(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
-func TestMergeSnapshotStatesBasic(t *testing.T) {
+func TestFindSnapshotMatchesBasic(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
@@ -804,13 +804,13 @@ func TestMergeSnapshotStatesBasic(t *testing.T) {
 	dqc.creatingStates[s1.ID.String()] = s1
 
 	// Test basic matching - should return the state
-	matches, err := dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
+	snapshotStates, err := dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 1)
-	assert.Equal(t, s1.ID, matches[0].ID)
+	require.Len(t, snapshotStates, 1)
+	assert.Equal(t, s1.ID, snapshotStates[0].ID)
 }
 
-func TestMergeSnapshotStatesSchemaFiltering(t *testing.T) {
+func TestFindSnapshotMatchesSchemaFiltering(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
@@ -840,19 +840,19 @@ func TestMergeSnapshotStatesSchemaFiltering(t *testing.T) {
 	dqc.creatingStates[s2.ID.String()] = s2
 
 	// Query for schema1 - should only return s1
-	matches, err := dqc.mergeSnapshotStates(ctx, schema1, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
+	snapshotStates, err := dqc.findSnapshotMatches(ctx, schema1, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 1)
-	assert.Equal(t, s1.ID, matches[0].ID)
+	require.Len(t, snapshotStates, 1)
+	assert.Equal(t, s1.ID, snapshotStates[0].ID)
 
 	// Query for schema2 - should only return s2
-	matches, err = dqc.mergeSnapshotStates(ctx, schema2, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
+	snapshotStates, err = dqc.findSnapshotMatches(ctx, schema2, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 1)
-	assert.Equal(t, s2.ID, matches[0].ID)
+	require.Len(t, snapshotStates, 1)
+	assert.Equal(t, s2.ID, snapshotStates[0].ID)
 }
 
-func TestMergeSnapshotStatesExcludeSpent(t *testing.T) {
+func TestFindSnapshotMatchesExcludeSpent(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
@@ -886,18 +886,18 @@ func TestMergeSnapshotStatesExcludeSpent(t *testing.T) {
 	})
 
 	// With excludeSpent=true, s1 should be excluded
-	matches, err := dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), true, false)
+	snapshotStates, err := dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), true, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 1)
-	assert.Equal(t, s2.ID, matches[0].ID)
+	require.Len(t, snapshotStates, 1)
+	assert.Equal(t, s2.ID, snapshotStates[0].ID)
 
 	// With excludeSpent=false, both should be included
-	matches, err = dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
+	snapshotStates, err = dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 2)
+	require.Len(t, snapshotStates, 2)
 }
 
-func TestMergeSnapshotStatesRequireNullifier(t *testing.T) {
+func TestFindSnapshotMatchesRequireNullifier(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
@@ -930,18 +930,18 @@ func TestMergeSnapshotStatesRequireNullifier(t *testing.T) {
 	dqc.creatingStates[s2.ID.String()] = s2
 
 	// With requireNullifier=true, only s1 should be returned
-	matches, err := dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, true)
+	snapshotStates, err := dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, true)
 	require.NoError(t, err)
-	require.Len(t, matches, 1)
-	assert.Equal(t, s1.ID, matches[0].ID)
+	require.Len(t, snapshotStates, 1)
+	assert.Equal(t, s1.ID, snapshotStates[0].ID)
 
 	// With requireNullifier=false, both should be returned
-	matches, err = dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
+	snapshotStates, err = dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 2)
+	require.Len(t, snapshotStates, 2)
 }
 
-func TestMergeSnapshotStatesQueryFiltering(t *testing.T) {
+func TestFindSnapshotMatchesQueryFiltering(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
@@ -967,19 +967,19 @@ func TestMergeSnapshotStatesQueryFiltering(t *testing.T) {
 	dqc.creatingStates[s2.ID.String()] = s2
 
 	// Query for amount = 100 - should only return s1
-	matches, err := dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Equal("amount", int64(100)).Query(), false, false)
+	snapshotStates, err := dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Equal("amount", int64(100)).Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 1)
-	assert.Equal(t, s1.ID, matches[0].ID)
+	require.Len(t, snapshotStates, 1)
+	assert.Equal(t, s1.ID, snapshotStates[0].ID)
 
 	// Query for amount = 200 - should only return s2
-	matches, err = dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Equal("amount", int64(200)).Query(), false, false)
+	snapshotStates, err = dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Equal("amount", int64(200)).Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 1)
-	assert.Equal(t, s2.ID, matches[0].ID)
+	require.Len(t, snapshotStates, 1)
+	assert.Equal(t, s2.ID, snapshotStates[0].ID)
 }
 
-func TestMergeSnapshotStatesDuplicateDetection(t *testing.T) {
+func TestFindSnapshotMatchesDuplicateDetection(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
@@ -1000,18 +1000,18 @@ func TestMergeSnapshotStatesDuplicateDetection(t *testing.T) {
 
 	// If the state is already in dbStates, it should not be returned
 	dbStates := []*pldapi.State{s1.State}
-	matches, err := dqc.mergeSnapshotStates(ctx, schema, dbStates, query.NewQueryBuilder().Query(), false, false)
+	snapshotStates, err := dqc.findSnapshotMatches(ctx, schema, dbStates, query.NewQueryBuilder().Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 0)
+	require.Len(t, snapshotStates, 0)
 
 	// If the state is not in dbStates, it should be returned
-	matches, err = dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
+	snapshotStates, err = dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 1)
-	assert.Equal(t, s1.ID, matches[0].ID)
+	require.Len(t, snapshotStates, 1)
+	assert.Equal(t, s1.ID, snapshotStates[0].ID)
 }
 
-func TestMergeSnapshotStatesQueryError(t *testing.T) {
+func TestFindSnapshotMatchesQueryError(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
@@ -1031,12 +1031,12 @@ func TestMergeSnapshotStatesQueryError(t *testing.T) {
 	dqc.creatingStates[s1.ID.String()] = s1
 
 	// Query with invalid field should return error
-	_, err = dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Equal("invalidField", "value").Query(), false, false)
+	_, err = dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Equal("invalidField", "value").Query(), false, false)
 	assert.Error(t, err)
 	assert.Regexp(t, "PD010700", err)
 }
 
-func TestMergeSnapshotStatesEmptyResults(t *testing.T) {
+func TestFindSnapshotMatchesEmptyResults(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
@@ -1048,12 +1048,12 @@ func TestMergeSnapshotStatesEmptyResults(t *testing.T) {
 	defer dqc.Close(ctx)
 
 	// No creating states - should return empty
-	matches, err := dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
+	snapshotStates, err := dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 0)
+	require.Len(t, snapshotStates, 0)
 }
 
-func TestMergeSnapshotStatesMultipleMatches(t *testing.T) {
+func TestFindSnapshotMatchesMultipleMatches(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
@@ -1085,13 +1085,13 @@ func TestMergeSnapshotStatesMultipleMatches(t *testing.T) {
 	dqc.creatingStates[s3.ID.String()] = s3
 
 	// All states should match a query that matches all
-	matches, err := dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
+	snapshotStates, err := dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), false, false)
 	require.NoError(t, err)
-	require.Len(t, matches, 3)
+	require.Len(t, snapshotStates, 3)
 
 	// Verify all states are present
 	matchIDs := make(map[string]bool)
-	for _, m := range matches {
+	for _, m := range snapshotStates {
 		matchIDs[m.ID.String()] = true
 	}
 	assert.True(t, matchIDs[s1.ID.String()])
@@ -1099,7 +1099,7 @@ func TestMergeSnapshotStatesMultipleMatches(t *testing.T) {
 	assert.True(t, matchIDs[s3.ID.String()])
 }
 
-func TestMergeSnapshotStatesCombinedFilters(t *testing.T) {
+func TestFindSnapshotMatchesCombinedFilters(t *testing.T) {
 	ctx, ss, _, _, done := newDBMockStateManager(t)
 	defer done()
 
@@ -1152,11 +1152,11 @@ func TestMergeSnapshotStatesCombinedFilters(t *testing.T) {
 
 	// Test with excludeSpent=true and requireNullifier=true
 	// s1 and s3 have nullifiers and are not spent, s2 is spent
-	matches, err := dqc.mergeSnapshotStates(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), true, true)
+	snapshotStates, err := dqc.findSnapshotMatches(ctx, schema, []*pldapi.State{}, query.NewQueryBuilder().Query(), true, true)
 	require.NoError(t, err)
-	require.Len(t, matches, 2)
+	require.Len(t, snapshotStates, 2)
 	matchIDs := make(map[string]bool)
-	for _, m := range matches {
+	for _, m := range snapshotStates {
 		matchIDs[m.ID.String()] = true
 	}
 	assert.True(t, matchIDs[s1.ID.String()])
