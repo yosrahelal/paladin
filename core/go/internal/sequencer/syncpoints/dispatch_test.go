@@ -236,6 +236,46 @@ func TestPersistDispatchBatch_WithPublicDispatch_LocalBinding(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestPersistDispatchBatch_CallerCtxCancelledStillCommits(t *testing.T) {
+	// Caller context is already cancelled before the persist is even attempted, simulating the
+	// worst case where the dispatch loop was stopped mid-dispatch.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	sp, mp, _, pubTxMgr, _ := newTestSyncPoints(t, "node1")
+	dsw := newTestDomainStateWriter(t)
+
+	txID := uuid.New()
+	localID := uint64(42)
+	pubTxMgr.On("WriteNewTransactions", mock.Anything, mock.Anything, mock.Anything).Return([]*pldapi.PublicTx{{LocalID: &localID}}, nil)
+
+	// The batch must still be written and committed despite the cancelled caller ctx.
+	mp.Mock.ExpectBegin()
+	mp.Mock.ExpectExec("INSERT.*dispatches").WillReturnResult(sqlmock.NewResult(1, 1))
+	mp.Mock.ExpectQuery("INSERT.*sequencer_activities").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+	mp.Mock.ExpectCommit()
+
+	dispatchBatch := &DispatchBatch{
+		PublicDispatches: []*PublicDispatch{
+			{
+				PublicTxs: []*components.PublicTxSubmission{{
+					Bindings: []*components.PaladinTXReference{{
+						TransactionID:     txID,
+						TransactionSender: "identity@node1", // local binding
+					}},
+				}},
+				PrivateTransactionDispatches: []*DispatchPersisted{{
+					TransactionID: txID.String(),
+				}},
+			},
+		},
+	}
+
+	err := sp.PersistDispatchBatch(ctx, dsw, *pldtypes.RandAddress(), uuid.New(), dispatchBatch, nil, nil)
+	require.NoError(t, err)
+	require.NoError(t, mp.Mock.ExpectationsWereMet())
+}
+
 func TestPersistDispatchBatch_WithPublicDispatch_RemoteBinding(t *testing.T) {
 	ctx := context.Background()
 	sp, mp, _, pubTxMgr, transportMgr := newTestSyncPoints(t, "node1")

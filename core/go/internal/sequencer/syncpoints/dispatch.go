@@ -155,8 +155,15 @@ func (s *syncPoints) PersistDispatchBatch(ctx context.Context, dsw components.Do
 		}
 	}
 
-	// Send the write operation with all of the batch sequence operations to the flush worker
-	op := s.writer.Queue(ctx, &syncPointOperation{
+	// Send the write operation with all of the batch sequence operations to the flush worker.
+	//
+	// Enqueue and wait on the long-lived s.bgCtx, never the caller's ctx. Dispatch persistence
+	// is a point of no return: a control-flow cancellation of the caller (e.g. an epoch-boundary
+	// dispatch-loop stop rotating the coordinator signing key) must not drop the operation before
+	// it is queued, nor return a context-cancelled error after the batch has already committed and
+	// leave the transaction wedged in Ready_For_Dispatch. Prior to splitting the domain context out
+	// into a context-free state writer, this rode on the long-lived domain context (dCtx.Ctx()).
+	op := s.writer.Queue(s.bgCtx, &syncPointOperation{
 		domainStateWriter: dsw,
 		contractAddress:   contractAddress,
 		dispatchOperation: &dispatchOperation{
@@ -170,14 +177,16 @@ func (s *syncPoints) PersistDispatchBatch(ctx context.Context, dsw components.Do
 	})
 
 	//wait for the flush to complete
-	_, err := op.WaitFlushed(ctx)
+	_, err := op.WaitFlushed(s.bgCtx)
 	return err
 }
 
 func (s *syncPoints) PersistDeployDispatchBatch(ctx context.Context, transactionID uuid.UUID, dispatchBatch *DispatchBatch) error {
 
-	// Send the write operation with all of the batch sequence operations to the flush worker
-	op := s.writer.Queue(ctx, &syncPointOperation{
+	// Send the write operation with all of the batch sequence operations to the flush worker.
+	// Queue and wait on the long-lived s.bgCtx rather than the caller's ctx - deploy dispatch is
+	// equally a point of no return, so a caller cancellation must not drop or orphan the persist.
+	op := s.writer.Queue(s.bgCtx, &syncPointOperation{
 		dispatchOperation: &dispatchOperation{
 			transactionID:    transactionID,
 			publicDispatches: dispatchBatch.PublicDispatches,
@@ -185,7 +194,7 @@ func (s *syncPoints) PersistDeployDispatchBatch(ctx context.Context, transaction
 	})
 
 	//wait for the flush to complete
-	_, err := op.WaitFlushed(ctx)
+	_, err := op.WaitFlushed(s.bgCtx)
 	return err
 }
 

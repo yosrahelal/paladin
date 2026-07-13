@@ -61,7 +61,13 @@ type SyncPoints interface {
 }
 
 type syncPoints struct {
-	started      bool
+	started bool
+	// bgCtx is the long-lived context that owns the flush writer. It is only cancelled on
+	// coordinator/sequencer shutdown, never for control-flow reasons (e.g. an epoch-boundary
+	// dispatch-loop stop). Durable point-of-no-return persists queue and wait on this context
+	// so a caller cancellation can neither drop the operation before it is enqueued nor abort
+	// the wait after the batch has committed.
+	bgCtx        context.Context
 	writer       flushwriter.Writer[*syncPointOperation, *noResult]
 	txMgr        components.TXManager
 	pubTxMgr     components.PublicTxManager
@@ -70,6 +76,7 @@ type syncPoints struct {
 
 func NewSyncPoints(ctx context.Context, conf *pldconf.FlushWriterConfig, p persistence.Persistence, txMgr components.TXManager, pubTxMgr components.PublicTxManager, transportMgr components.TransportManager) SyncPoints {
 	s := &syncPoints{
+		bgCtx:        ctx,
 		txMgr:        txMgr,
 		pubTxMgr:     pubTxMgr,
 		transportMgr: transportMgr,
